@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import AppIcon from './AppIcon.vue'
 import PasswordEye from './PasswordEye.vue'
+import titleImage from '../assets/title.png'
 
 defineEmits(['signup', 'login'])
 
@@ -17,7 +18,7 @@ const passwordVisible = ref(false)
     </div>
 
     <div class="brand-copy">
-      <h1>Pick pig</h1>
+      <img :src="titleImage" class="brand-logo" alt="Pick pig" />
       <p>피그가 골라주는 카드, 픽피</p>
       <span></span>
     </div>
