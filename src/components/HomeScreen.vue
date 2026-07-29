@@ -8,6 +8,8 @@ import iconMycard from '../assets/icons/mycard.svg'
 import iconLocation from '../assets/icons/location.svg'
 import { categories, favoritePlaces, cards, benefitProfiles, benefitIcons, events } from '../data'
 
+const emit = defineEmits(['search'])
+
 const selectedCategory = ref(null)
 const consentCategory = ref(null)
 const benefitCard = ref(null)
@@ -90,7 +92,7 @@ function selectTab(index, label) {
 
   <div class="scroll-content">
     <div class="search-wrap">
-      <button class="search-bar" @click="notify('검색 화면은 홈 변환본에서 제외했어요.')">
+      <button class="search-bar" @click="emit('search')">
         <img :src="iconSearch" alt="" width="19" height="19" />
         <span>어떤 혜택을 찾으시나요?</span>
       </button>

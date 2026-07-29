@@ -6,6 +6,7 @@ import PinPad from './components/PinPad.vue'
 import SignUpComplete from './components/SignUpComplete.vue'
 import AssetConnectScreen from './components/AssetConnectScreen.vue'
 import HomeScreen from './components/HomeScreen.vue'
+import SearchScreen from './components/SearchScreen.vue'
 
 const screen = ref('login')
 const registeredPin = ref('')
@@ -42,6 +43,7 @@ function finishPinConfirmation(pin) {
 
       <PinPad
         v-else-if="screen === 'pin-register'"
+        key="pin-register"
         title="결제 비밀번호 6자리를 등록해주세요"
         subtitle="보안을 위해 비밀번호를 노출하지 마세요"
         @complete="finishPinRegistration"
@@ -49,16 +51,13 @@ function finishPinConfirmation(pin) {
 
       <PinPad
         v-else-if="screen === 'pin-confirm'"
+        key="pin-confirm"
         title="결제 비밀번호 6자리를 확인해주세요"
         subtitle="보안을 위해 비밀번호를 노출하지 마세요"
         @complete="finishPinConfirmation"
       />
 
-      <SignUpComplete
-        v-else-if="screen === 'complete'"
-        @connect="screen = 'asset-connect'"
-        @skip="screen = 'home'"
-      />
+      <SignUpComplete v-else-if="screen === 'complete'" @connect="screen = 'asset-connect'" />
 
       <AssetConnectScreen
         v-else-if="screen === 'asset-connect'"
@@ -66,7 +65,9 @@ function finishPinConfirmation(pin) {
         @done="screen = 'home'"
       />
 
-      <HomeScreen v-else-if="screen === 'home'" />
+      <HomeScreen v-else-if="screen === 'home'" @search="screen = 'search'" />
+
+      <SearchScreen v-else-if="screen === 'search'" @back="screen = 'home'" />
     </section>
   </main>
 </template>
