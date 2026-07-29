@@ -7,6 +7,7 @@ import SignUpComplete from './components/SignUpComplete.vue'
 import AssetConnectScreen from './components/AssetConnectScreen.vue'
 import HomeScreen from './components/HomeScreen.vue'
 import SearchScreen from './components/SearchScreen.vue'
+import MyPage from './components/MyPage.vue'
 
 const screen = ref('login')
 const registeredPin = ref('')
@@ -65,9 +66,15 @@ function finishPinConfirmation(pin) {
         @done="screen = 'home'"
       />
 
-      <HomeScreen v-else-if="screen === 'home'" @search="screen = 'search'" />
+      <HomeScreen
+        v-else-if="screen === 'home'"
+        @search="screen = 'search'"
+        @mypage="screen = 'mypage'"
+      />
 
       <SearchScreen v-else-if="screen === 'search'" @back="screen = 'home'" />
+
+      <MyPage v-else-if="screen === 'mypage'" @back="screen = 'home'" />
     </section>
   </main>
 </template>

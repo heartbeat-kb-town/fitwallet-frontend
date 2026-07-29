@@ -8,7 +8,7 @@ import iconMycard from '../assets/icons/mycard.svg'
 import iconLocation from '../assets/icons/location.svg'
 import { categories, favoritePlaces, cards, benefitProfiles, benefitIcons, events } from '../data'
 
-const emit = defineEmits(['search'])
+const emit = defineEmits(['search', 'mypage'])
 
 // 가로 스크롤 영역을 마우스로 잡아끌 수 있게 해주는 커스텀 디렉티브 (v-drag-scroll)
 // 터치·트랙패드는 브라우저 기본 스크롤을 그대로 쓰고, 마우스일 때만 동작해요.
@@ -150,11 +150,7 @@ function selectTab(index, label) {
         <strong>김지연님</strong>
       </div>
     </div>
-    <button
-      class="icon-button"
-      aria-label="메뉴 열기"
-      @click="notify('메뉴 화면은 홈 변환본에서 제외했어요.')"
-    >
+    <button class="icon-button" aria-label="마이페이지 열기" @click="emit('mypage')">
       <Menu :size="23" />
     </button>
   </header>
