@@ -8,8 +8,10 @@ import AssetConnectScreen from './components/AssetConnectScreen.vue'
 import HomeScreen from './components/HomeScreen.vue'
 import SearchScreen from './components/SearchScreen.vue'
 import MyPage from './components/MyPage.vue'
+import PaymentScreen from './components/PaymentScreen.vue'
 
 const screen = ref('login')
+const previousScreen = ref('home')
 const registeredPin = ref('')
 const confirmPin = ref('')
 
@@ -28,6 +30,11 @@ function finishPinConfirmation(pin) {
   confirmPin.value = pin
   // TODO: registeredPin과 confirmPin이 다르면 다시 입력받는 로직을 나중에 추가하면 좋아요
   screen.value = 'complete'
+}
+
+function openMyPage(from) {
+  previousScreen.value = from
+  screen.value = 'mypage'
 }
 </script>
 
@@ -69,12 +76,19 @@ function finishPinConfirmation(pin) {
       <HomeScreen
         v-else-if="screen === 'home'"
         @search="screen = 'search'"
-        @mypage="screen = 'mypage'"
+        @mypage="openMyPage('home')"
+        @navigate="screen = $event"
       />
 
       <SearchScreen v-else-if="screen === 'search'" @back="screen = 'home'" />
 
-      <MyPage v-else-if="screen === 'mypage'" @back="screen = 'home'" />
+      <PaymentScreen
+        v-else-if="screen === 'payment'"
+        @home="screen = 'home'"
+        @mypage="openMyPage('payment')"
+      />
+
+      <MyPage v-else-if="screen === 'mypage'" @back="screen = previousScreen" />
     </section>
   </main>
 </template>

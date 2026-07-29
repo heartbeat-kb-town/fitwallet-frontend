@@ -1818,3 +1818,179 @@ input[type='search']::-webkit-search-cancel-button {
   font-size: 14px;
   font-weight: 700;
 }
+
+/* ==================== 결제 화면 ==================== */
+.payment-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+}
+
+.payment-header {
+  flex: none;
+  height: 80px;
+  padding: 16px 20px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border-bottom: 1px solid #eeece9;
+}
+
+.payment-header h1 {
+  margin: 0;
+  color: #1a1a1a;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+}
+
+.payment-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  padding-top: 4px;
+}
+
+.payment-card-stack {
+  position: relative;
+  width: 100%;
+  height: 382px;
+  flex: none;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  cursor: pointer;
+}
+
+.payment-card {
+  position: absolute;
+  top: 148px;
+  left: 50%;
+  width: 344px;
+  height: 198px;
+  opacity: 1;
+  transform-origin: center;
+  transition:
+    transform 0.5s cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 0.4s ease,
+    filter 0.5s ease;
+  will-change: transform, opacity;
+}
+
+.payment-card.slot-0 {
+  z-index: 30;
+  transform: translateX(-50%) translateY(0) scale(1.02);
+  filter: brightness(1);
+}
+
+.payment-card.slot-1 {
+  z-index: 20;
+  transform: translateX(-50%) translateY(-70px) scale(0.94);
+  filter: brightness(0.73);
+}
+
+.payment-card.slot-2 {
+  z-index: 10;
+  transform: translateX(-50%) translateY(-133px) scale(0.9);
+  filter: brightness(0.5);
+}
+
+.payment-card.slot-3 {
+  z-index: 5;
+  opacity: 0;
+  transform: translateX(-50%) translateY(-440px) scale(0.86);
+  filter: brightness(1);
+}
+
+.payment-card-photo {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 9px;
+  background: #f4f3f2;
+  box-shadow: 0 7px 15px rgba(36, 31, 25, 0.14);
+}
+
+.payment-card-photo img {
+  position: absolute;
+  left: -41px;
+  width: 432px;
+  max-width: none;
+  height: auto;
+  display: block;
+  pointer-events: none;
+}
+
+.payment-card-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.payment-card-meta > span {
+  padding: 5px 16px;
+  color: #60584c;
+  border-radius: 20px;
+  background: #f6f6f8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.payment-card-dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.payment-card-dots button {
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border-radius: 999px;
+  background: #ddd;
+  transition:
+    width 0.25s ease,
+    background 0.25s ease;
+}
+
+.payment-card-dots button.active {
+  width: 22px;
+  background: #ffcc00;
+}
+
+.payment-qr-area {
+  flex: none;
+  padding: 12px 20px 91px;
+}
+
+.payment-qr-button {
+  width: 100%;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #1a1a1a;
+  border-radius: 14px;
+  background: #ffcc00;
+  font-size: 15px;
+  font-weight: 700;
+  transition:
+    transform 0.1s ease,
+    background 0.1s ease;
+}
+
+.payment-qr-button:active {
+  transform: scale(0.985);
+  background: #f5c300;
+}
