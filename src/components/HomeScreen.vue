@@ -1,14 +1,27 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { Menu, TrendingUp, ChevronDown, ChevronRight, X } from 'lucide-vue-next'
+import { Menu, ChevronDown, ChevronRight, X } from 'lucide-vue-next'
 import iconSearch from '../assets/icons/search.svg'
-import iconHome from '../assets/icons/click-home.svg'
+import iconHomeActive from '../assets/icons/click-home.svg'
+import iconHome from '../assets/icons/home.svg'
 import iconPayment from '../assets/icons/payment.svg'
+import iconPaymentActive from '../assets/icons/payment-selected.svg'
 import iconMycard from '../assets/icons/mycard.svg'
+import iconMycardActive from '../assets/icons/mycard-selected.svg'
+import iconReport from '../assets/icons/report.svg'
+import iconReportActive from '../assets/icons/report-selected.svg'
 import iconLocation from '../assets/icons/location.svg'
 import { categories, favoritePlaces, cards, benefitProfiles, benefitIcons, events } from '../data'
 
-const emit = defineEmits(['search', 'mypage'])
+const emit = defineEmits(['search', 'mypage', 'navigate'])
+
+// 하단 내비게이션 탭: icon(비활성/회색), iconActive(활성/노랑)
+const navItems = [
+  { label: '홈', icon: iconHome, iconActive: iconHomeActive },
+  { label: '결제', icon: iconPayment, iconActive: iconPaymentActive },
+  { label: '내 카드', icon: iconMycard, iconActive: iconMycardActive },
+  { label: '리포트', icon: iconReport, iconActive: iconReportActive },
+]
 
 // 가로 스크롤 영역을 마우스로 잡아끌 수 있게 해주는 커스텀 디렉티브 (v-drag-scroll)
 // 터치·트랙패드는 브라우저 기본 스크롤을 그대로 쓰고, 마우스일 때만 동작해요.
@@ -132,6 +145,10 @@ function categoryIcon(name) {
 
 function selectTab(index, label) {
   activeTab.value = index
+  if (index === 1) {
+    emit('navigate', 'payment')
+    return
+  }
   if (index !== 0) {
     notify(`${label} 탭은 홈 화면 변환본에서 제외했어요.`)
     requestAnimationFrame(() => {
@@ -228,18 +245,17 @@ function selectTab(index, label) {
 
   <nav class="bottom-nav">
     <button
-      v-for="(item, index) in [
-        { label: '홈', icon: iconHome },
-        { label: '결제', icon: iconPayment },
-        { label: '내 카드', icon: iconMycard },
-        { label: '리포트', icon: null },
-      ]"
+      v-for="(item, index) in navItems"
       :key="item.label"
       :class="{ active: activeTab === index }"
       @click="selectTab(index, item.label)"
     >
-      <img v-if="item.icon" :src="item.icon" :alt="item.label" width="22" height="22" />
-      <TrendingUp v-else :size="22" :stroke-width="activeTab === index ? 2.3 : 1.8" />
+      <img
+        :src="activeTab === index ? item.iconActive : item.icon"
+        :alt="item.label"
+        width="22"
+        height="22"
+      />
       <span>{{ item.label }}</span>
     </button>
   </nav>
