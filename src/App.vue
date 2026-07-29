@@ -86,6 +86,7 @@ function openMyPage(from) {
         v-else-if="screen === 'payment'"
         @home="screen = 'home'"
         @mypage="openMyPage('payment')"
+        @report="screen = 'home'"
       />
 
       <MyPage v-else-if="screen === 'mypage'" @back="screen = previousScreen" />
