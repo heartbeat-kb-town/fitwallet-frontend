@@ -1664,3 +1664,157 @@ input[type='search']::-webkit-search-cancel-button {
 .horizontal-scroll img {
   -webkit-user-drag: none;
 }
+
+/* ==================== 마이페이지 ==================== */
+.my-page-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.my-page-header {
+  flex: none;
+  height: 80px;
+  padding: 16px 20px 0;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #eeece9;
+  background: #fff;
+}
+
+.my-page-header h1 {
+  margin: 0;
+  color: #1a1a1a;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.my-page-back {
+  width: 30px;
+  height: 30px;
+  margin-right: 8px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: #1a1a1a;
+}
+
+.my-page-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: #fff;
+  scrollbar-width: none;
+}
+
+.my-page-content::-webkit-scrollbar {
+  display: none;
+}
+
+.my-profile-card {
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border: 1.5px solid #eeece9;
+  border-radius: 16px;
+}
+
+.my-profile-card > strong {
+  color: #1a1a1a;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.my-profile-image-wrap {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex: none;
+  border: 3px solid #ffcc00;
+  border-radius: 50%;
+}
+
+.my-profile-image-wrap > img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.my-profile-badge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  color: #1a1a1a;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #ffcc00;
+}
+
+.my-settings h2 {
+  margin: 0 0 10px;
+  padding-left: 4px;
+  color: #60584c;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.my-settings-list {
+  overflow: hidden;
+  border: 1.5px solid #eeece9;
+  border-radius: 16px;
+}
+
+.my-settings-list button {
+  width: 100%;
+  padding: 17px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  color: #b0a89e;
+  text-align: left;
+  cursor: default;
+}
+
+.my-settings-list button + button {
+  border-top: 1px solid #eeece9;
+}
+
+.my-settings-list span {
+  color: #1a1a1a;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.my-logout {
+  width: 100%;
+  padding: 17px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 14px;
+  background: #ffcc00;
+  color: #1a1a1a;
+  cursor: default;
+}
+
+.my-logout span {
+  font-size: 14px;
+  font-weight: 700;
+}
