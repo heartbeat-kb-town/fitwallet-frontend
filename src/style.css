@@ -1652,3 +1652,15 @@ input[type='search']::-webkit-search-cancel-button {
 .search-bottom-nav .active svg {
   stroke-width: 2.2;
 }
+
+/* 가로 스크롤 마우스 드래그 */
+.horizontal-scroll {
+  cursor: grab;
+  user-select: none;
+}
+.horizontal-scroll.dragging {
+  cursor: grabbing;
+}
+.horizontal-scroll img {
+  -webkit-user-drag: none;
+}

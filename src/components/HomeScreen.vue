@@ -10,6 +10,75 @@ import { categories, favoritePlaces, cards, benefitProfiles, benefitIcons, event
 
 const emit = defineEmits(['search'])
 
+// 가로 스크롤 영역을 마우스로 잡아끌 수 있게 해주는 커스텀 디렉티브 (v-drag-scroll)
+// 터치·트랙패드는 브라우저 기본 스크롤을 그대로 쓰고, 마우스일 때만 동작해요.
+const vDragScroll = {
+  mounted(el) {
+    let pointerId = null
+    let startX = 0
+    let startScrollLeft = 0
+    let dragged = false
+
+    const onPointerDown = (event) => {
+      if (event.pointerType !== 'mouse' || event.button !== 0) return
+      pointerId = event.pointerId
+      startX = event.clientX
+      startScrollLeft = el.scrollLeft
+      dragged = false
+    }
+
+    const onPointerMove = (event) => {
+      if (pointerId === null || event.pointerId !== pointerId) return
+      const deltaX = event.clientX - startX
+      if (!dragged && Math.abs(deltaX) > 6) {
+        dragged = true
+        el.setPointerCapture(pointerId)
+        el.style.scrollSnapType = 'none'
+        el.classList.add('dragging')
+      }
+      if (dragged) {
+        el.scrollLeft = startScrollLeft - deltaX
+        event.preventDefault()
+      }
+    }
+
+    const endDrag = (event) => {
+      if (pointerId === null || event.pointerId !== pointerId) return
+      pointerId = null
+      el.classList.remove('dragging')
+      el.style.scrollSnapType = ''
+      // 드래그 직후 발생하는 클릭 한 번을 막은 뒤 상태를 초기화해요
+      window.setTimeout(() => {
+        dragged = false
+      }, 0)
+    }
+
+    const onClickCapture = (event) => {
+      if (dragged) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+    }
+
+    el.addEventListener('pointerdown', onPointerDown)
+    el.addEventListener('pointermove', onPointerMove)
+    el.addEventListener('pointerup', endDrag)
+    el.addEventListener('pointercancel', endDrag)
+    el.addEventListener('click', onClickCapture, true)
+
+    el._dragScrollCleanup = () => {
+      el.removeEventListener('pointerdown', onPointerDown)
+      el.removeEventListener('pointermove', onPointerMove)
+      el.removeEventListener('pointerup', endDrag)
+      el.removeEventListener('pointercancel', endDrag)
+      el.removeEventListener('click', onClickCapture, true)
+    }
+  },
+  unmounted(el) {
+    el._dragScrollCleanup?.()
+  },
+}
+
 const selectedCategory = ref(null)
 const consentCategory = ref(null)
 const benefitCard = ref(null)
@@ -115,7 +184,7 @@ function selectTab(index, label) {
 
     <section class="home-section">
       <h2>자주 찾는 장소</h2>
-      <div class="horizontal-scroll">
+      <div v-drag-scroll class="horizontal-scroll">
         <button
           v-for="place in favoritePlaces"
           :key="place.id"
@@ -136,7 +205,7 @@ function selectTab(index, label) {
 
     <section class="home-section cards-section">
       <h2>카드 혜택 현황</h2>
-      <div class="horizontal-scroll">
+      <div v-drag-scroll class="horizontal-scroll">
         <article v-for="card in cards" :key="card.id" class="benefit-card">
           <div class="card-visual" :style="{ background: card.gradient, color: card.text }">
             <span class="card-glow one"></span>
