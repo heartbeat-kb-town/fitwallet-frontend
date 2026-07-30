@@ -11,7 +11,7 @@ import MyPage from './components/MyPage.vue'
 import PaymentScreen from './components/PaymentScreen.vue'
 import MyCardScreen from './components/MyCardScreen.vue'
 import ReportScreen from './components/ReportScreen.vue'
-import MerchantFlow from './components/MerchantFlow.vue'
+import MerchantFlow from './components/Merchantflow.vue'
 
 const screen = ref('login')
 const previousScreen = ref('home')

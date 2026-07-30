@@ -515,6 +515,11 @@ function notify(message) {
   }, 2000)
 }
 
+function selectMissedTab(tab) {
+  missedTab.value = tab
+  expanded.value = new Set(['food'])
+}
+
 function animateCounts() {
   const start = performance.now()
   const duration = 900
@@ -737,20 +742,14 @@ onBeforeUnmount(() => {
         <button
           type="button"
           :class="{ active: missedTab === 'app' }"
-          @click="
-            missedTab = 'app'
-            expanded = new Set(['food'])
-          "
+          @click="selectMissedTab('app')"
         >
           앱 미사용 손실
         </button>
         <button
           type="button"
           :class="{ active: missedTab === 'card' }"
-          @click="
-            missedTab = 'card'
-            expanded = new Set(['food'])
-          "
+          @click="selectMissedTab('card')"
         >
           카드 선택 손실
         </button>
