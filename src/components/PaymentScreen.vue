@@ -10,6 +10,10 @@ import waitingPig from '../assets/icons/pig-waiting.svg'
 import completePig from '../assets/icons/pig-thorwcard.svg'
 
 const emit = defineEmits(['home', 'mypage', 'report', 'mycard'])
+const props = defineProps({
+  initialCardIndex: { type: Number, default: 0 },
+  merchantName: { type: String, default: '' },
+})
 
 const cards = [
   { id: 'deep-dream', issuer: '신한카드', name: 'Deep Dream', cropY: 208 },
@@ -18,7 +22,9 @@ const cards = [
   { id: 'da', issuer: '신한카드', name: 'DA@카드의정석', cropY: 1443 },
 ]
 
-const activeIndex = ref(0)
+const activeIndex = ref(
+  Math.min(Math.max(Number(props.initialCardIndex) || 0, 0), cards.length - 1),
+)
 const pointerStartY = ref(null)
 const pointerMoved = ref(false)
 const locked = ref(false)
@@ -265,7 +271,7 @@ onBeforeUnmount(clearFlowTimers)
           <img :src="iconMycard" alt="" width="22" height="22" />
           <span>내 카드</span>
         </button>
-        <button type="button">
+        <button type="button" @click="emit('report')">
           <img :src="iconReport" alt="" width="22" height="22" />
           <span>리포트</span>
         </button>
@@ -400,7 +406,7 @@ onBeforeUnmount(clearFlowTimers)
         <dl class="payment-receipt">
           <div>
             <dt>가맹점명</dt>
-            <dd>스타벅스 강남점</dd>
+            <dd>{{ merchantName || '스타벅스 강남점' }}</dd>
           </div>
           <div>
             <dt>결제 수단</dt>

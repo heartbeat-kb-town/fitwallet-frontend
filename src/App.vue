@@ -10,11 +10,18 @@ import SearchScreen from './components/SearchScreen.vue'
 import MyPage from './components/MyPage.vue'
 import PaymentScreen from './components/PaymentScreen.vue'
 import MyCardScreen from './components/MyCardScreen.vue'
+import ReportScreen from './components/ReportScreen.vue'
+import MerchantFlow from './components/Merchantflow.vue'
 
 const screen = ref('login')
 const previousScreen = ref('home')
 const registeredPin = ref('')
 const confirmPin = ref('')
+const reportCardId = ref('')
+const merchantEntry = ref('home')
+const merchantRequest = ref({ categoryId: 'cafe', title: '카페/디저트', query: '' })
+const paymentCardIndex = ref(0)
+const paymentStore = ref('')
 
 function startPinRegistration() {
   registeredPin.value = ''
@@ -36,6 +43,27 @@ function finishPinConfirmation(pin) {
 function openMyPage(from) {
   previousScreen.value = from
   screen.value = 'mypage'
+}
+
+function openReport(cardId = '') {
+  reportCardId.value = cardId
+  screen.value = 'report'
+}
+
+function openMerchants(request, from = 'home') {
+  merchantEntry.value = from
+  merchantRequest.value = {
+    categoryId: request?.categoryId ?? 'cafe',
+    title: request?.title ?? request?.query ?? '가맹점',
+    query: request?.query ?? '',
+  }
+  screen.value = 'merchants'
+}
+
+function startRecommendedPayment({ cardIndex, store }) {
+  paymentCardIndex.value = cardIndex
+  paymentStore.value = store
+  screen.value = 'payment'
 }
 </script>
 
@@ -79,15 +107,32 @@ function openMyPage(from) {
         @search="screen = 'search'"
         @mypage="openMyPage('home')"
         @navigate="screen = $event"
+        @report="openReport"
+        @merchants="openMerchants($event, 'home')"
       />
 
-      <SearchScreen v-else-if="screen === 'search'" @back="screen = 'home'" />
+      <SearchScreen
+        v-else-if="screen === 'search'"
+        @back="screen = 'home'"
+        @search="openMerchants($event, 'search')"
+      />
+
+      <MerchantFlow
+        v-else-if="screen === 'merchants'"
+        :request="merchantRequest"
+        @back="screen = merchantEntry"
+        @mypage="openMyPage('merchants')"
+        @pay="startRecommendedPayment"
+        @navigate="screen = $event"
+      />
 
       <PaymentScreen
         v-else-if="screen === 'payment'"
+        :initial-card-index="paymentCardIndex"
+        :merchant-name="paymentStore"
         @home="screen = 'home'"
         @mypage="openMyPage('payment')"
-        @report="screen = 'home'"
+        @report="openReport()"
         @mycard="screen = 'mycard'"
       />
 
@@ -96,7 +141,15 @@ function openMyPage(from) {
         @home="screen = 'home'"
         @payment="screen = 'payment'"
         @mypage="openMyPage('mycard')"
-        @report="screen = 'home'"
+        @report="openReport()"
+      />
+
+      <ReportScreen
+        v-else-if="screen === 'report'"
+        :key="`report-${reportCardId}`"
+        :initial-card-id="reportCardId"
+        @navigate="screen = $event"
+        @mypage="openMyPage('report')"
       />
 
       <MyPage v-else-if="screen === 'mypage'" @back="screen = previousScreen" />

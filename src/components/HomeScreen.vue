@@ -1,3 +1,8 @@
+<script>
+// 위치 정보 동의는 세션 동안 한 번만 받도록 모듈 스코프에 저장 (홈 재진입해도 유지, 새로고침 시 초기화)
+let locationConsented = false
+</script>
+
 <script setup>
 import { computed, ref } from 'vue'
 import { Menu, ChevronDown, ChevronRight, X } from 'lucide-vue-next'
@@ -13,7 +18,7 @@ import iconReportActive from '../assets/icons/report-selected.svg'
 import iconLocation from '../assets/icons/location.svg'
 import { categories, favoritePlaces, cards, benefitProfiles, benefitIcons, events } from '../data'
 
-const emit = defineEmits(['search', 'mypage', 'navigate'])
+const emit = defineEmits(['search', 'mypage', 'navigate', 'report', 'merchants'])
 
 // 하단 내비게이션 탭: icon(비활성/회색), iconActive(활성/노랑)
 const navItems = [
@@ -125,13 +130,20 @@ function notify(message) {
 
 function chooseCategory(category) {
   selectedCategory.value = category.id
+  if (locationConsented) {
+    emit('merchants', { categoryId: category.id, title: category.name })
+    return
+  }
   consentCategory.value = category
 }
 
 function confirmLocation() {
-  const name = consentCategory.value?.name ?? '선택한 카테고리'
+  const category = consentCategory.value
   consentCategory.value = null
-  notify(`${name} 주변 매장 화면으로 연결할 수 있어요.`)
+  locationConsented = true
+  if (category) {
+    emit('merchants', { categoryId: category.id, title: category.name })
+  }
 }
 
 function openBenefit(card) {
@@ -151,6 +163,10 @@ function selectTab(index, label) {
   }
   if (index === 2) {
     emit('navigate', 'mycard')
+    return
+  }
+  if (index === 3) {
+    emit('report')
     return
   }
   if (index !== 0) {
@@ -206,7 +222,13 @@ function selectTab(index, label) {
           v-for="place in favoritePlaces"
           :key="place.id"
           class="place-card"
-          @click="notify(`${place.name} 카드 혜택 PICK 화면은 상세 화면 연결 시 열려요.`)"
+          @click="
+            emit('merchants', {
+              categoryId: place.categoryId,
+              title: place.name,
+              query: place.name,
+            })
+          "
         >
           <div class="place-image">
             <img :src="place.img" :alt="place.name" />
@@ -382,7 +404,7 @@ function selectTab(index, label) {
             <span>총 {{ profile.totalCount }}건 · {{ won(profile.totalSpend) }} 결제</span>
             <strong>총 {{ won(receivedDiscount) }} 할인</strong>
           </div>
-          <button class="primary-button" @click="notify('받은 혜택 리포트 화면과 연결하면 돼요.')">
+          <button class="primary-button" @click="emit('report', benefitCard.id)">
             받은 혜택 리포트 보기
           </button>
         </div>
