@@ -9,6 +9,7 @@ import HomeScreen from './components/HomeScreen.vue'
 import SearchScreen from './components/SearchScreen.vue'
 import MyPage from './components/MyPage.vue'
 import PaymentScreen from './components/PaymentScreen.vue'
+import MyCardScreen from './components/MyCardScreen.vue'
 
 const screen = ref('login')
 const previousScreen = ref('home')
@@ -86,6 +87,15 @@ function openMyPage(from) {
         v-else-if="screen === 'payment'"
         @home="screen = 'home'"
         @mypage="openMyPage('payment')"
+        @report="screen = 'home'"
+        @mycard="screen = 'mycard'"
+      />
+
+      <MyCardScreen
+        v-else-if="screen === 'mycard'"
+        @home="screen = 'home'"
+        @payment="screen = 'payment'"
+        @mypage="openMyPage('mycard')"
         @report="screen = 'home'"
       />
 

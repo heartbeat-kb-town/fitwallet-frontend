@@ -9,7 +9,7 @@ import cardSheet from '../assets/cards/payment-card-sheet.png'
 import waitingPig from '../assets/icons/pig-waiting.svg'
 import completePig from '../assets/icons/pig-thorwcard.svg'
 
-const emit = defineEmits(['home', 'mypage', 'report'])
+const emit = defineEmits(['home', 'mypage', 'report', 'mycard'])
 
 const cards = [
   { id: 'deep-dream', issuer: '신한카드', name: 'Deep Dream', cropY: 208 },
@@ -261,7 +261,7 @@ onBeforeUnmount(clearFlowTimers)
           <img :src="iconPaymentActive" alt="" width="22" height="22" />
           <span>결제</span>
         </button>
-        <button type="button">
+        <button type="button" @click="emit('mycard')">
           <img :src="iconMycard" alt="" width="22" height="22" />
           <span>내 카드</span>
         </button>
