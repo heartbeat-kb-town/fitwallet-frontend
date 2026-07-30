@@ -1,7 +1,7 @@
 <script setup>
 import { nextTick, onMounted, ref } from 'vue'
 
-const emit = defineEmits(['back'])
+const emit = defineEmits(['back', 'search'])
 
 const searchInput = ref(null)
 const query = ref('')
@@ -23,7 +23,19 @@ function clearAll() {
 async function selectWord(word) {
   query.value = word
   await nextTick()
-  searchInput.value?.focus()
+  submitSearch()
+}
+
+function submitSearch() {
+  const value = query.value.trim()
+  if (!value) {
+    searchInput.value?.focus()
+    return
+  }
+  if (!recents.value.includes(value)) {
+    recents.value = [value, ...recents.value].slice(0, 5)
+  }
+  emit('search', { query: value, title: value })
 }
 </script>
 
@@ -36,7 +48,7 @@ async function selectWord(word) {
         </svg>
       </button>
 
-      <label class="search-field">
+      <form class="search-field" @submit.prevent="submitSearch">
         <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="11" cy="11" r="7" />
           <path d="m16.5 16.5 4.5 4.5" />
@@ -61,7 +73,7 @@ async function selectWord(word) {
             <path d="m5 5 4 4m0-4-4 4" />
           </svg>
         </button>
-      </label>
+      </form>
     </header>
 
     <div class="search-content">
