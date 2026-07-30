@@ -1,7 +1,11 @@
 <script setup>
+import { ref } from 'vue'
 import profileImage from '../assets/icons/pig-face.svg'
+import PaymentPinChange from './PaymentPinChange.vue'
 
 defineEmits(['back'])
+
+const showPinChange = ref(false)
 </script>
 
 <template>
@@ -45,7 +49,7 @@ defineEmits(['back'])
       <section class="my-settings">
         <h2>설정 및 관리</h2>
         <div class="my-settings-list">
-          <button type="button" aria-disabled="true">
+          <button type="button" aria-label="결제 비밀번호 변경" @click="showPinChange = true">
             <span>결제 비밀번호 변경</span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
@@ -92,5 +96,7 @@ defineEmits(['back'])
         <span>로그아웃</span>
       </button>
     </div>
+
+    <PaymentPinChange v-if="showPinChange" @done="showPinChange = false" />
   </section>
 </template>

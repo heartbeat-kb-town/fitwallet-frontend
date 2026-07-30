@@ -149,6 +149,10 @@ function selectTab(index, label) {
     emit('navigate', 'payment')
     return
   }
+  if (index === 2) {
+    emit('navigate', 'mycard')
+    return
+  }
   if (index !== 0) {
     notify(`${label} 탭은 홈 화면 변환본에서 제외했어요.`)
     requestAnimationFrame(() => {
