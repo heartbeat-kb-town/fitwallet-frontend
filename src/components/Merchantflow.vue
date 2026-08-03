@@ -14,10 +14,18 @@ const props = defineProps({
     type: Object,
     default: () => ({ categoryId: 'cafe', title: '카페/디저트', query: '' }),
   },
+  initialStoreName: {
+    type: String,
+    default: '',
+  },
 })
 
 const emit = defineEmits(['back', 'mypage', 'pay', 'navigate'])
 const selectedStore = ref(null)
+const showPin = ref(false)
+const pendingPick = ref(null)
+const pin = ref([])
+const shakePin = ref(false)
 
 const storesByCategory = {
   cafe: [
@@ -86,6 +94,11 @@ const stores = computed(() => {
   return matches.length ? matches : (storesByCategory[category.value.id] ?? [])
 })
 
+// QR 결제에서 뒤로 돌아온 경우, 결제했던 가게의 피그의 PICK 화면을 다시 보여줍니다.
+if (props.initialStoreName) {
+  selectedStore.value = stores.value.find((store) => store.name === props.initialStoreName) ?? null
+}
+
 const cardPicks = [
   {
     cardIndex: 0,
@@ -143,7 +156,38 @@ function formatDistance(distance) {
 }
 
 function chooseCard(pick) {
-  emit('pay', { cardIndex: pick.cardIndex, store: selectedStore.value.name })
+  pendingPick.value = pick
+  pin.value = []
+  showPin.value = true
+}
+
+function closePin() {
+  showPin.value = false
+  pendingPick.value = null
+  pin.value = []
+}
+
+function addDigit(digit) {
+  if (pin.value.length < 6) pin.value.push(digit)
+}
+
+function deleteDigit() {
+  pin.value.pop()
+}
+
+function confirmPin() {
+  if (pin.value.length !== 6) {
+    shakePin.value = false
+    requestAnimationFrame(() => {
+      shakePin.value = true
+      window.setTimeout(() => {
+        shakePin.value = false
+      }, 460)
+    })
+    return
+  }
+  emit('pay', { cardIndex: pendingPick.value.cardIndex, store: selectedStore.value.name })
+  showPin.value = false
 }
 </script>
 
@@ -288,5 +332,51 @@ function chooseCard(pick) {
         <img :src="iconReport" alt="" width="22" height="22" /><span>리포트</span>
       </button>
     </nav>
+
+    <div v-if="showPin" class="payment-flow-layer">
+      <button
+        class="payment-pin-scrim"
+        type="button"
+        aria-label="결제 취소"
+        @click="closePin"
+      ></button>
+      <button class="payment-flow-close" type="button" aria-label="닫기" @click="closePin">
+        ×
+      </button>
+
+      <section class="payment-pin-sheet" @click.stop>
+        <span class="payment-sheet-handle"></span>
+        <div class="payment-pin-title">
+          <h2>결제 비밀번호 6자리를 입력해 주세요</h2>
+          <p>보안을 위해 비밀번호를 노출하지 마세요</p>
+        </div>
+        <div class="payment-pin-dots" :class="{ shake: shakePin }" aria-label="비밀번호 입력 상태">
+          <span v-for="index in 6" :key="index" :class="{ filled: index <= pin.length }"></span>
+        </div>
+        <div class="payment-pin-pad">
+          <button v-for="digit in 9" :key="digit" type="button" @click="addDigit(digit)">
+            {{ digit }}
+          </button>
+          <button type="button" aria-label="한 글자 지우기" @click="deleteDigit">
+            <svg width="27" height="21" viewBox="0 0 28 22" fill="none" aria-hidden="true">
+              <path
+                d="M10 1H26C26.55 1 27 1.45 27 2V20C27 20.55 26.55 21 26 21H10L1 11L10 1Z"
+                stroke="currentColor"
+                stroke-width="1.8"
+              />
+              <path
+                d="M17 7L13 11M13 11L17 15M13 11H21"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <button type="button" @click="addDigit(0)">0</button>
+          <button class="payment-pin-confirm" type="button" @click="confirmPin">완료</button>
+        </div>
+      </section>
+    </div>
   </section>
 </template>

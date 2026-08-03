@@ -85,6 +85,14 @@ async function closeSheet() {
   </section>
 
   <section v-else class="pin-change-overlay" aria-modal="true" role="dialog">
+    <button
+      class="pin-change-scrim"
+      type="button"
+      aria-label="닫기"
+      style="position: absolute; inset: 0; background: transparent"
+      @click="closeSheet"
+    ></button>
+
     <div class="pin-change-sheet" :class="{ mounted: isMounted }">
       <div class="pin-change-handle" aria-hidden="true"><span></span></div>
 
@@ -129,8 +137,6 @@ async function closeSheet() {
           <template v-else>{{ key }}</template>
         </button>
       </div>
-
-      <button class="pin-change-cancel" type="button" @click="closeSheet">취소</button>
     </div>
   </section>
 </template>
