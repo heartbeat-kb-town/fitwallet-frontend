@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import profileImage from '../assets/icons/pig-face.svg'
 import PaymentPinChange from './PaymentPinChange.vue'
 
-defineEmits(['back'])
+defineEmits(['back', 'manage-cards'])
 
 const showPinChange = ref(false)
 </script>
@@ -61,7 +61,7 @@ const showPinChange = ref(false)
               />
             </svg>
           </button>
-          <button type="button" aria-disabled="true">
+          <button type="button" @click="$emit('manage-cards')">
             <span>내 카드 관리</span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path

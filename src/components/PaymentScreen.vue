@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Menu } from 'lucide-vue-next'
 import iconHome from '../assets/icons/home.svg'
 import iconPaymentActive from '../assets/icons/payment-selected.svg'
@@ -8,23 +8,19 @@ import iconReport from '../assets/icons/report.svg'
 import cardSheet from '../assets/cards/payment-card-sheet.png'
 import waitingPig from '../assets/icons/pig-waiting.svg'
 import completePig from '../assets/icons/pig-thorwcard.svg'
+import { DEFAULT_CARDS } from '../cardData'
 
-const emit = defineEmits(['home', 'mypage', 'report', 'mycard'])
+const emit = defineEmits(['home', 'mypage', 'report', 'mycard', 'merchant-back'])
 const props = defineProps({
-  initialCardIndex: { type: Number, default: 0 },
+  cards: { type: Array, default: () => DEFAULT_CARDS },
+  initialCardId: { type: String, default: '' },
   merchantName: { type: String, default: '' },
+  startPhase: { type: String, default: 'cards' },
 })
 
-const cards = [
-  { id: 'deep-dream', issuer: '신한카드', name: 'Deep Dream', cropY: 208 },
-  { id: 'toktok-o', issuer: 'KB국민카드', name: '톡톡O', cropY: 609 },
-  { id: 'zero', issuer: '현대카드', name: 'ZERO Edition2', cropY: 1022 },
-  { id: 'da', issuer: '신한카드', name: 'DA@카드의정석', cropY: 1443 },
-]
-
-const activeIndex = ref(
-  Math.min(Math.max(Number(props.initialCardIndex) || 0, 0), cards.length - 1),
-)
+const cards = computed(() => (props.cards?.length ? props.cards : DEFAULT_CARDS))
+const initialIndex = cards.value.findIndex((card) => card.id === props.initialCardId)
+const activeIndex = ref(initialIndex >= 0 ? initialIndex : 0)
 const pointerStartY = ref(null)
 const pointerMoved = ref(false)
 const locked = ref(false)
@@ -37,7 +33,7 @@ const paidAt = ref('')
 let countdownTimer
 let phaseTimer
 
-const activeCard = computed(() => cards[activeIndex.value])
+const activeCard = computed(() => cards.value[activeIndex.value])
 const countdownText = computed(() => {
   const minutes = Math.floor(secondsLeft.value / 60)
   const seconds = String(secondsLeft.value % 60).padStart(2, '0')
@@ -45,13 +41,13 @@ const countdownText = computed(() => {
 })
 
 function cardSlot(index) {
-  return (index - activeIndex.value + cards.length) % cards.length
+  return (index - activeIndex.value + cards.value.length) % cards.value.length
 }
 
 function advanceCard() {
   if (locked.value) return
   locked.value = true
-  activeIndex.value = (activeIndex.value + 1) % cards.length
+  activeIndex.value = (activeIndex.value + 1) % cards.value.length
   window.setTimeout(() => {
     locked.value = false
   }, 520)
@@ -157,6 +153,26 @@ watch(phase, (nextPhase) => {
       paidAt.value = formatNow()
       phase.value = 'done'
     }, 2200)
+  }
+})
+
+function qrBack() {
+  clearFlowTimers()
+  if (props.startPhase === 'qr') {
+    // 가맹점(피그의 PICK)에서 진입한 결제 → 피그의 PICK 화면으로 돌아갑니다.
+    emit('merchant-back')
+    return
+  }
+  // 결제 탭에서 진입한 결제 → 카드 선택(결제) 화면으로 돌아갑니다.
+  phase.value = 'cards'
+}
+
+onMounted(() => {
+  // 가맹점에서 카드를 고르고 비밀번호까지 입력한 경우, 바로 QR 결제 단계부터 시작합니다.
+  if (props.startPhase === 'qr') {
+    qrTab.value = 'scan'
+    secondsLeft.value = 180
+    phase.value = 'qr'
   }
 })
 
@@ -330,7 +346,7 @@ onBeforeUnmount(clearFlowTimers)
 
     <section v-else-if="phase === 'qr'" class="payment-qr-screen">
       <header>
-        <button type="button" aria-label="비밀번호 입력으로 돌아가기" @click="phase = 'pin'">
+        <button type="button" aria-label="이전으로 돌아가기" @click="qrBack">
           <svg width="19" height="19" viewBox="0 0 18 18" fill="none" aria-hidden="true">
             <path
               d="M11 4L6 9L11 14"
