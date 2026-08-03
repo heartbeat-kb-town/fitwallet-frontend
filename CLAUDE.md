@@ -21,8 +21,6 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
 - 커밋 시 lefthook pre-commit 훅이 스테이징된 파일에 ESLint `--fix` + Prettier를 자동 적용한다
   (`npm install` 하면 `prepare` 스크립트가 `lefthook install`을 실행)
 
----
-
 ## 현재 적용 상태 (작업 전 반드시 확인)
 
 **아래 개발 규칙은 확정됐지만, 상당수가 아직 코드에 적용되지 않았다.**
@@ -52,8 +50,6 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
 - 기존 14개 화면을 수정할 때는 기존 방식(스위처 + 전역 CSS)을 그대로 따른다.
   한 PR에서 규칙 이관과 기능 변경을 같이 하지 않는다.
 - 표의 항목이 적용되면 **이 표를 같이 갱신한다.**
-
----
 
 ## 폴더 구조
 
@@ -306,8 +302,6 @@ export const useCardStore = defineStore('card', () => {
 
 - `.env.example`을 `.env`로 복사해 쓴다. `.env`는 커밋하지 않는다.
 - 클라이언트에 노출되므로 **비밀 키를 넣지 않는다.** `VITE_` 접두사가 붙은 값만 코드에서 읽힌다.
-
----
 
 ## Git 컨벤션
 
