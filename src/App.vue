@@ -11,7 +11,7 @@ import MyPage from './components/MyPage.vue'
 import PaymentScreen from './components/PaymentScreen.vue'
 import MyCardScreen from './components/MyCardScreen.vue'
 import ReportScreen from './components/ReportScreen.vue'
-import MerchantFlow from './components/MerchantFlow.vue'
+import MerchantFlow from './components/Merchantflow.vue'
 import CardManagement from './components/CardManagement.vue'
 import { DEFAULT_CARDS } from './cardData'
 
