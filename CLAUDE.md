@@ -135,19 +135,30 @@ export const getUserCards = () => client.get('/user-cards')
 
 두 함수의 **호출부 코드가 같아야 한다.** 그래야 실제 호출로 교체할 때 화면을 안 고친다.
 
-### 실제 호출 가능한 엔드포인트
+### API 계약의 정본 — OpenAPI 스펙
+
+**엔드포인트 목록, 필드명, 타입은 전부 아래 스펙에서 확인한다. 추측하지 않는다.**
 
 ```
-GET  /api/user-cards                        GET  /api/store/search
-GET  /api/card/{cardId}/summary             GET  /api/store/keywords
-GET  /api/card/{cardId}/transactions        DEL  /api/store/keywords/recent/{searchHistoryId}
-POST /api/card                              DEL  /api/store/keywords/recent
-GET  /api/benefit/expected                  POST /api/payment/pin/verify
-POST /api/user/signup                       POST /api/user/login
+https://raw.githubusercontent.com/heartbeat-kb-town/fitwallet-backend/openapi-spec/openapi.json
 ```
 
-- 그 외(**리포트 전체**, 토큰 재발급/로그아웃)는 목데이터로 둔다.
-- 필드명·타입의 **정본은 Swagger**다: `http://localhost:8080/swagger-ui/index.html`. 추측하지 말고 확인한다.
+백엔드 CI가 `develop` 머지마다 자동 발행한다. **백엔드를 띄울 필요가 없다.**
+여기 없는 엔드포인트는 백엔드 미구현이므로 목데이터로 둔다(위 규칙 참고).
+
+읽는 법 — 파일이 크니 통째로 읽지 말고 필요한 부분만 뽑는다:
+
+```bash
+SPEC=https://raw.githubusercontent.com/heartbeat-kb-town/fitwallet-backend/openapi-spec/openapi.json
+
+curl -s $SPEC | jq -r '.paths | keys[]'                    # 엔드포인트 목록
+curl -s $SPEC | jq '.paths["/api/user-cards"]'             # 특정 엔드포인트 계약
+curl -s $SPEC | jq '.components.schemas | keys[]'          # 스키마 목록
+curl -s $SPEC -o /tmp/openapi.json                         # 전체를 읽어야 할 때
+```
+
+- 응답은 `success`/`code`/`message`/`data` 봉투에 담긴다. **실제 데이터는 스키마의 `data`를 열어야 나온다**
+- 백엔드를 직접 띄웠다면 `http://localhost:8080/swagger-ui/index.html`도 같은 내용이다 (사람이 보기엔 이쪽이 편하다)
 - 개발 시 `/api` 요청은 vite proxy가 `localhost:8080`으로 넘긴다 (`vite.config.js`).
 
 ## 인증
