@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+import { getAccessToken } from '@/api/client'
 import { routes } from './routes'
 
 const router = createRouter({
@@ -9,8 +10,13 @@ const router = createRouter({
   scrollBehavior: () => ({ top: 0 }),
 })
 
-// TODO(#27): meta.requiresAuth 가드를 붙인다.
-// access token 을 메모리에 들고 있는 `api/client.js` 가 아직 없어서,
-// 토큰 저장소가 생긴 뒤에 추가한다.
+// meta.requiresAuth 가 붙은 라우트는 토큰이 없으면 로그인으로 보낸다.
+router.beforeEach((to) => {
+  if (!to.meta.requiresAuth || getAccessToken()) return true
+
+  // 로그인 화면이 아직 `src/views/` 로 이관되기 전이면 login 라우트가 없다.
+  // 없는 라우트로 보내면 터지므로, 그때까지는 막지 않는다.
+  return router.hasRoute('login') ? { name: 'login' } : true
+})
 
 export default router
