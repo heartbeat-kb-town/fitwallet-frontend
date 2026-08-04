@@ -10,7 +10,9 @@
  *
  * 새 코드는 여기에 추가하지 않는다. 여기는 줄어들기만 하는 파일이다.
  */
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
+// startRecommendedPayment 가 가맹점에서 받은 인덱스로 원본 목록을 참조한다.
+// 정렬된 목록이 아니라 원본이다 — 기존 동작이라 그대로 둔다.
 import { DEFAULT_CARDS } from '@/cardData'
 
 /**
@@ -30,17 +32,14 @@ import { DEFAULT_CARDS } from '@/cardData'
 const reportCardId = ref('')
 const merchantEntry = ref('home')
 const merchantRequest = ref({ categoryId: 'cafe', title: '카페/디저트', query: '' })
-const cardOrder = ref(DEFAULT_CARDS.map((card) => card.id))
 const paymentCardId = ref('')
 const paymentStore = ref('')
 const paymentStartPhase = ref('cards')
 const merchantReturnStore = ref('')
-const orderedCards = computed(() =>
-  cardOrder.value.map((id) => DEFAULT_CARDS.find((card) => card.id === id)).filter(Boolean),
-)
 </script>
 
 <script setup>
+import { watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import HomeScreen from '@/components/HomeScreen.vue'
 import SearchScreen from '@/components/SearchScreen.vue'
@@ -48,10 +47,22 @@ import PaymentScreen from '@/components/PaymentScreen.vue'
 import MyCardScreen from '@/components/MyCardScreen.vue'
 import ReportScreen from '@/components/ReportScreen.vue'
 import MerchantFlow from '@/components/Merchantflow.vue'
-import CardManagement from '@/components/CardManagement.vue'
+import { useCardStore } from '@/stores/cardStore'
 
 const route = useRoute()
 const router = useRouter()
+const cardStore = useCardStore()
+
+// 카드 순서가 바뀌면 결제 화면에 미리 골라둔 카드가 무효가 된다.
+// 원래 셸의 reorderCards()/setPrimaryCard() 가 갖고 있던 부수효과인데,
+// cardStore 는 결제 도메인을 모르므로 여기서 잇는다.
+// 결제 화면이 이관되면 그쪽 store 로 옮겨간다.
+watch(
+  () => cardStore.order,
+  () => {
+    paymentCardId.value = ''
+  },
+)
 
 // 이관 중에만 쓰는 진입점. 라우팅된 화면이 셸 안의 특정 화면으로 들어올 때 쓴다.
 // 이건 마운트마다 새로 읽어야 하므로 위와 달리 setup 안에 둔다.
@@ -62,11 +73,6 @@ const screen = ref(typeof route.query.screen === 'string' ? route.query.screen :
 // (셸 안의 화면 전환은 히스토리를 만들지 않아 router.back() 을 아직 쓸 수 없다)
 function openMyPage(from) {
   router.push({ name: 'my-page', query: { from } })
-}
-
-// 카드 관리에서 마이페이지로 돌아갈 때, 마이페이지가 원래 온 곳(`from`)을 되돌려준다.
-function backToMyPage() {
-  router.push({ name: 'my-page', query: { from: route.query.from } })
 }
 
 function openReport(cardId = '') {
@@ -108,16 +114,6 @@ function navigateTo(nextScreen) {
   }
   screen.value = nextScreen
 }
-
-function reorderCards(nextOrder) {
-  cardOrder.value = [...nextOrder]
-  paymentCardId.value = ''
-}
-
-function setPrimaryCard(cardId) {
-  cardOrder.value = [cardId, ...cardOrder.value.filter((id) => id !== cardId)]
-  paymentCardId.value = ''
-}
 </script>
 
 <template>
@@ -139,7 +135,7 @@ function setPrimaryCard(cardId) {
 
   <PaymentScreen
     v-else-if="screen === 'payment'"
-    :cards="orderedCards"
+    :cards="cardStore.cards"
     :initial-card-id="paymentCardId"
     :merchant-name="paymentStore"
     :start-phase="paymentStartPhase"
@@ -164,14 +160,6 @@ function setPrimaryCard(cardId) {
     :initial-card-id="reportCardId"
     @navigate="screen = $event"
     @mypage="openMyPage('report')"
-  />
-
-  <CardManagement
-    v-else-if="screen === 'card-management'"
-    :cards="orderedCards"
-    @back="backToMyPage"
-    @reorder="reorderCards"
-    @primary="setPrimaryCard"
   />
 
   <HomeScreen

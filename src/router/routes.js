@@ -25,6 +25,11 @@ export const routes = [
   },
   { path: '/my-page', name: 'my-page', component: () => import('@/views/MyPageView.vue') },
   {
+    path: '/card-management',
+    name: 'card-management',
+    component: () => import('@/views/CardManagementView.vue'),
+  },
+  {
     path: '/asset-connect',
     name: 'asset-connect',
     component: () => import('@/views/AssetConnectView.vue'),

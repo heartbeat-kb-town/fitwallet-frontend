@@ -20,14 +20,10 @@ function goBack() {
   router.push({ name: 'app-shell', query: { screen: from } })
 }
 
-// 내 카드 관리는 아직 셸에 있다 (#39 로 순차 이관 중).
 // `from` 을 그대로 딸려 보낸다. 카드 관리에서 뒤로 누르면 마이페이지로 돌아오는데,
 // 그때도 원래 온 곳(홈·결제 …)을 잃지 않아야 기존 동작과 같다.
 function goToCardManagement() {
-  router.push({
-    name: 'app-shell',
-    query: { screen: 'card-management', from: route.query.from },
-  })
+  router.push({ name: 'card-management', query: { from: route.query.from } })
 }
 </script>
 
