@@ -26,10 +26,8 @@ function goToLogin() {
 
 // TODO(#27): 실제 가입 연동(POST /api/user/signup)은 별도 이슈다.
 //            지금은 기존 프로토타입과 동일하게 PIN 등록 화면으로 넘어가기만 한다.
-//            PIN 은 아직 셸에 있어 임시 query 를 쓴다 (PinPadView 이관 시 사라진다).
-//            셸이 새로 마운트되므로 registeredPin·confirmPin 은 빈 값으로 시작한다.
 function submit() {
-  if (canSubmit.value) router.push({ name: 'app-shell', query: { screen: 'pin-register' } })
+  if (canSubmit.value) router.push({ name: 'pin-register' })
 }
 </script>
 

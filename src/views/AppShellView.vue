@@ -12,7 +12,6 @@
  */
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import PinPad from '@/components/PinPad.vue'
 import SignUpComplete from '@/components/SignUpComplete.vue'
 import AssetConnectScreen from '@/components/AssetConnectScreen.vue'
 import HomeScreen from '@/components/HomeScreen.vue'
@@ -32,8 +31,6 @@ const route = useRoute()
 const screen = ref(typeof route.query.screen === 'string' ? route.query.screen : 'home')
 
 const previousScreen = ref('home')
-const registeredPin = ref('')
-const confirmPin = ref('')
 const reportCardId = ref('')
 const merchantEntry = ref('home')
 const merchantRequest = ref({ categoryId: 'cafe', title: '카페/디저트', query: '' })
@@ -45,17 +42,6 @@ const merchantReturnStore = ref('')
 const orderedCards = computed(() =>
   cardOrder.value.map((id) => DEFAULT_CARDS.find((card) => card.id === id)).filter(Boolean),
 )
-
-function finishPinRegistration(pin) {
-  registeredPin.value = pin
-  screen.value = 'pin-confirm'
-}
-
-function finishPinConfirmation(pin) {
-  confirmPin.value = pin
-  // TODO: registeredPin과 confirmPin이 다르면 다시 입력받는 로직을 나중에 추가하면 좋아요
-  screen.value = 'complete'
-}
 
 function openMyPage(from) {
   previousScreen.value = from
@@ -118,23 +104,7 @@ function setPrimaryCard(cardId) {
 </script>
 
 <template>
-  <PinPad
-    v-if="screen === 'pin-register'"
-    key="pin-register"
-    title="결제 비밀번호 6자리를 등록해주세요"
-    subtitle="보안을 위해 비밀번호를 노출하지 마세요"
-    @complete="finishPinRegistration"
-  />
-
-  <PinPad
-    v-else-if="screen === 'pin-confirm'"
-    key="pin-confirm"
-    title="결제 비밀번호 6자리를 확인해주세요"
-    subtitle="보안을 위해 비밀번호를 노출하지 마세요"
-    @complete="finishPinConfirmation"
-  />
-
-  <SignUpComplete v-else-if="screen === 'complete'" @connect="screen = 'asset-connect'" />
+  <SignUpComplete v-if="screen === 'complete'" @connect="screen = 'asset-connect'" />
 
   <AssetConnectScreen
     v-else-if="screen === 'asset-connect'"
