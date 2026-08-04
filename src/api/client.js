@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { ref } from 'vue'
 
 /**
  * 백엔드 봉투에서 벗겨낸 에러.
@@ -34,17 +35,21 @@ const PUBLIC_PATHS = ['/user/login', '/user/signup']
 // access token 은 메모리에만 둔다. localStorage / sessionStorage 에 절대 넣지 않는다.
 // refresh 를 HttpOnly 쿠키로 감싼 설계라, access 를 스토리지에 두면 XSS 방어가 무의미해진다.
 // 대신 새로고침하면 날아간다. 백엔드에 /reissue 가 생기면 앱 부팅 시 복구한다.
-let accessToken = null
+//
+// 평범한 모듈 변수가 아니라 ref 다. store 가 isLoggedIn 같은 computed 로 이걸 보는데,
+// 일반 변수면 값이 바뀌어도 computed 가 다시 계산되지 않는다.
+// 토큰의 유일한 보관처를 여기 하나로 두기 위해 store 로 복사하지 않고 여기를 반응형으로 만든다.
+const accessToken = ref(null)
 
 export const setAccessToken = (token) => {
-  accessToken = token
+  accessToken.value = token
 }
 
 export const clearAccessToken = () => {
-  accessToken = null
+  accessToken.value = null
 }
 
-export const getAccessToken = () => accessToken
+export const getAccessToken = () => accessToken.value
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api',
@@ -54,8 +59,8 @@ const client = axios.create({
 })
 
 client.interceptors.request.use((config) => {
-  if (accessToken) {
-    config.headers.Authorization = `Bearer ${accessToken}`
+  if (accessToken.value) {
+    config.headers.Authorization = `Bearer ${accessToken.value}`
   }
   return config
 })
