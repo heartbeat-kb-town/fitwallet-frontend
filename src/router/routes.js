@@ -9,11 +9,27 @@
  * 셸(`/app`)과 그 뒤의 catch-all 은 이관(#39)이 끝나면 함께 지운다.
  * 그때부터는 원래대로 배열 끝에 추가하면 된다.
  */
+// `useSignupStore()` 는 아래 가드 안에서만 호출한다.
+// 모듈 로드 시점에는 아직 Pinia 가 설치되기 전이라 호출하면 터진다.
+import { useSignupStore } from '@/stores/signupStore'
+
 export const routes = [
   { path: '/', redirect: { name: 'login' } },
 
   { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue') },
   { path: '/signup', name: 'signup', component: () => import('@/views/SignUpView.vue') },
+  {
+    path: '/pin/register',
+    name: 'pin-register',
+    component: () => import('@/views/PinRegisterView.vue'),
+  },
+  {
+    path: '/pin/confirm',
+    name: 'pin-confirm',
+    component: () => import('@/views/PinConfirmView.vue'),
+    // 등록을 건너뛰고 주소창으로 바로 들어오면 확인할 대상이 없다.
+    beforeEnter: () => (useSignupStore().registeredPin ? true : { name: 'pin-register' }),
+  },
 
   // 이관 중(#39): 아직 `views/` 로 옮기지 않은 화면 12개를 담는 임시 셸.
   // 셸 안에서 어느 화면을 볼지는 `?screen=` 으로 넘긴다 (이관이 끝나면 사라지는 임시 수단).
