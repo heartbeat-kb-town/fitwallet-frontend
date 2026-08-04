@@ -13,6 +13,7 @@ export const routes = [
   { path: '/', redirect: { name: 'login' } },
 
   { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue') },
+  { path: '/signup', name: 'signup', component: () => import('@/views/SignUpView.vue') },
 
   // 이관 중(#39): 아직 `views/` 로 옮기지 않은 화면 12개를 담는 임시 셸.
   // 셸 안에서 어느 화면을 볼지는 `?screen=` 으로 넘긴다 (이관이 끝나면 사라지는 임시 수단).

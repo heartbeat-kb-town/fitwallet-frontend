@@ -1,9 +1,10 @@
 <script setup>
 import { computed, ref } from 'vue'
-import AppIcon from './AppIcon.vue'
-import PasswordEye from './PasswordEye.vue'
+import { useRouter } from 'vue-router'
+import AppIcon from '@/components/AppIcon.vue'
+import PasswordEye from '@/components/PasswordEye.vue'
 
-const emit = defineEmits(['back', 'submit'])
+const router = useRouter()
 
 const name = ref('')
 const id = ref('')
@@ -19,15 +20,23 @@ const canSubmit = computed(
   () => name.value && id.value && password.value && passwordMatches.value && agreed.value,
 )
 
+function goToLogin() {
+  router.push({ name: 'login' })
+}
+
+// TODO(#27): 실제 가입 연동(POST /api/user/signup)은 별도 이슈다.
+//            지금은 기존 프로토타입과 동일하게 PIN 등록 화면으로 넘어가기만 한다.
+//            PIN 은 아직 셸에 있어 임시 query 를 쓴다 (PinPadView 이관 시 사라진다).
+//            셸이 새로 마운트되므로 registeredPin·confirmPin 은 빈 값으로 시작한다.
 function submit() {
-  if (canSubmit.value) emit('submit')
+  if (canSubmit.value) router.push({ name: 'app-shell', query: { screen: 'pin-register' } })
 }
 </script>
 
 <template>
   <div class="screen signup-screen">
     <header class="flow-header left-title">
-      <button type="button" aria-label="로그인으로 돌아가기" @click="emit('back')">
+      <button type="button" aria-label="로그인으로 돌아가기" @click="goToLogin()">
         <AppIcon name="back" :size="22" />
       </button>
       <h1>회원가입</h1>

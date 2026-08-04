@@ -11,8 +11,7 @@
  * 새 코드는 여기에 추가하지 않는다. 여기는 줄어들기만 하는 파일이다.
  */
 import { computed, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import SignUpScreen from '@/components/SignUpScreen.vue'
+import { useRoute } from 'vue-router'
 import PinPad from '@/components/PinPad.vue'
 import SignUpComplete from '@/components/SignUpComplete.vue'
 import AssetConnectScreen from '@/components/AssetConnectScreen.vue'
@@ -27,7 +26,6 @@ import CardManagement from '@/components/CardManagement.vue'
 import { DEFAULT_CARDS } from '@/cardData'
 
 const route = useRoute()
-const router = useRouter()
 
 // 이관 중에만 쓰는 진입점. 라우팅된 화면이 셸 안의 특정 화면으로 들어올 때 쓴다.
 // (예: LoginView → 회원가입) 해당 화면이 이관되면 이 query 도 함께 사라진다.
@@ -47,17 +45,6 @@ const merchantReturnStore = ref('')
 const orderedCards = computed(() =>
   cardOrder.value.map((id) => DEFAULT_CARDS.find((card) => card.id === id)).filter(Boolean),
 )
-
-// 로그인 화면은 이관 완료(#40). 셸에서 로그인으로 나갈 때는 라우터를 쓴다.
-function goToLogin() {
-  router.push({ name: 'login' })
-}
-
-function startPinRegistration() {
-  registeredPin.value = ''
-  confirmPin.value = ''
-  screen.value = 'pin-register'
-}
 
 function finishPinRegistration(pin) {
   registeredPin.value = pin
@@ -131,10 +118,8 @@ function setPrimaryCard(cardId) {
 </script>
 
 <template>
-  <SignUpScreen v-if="screen === 'signup'" @back="goToLogin" @submit="startPinRegistration" />
-
   <PinPad
-    v-else-if="screen === 'pin-register'"
+    v-if="screen === 'pin-register'"
     key="pin-register"
     title="결제 비밀번호 6자리를 등록해주세요"
     subtitle="보안을 위해 비밀번호를 노출하지 마세요"

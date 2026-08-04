@@ -17,10 +17,8 @@ function login() {
   router.push({ name: 'app-shell' })
 }
 
-// 회원가입은 아직 AppShellView 의 스위처에 있다 (#39 로 순차 이관 중).
-// SignUpView 가 생기면 이 줄이 name: 'signup' 으로 바뀐다.
 function goToSignUp() {
-  router.push({ name: 'app-shell', query: { screen: 'signup' } })
+  router.push({ name: 'signup' })
 }
 </script>
 
