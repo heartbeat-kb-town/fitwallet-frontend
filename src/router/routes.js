@@ -23,6 +23,7 @@ export const routes = [
     name: 'signup-complete',
     component: () => import('@/views/SignUpCompleteView.vue'),
   },
+  { path: '/my-page', name: 'my-page', component: () => import('@/views/MyPageView.vue') },
   {
     path: '/asset-connect',
     name: 'asset-connect',

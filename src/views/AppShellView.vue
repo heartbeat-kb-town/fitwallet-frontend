@@ -1,4 +1,4 @@
-<script setup>
+<script>
 /**
  * 이관용 임시 셸 (#39).
  *
@@ -11,27 +11,22 @@
  * 새 코드는 여기에 추가하지 않는다. 여기는 줄어들기만 하는 파일이다.
  */
 import { computed, ref } from 'vue'
-import { useRoute } from 'vue-router'
-import HomeScreen from '@/components/HomeScreen.vue'
-import SearchScreen from '@/components/SearchScreen.vue'
-import MyPage from '@/components/MyPage.vue'
-import PaymentScreen from '@/components/PaymentScreen.vue'
-import MyCardScreen from '@/components/MyCardScreen.vue'
-import ReportScreen from '@/components/ReportScreen.vue'
-import MerchantFlow from '@/components/Merchantflow.vue'
-import CardManagement from '@/components/CardManagement.vue'
 import { DEFAULT_CARDS } from '@/cardData'
 
-const route = useRoute()
-
-// 이관 중에만 쓰는 진입점. 라우팅된 화면이 셸 안의 특정 화면으로 들어올 때 쓴다.
-//
-// 가입 흐름이 전부 이관돼 지금은 이 query 를 넘기는 코드가 없지만, 읽는 쪽은 남겨둔다.
-// 남은 화면(MyPage, CardManagement, Search …)을 이관하면 다시 필요해진다.
-// AppShellView 를 삭제할 때 함께 사라진다.
-const screen = ref(typeof route.query.screen === 'string' ? route.query.screen : 'home')
-
-const previousScreen = ref('home')
+/**
+ * 화면 간에 공유하는 상태는 **모듈 스코프**에 둔다. setup 안이 아니다.
+ *
+ * 원래 이 값들은 `App.vue` 에 있어서 앱이 떠 있는 내내 살아 있었다.
+ * 지금은 셸이 라우트라, 이관된 화면(`/my-page` 등)으로 나갔다 오면 컴포넌트가
+ * 언마운트됐다가 새로 마운트된다. setup 안에 두면 그때마다 초기화된다.
+ *
+ * 그러면 이런 게 깨진다:
+ *   - 카드 순서를 바꾸고 카드관리를 나가면 순서가 기본값으로 되돌아감
+ *   - 가맹점 → 결제(QR) → 마이페이지 → 뒤로 가면 결제가 카드선택부터 다시 시작
+ *
+ * 각 화면이 이관되면서 자기 상태를 제대로 된 store 로 가져간다.
+ * 마지막 화면이 나가면 이 블록도 파일과 함께 사라진다.
+ */
 const reportCardId = ref('')
 const merchantEntry = ref('home')
 const merchantRequest = ref({ categoryId: 'cafe', title: '카페/디저트', query: '' })
@@ -43,10 +38,35 @@ const merchantReturnStore = ref('')
 const orderedCards = computed(() =>
   cardOrder.value.map((id) => DEFAULT_CARDS.find((card) => card.id === id)).filter(Boolean),
 )
+</script>
 
+<script setup>
+import { useRoute, useRouter } from 'vue-router'
+import HomeScreen from '@/components/HomeScreen.vue'
+import SearchScreen from '@/components/SearchScreen.vue'
+import PaymentScreen from '@/components/PaymentScreen.vue'
+import MyCardScreen from '@/components/MyCardScreen.vue'
+import ReportScreen from '@/components/ReportScreen.vue'
+import MerchantFlow from '@/components/Merchantflow.vue'
+import CardManagement from '@/components/CardManagement.vue'
+
+const route = useRoute()
+const router = useRouter()
+
+// 이관 중에만 쓰는 진입점. 라우팅된 화면이 셸 안의 특정 화면으로 들어올 때 쓴다.
+// 이건 마운트마다 새로 읽어야 하므로 위와 달리 setup 안에 둔다.
+// AppShellView 를 삭제할 때 함께 사라진다.
+const screen = ref(typeof route.query.screen === 'string' ? route.query.screen : 'home')
+
+// 마이페이지는 이관 완료(#52). 돌아올 화면은 `from` query 로 넘긴다.
+// (셸 안의 화면 전환은 히스토리를 만들지 않아 router.back() 을 아직 쓸 수 없다)
 function openMyPage(from) {
-  previousScreen.value = from
-  screen.value = 'mypage'
+  router.push({ name: 'my-page', query: { from } })
+}
+
+// 카드 관리에서 마이페이지로 돌아갈 때, 마이페이지가 원래 온 곳(`from`)을 되돌려준다.
+function backToMyPage() {
+  router.push({ name: 'my-page', query: { from: route.query.from } })
 }
 
 function openReport(cardId = '') {
@@ -87,10 +107,6 @@ function navigateTo(nextScreen) {
     paymentStartPhase.value = 'cards'
   }
   screen.value = nextScreen
-}
-
-function openCardManagement() {
-  screen.value = 'card-management'
 }
 
 function reorderCards(nextOrder) {
@@ -150,16 +166,10 @@ function setPrimaryCard(cardId) {
     @mypage="openMyPage('report')"
   />
 
-  <MyPage
-    v-else-if="screen === 'mypage'"
-    @back="screen = previousScreen"
-    @manage-cards="openCardManagement"
-  />
-
   <CardManagement
     v-else-if="screen === 'card-management'"
     :cards="orderedCards"
-    @back="screen = 'mypage'"
+    @back="backToMyPage"
     @reorder="reorderCards"
     @primary="setPrimaryCard"
   />
