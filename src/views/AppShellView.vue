@@ -11,8 +11,7 @@
  * 새 코드는 여기에 추가하지 않는다. 여기는 줄어들기만 하는 파일이다.
  */
 import { computed, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import AssetConnectScreen from '@/components/AssetConnectScreen.vue'
+import { useRoute } from 'vue-router'
 import HomeScreen from '@/components/HomeScreen.vue'
 import SearchScreen from '@/components/SearchScreen.vue'
 import MyPage from '@/components/MyPage.vue'
@@ -24,15 +23,12 @@ import CardManagement from '@/components/CardManagement.vue'
 import { DEFAULT_CARDS } from '@/cardData'
 
 const route = useRoute()
-const router = useRouter()
-
-// 가입 완료 화면은 이관 완료(#47). 셸에서 그쪽으로 나갈 때는 라우터를 쓴다.
-function goToSignUpComplete() {
-  router.push({ name: 'signup-complete' })
-}
 
 // 이관 중에만 쓰는 진입점. 라우팅된 화면이 셸 안의 특정 화면으로 들어올 때 쓴다.
-// (예: LoginView → 회원가입) 해당 화면이 이관되면 이 query 도 함께 사라진다.
+//
+// 가입 흐름이 전부 이관돼 지금은 이 query 를 넘기는 코드가 없지만, 읽는 쪽은 남겨둔다.
+// 남은 화면(MyPage, CardManagement, Search …)을 이관하면 다시 필요해진다.
+// AppShellView 를 삭제할 때 함께 사라진다.
 const screen = ref(typeof route.query.screen === 'string' ? route.query.screen : 'home')
 
 const previousScreen = ref('home')
@@ -109,14 +105,8 @@ function setPrimaryCard(cardId) {
 </script>
 
 <template>
-  <AssetConnectScreen
-    v-if="screen === 'asset-connect'"
-    @back="goToSignUpComplete"
-    @done="screen = 'home'"
-  />
-
   <SearchScreen
-    v-else-if="screen === 'search'"
+    v-if="screen === 'search'"
     @back="screen = 'home'"
     @search="openMerchants($event, 'search')"
   />
