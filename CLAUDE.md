@@ -9,7 +9,8 @@
 
 Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
 
-- 상태 관리는 **Pinia 단독**이다. `@tanstack/vue-query`는 쓰지 않는다 (아직 설치돼 있으나 제거 예정).
+- 상태 관리는 **Pinia 단독**이다. 서버 데이터 캐싱 라이브러리(`@tanstack/vue-query` 등)를 새로 들이지 않는다.
+  비동기 상태는 `useAsyncState`로 처리한다 (아래 "상태 관리" 참고).
 - `zod`는 **폼 검증에만** 쓴다. API 응답 검증에는 쓰지 않는다.
 
 ## 빌드
@@ -34,7 +35,7 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
 | `src/api/client.js`        | **추가됨** — `useAsyncState`도 함께 (도메인 API는 아직) |
 | Tailwind `@theme` 토큰     | **정의됨** — 유틸리티 사용 가능 (Preflight 는 제외)     |
 | `src/views/` 이관          | **미착수** — 화면 14개가 `src/components/`에 있음       |
-| `@tanstack/vue-query` 제거 | **미착수** — `package.json`에 남아 있음                 |
+| `@tanstack/vue-query` 제거 | **완료** — 의존성에서 제거됨                            |
 | 폴더 구조·네이밍·Git 규칙  | **즉시 적용** — 코드 없이도 바로 지킬 수 있다           |
 
 **지금 코드가 어떻게 돼 있나**
