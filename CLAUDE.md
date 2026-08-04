@@ -105,7 +105,8 @@ src/
 
 ### 응답 봉투는 인터셉터에서 한 번만 벗긴다
 
-백엔드 응답은 `{ success, code, message, data, errors }` 봉투로 온다. (Swagger 스키마 9종 전부 동일)
+백엔드 응답은 `{ success, code, message, data, errors }` 봉투로 온다.
+(`/api` 전체가 같은 모양이다 — 백엔드 `global/common/dto/ApiResponse.java`)
 
 `errors`는 검증 실패(400 `INVALID_INPUT_VALUE`)일 때만 채워지는 필드별 사유다.
 `[{ field: 'loginId', reason: '아이디는 필수입니다.' }, ...]` 형태이고, 이게 아래 "에러 처리"의
@@ -141,30 +142,63 @@ export const getUserCards = () => client.get('/user-cards')
 
 두 함수의 **호출부 코드가 같아야 한다.** 그래야 실제 호출로 교체할 때 화면을 안 고친다.
 
-### API 계약의 정본 — OpenAPI 스펙
+### API 계약의 정본 — 백엔드 저장소 코드
 
-**엔드포인트 목록, 필드명, 타입은 전부 아래 스펙에서 확인한다. 추측하지 않는다.**
+**엔드포인트 목록, 필드명, 타입, 에러 문구는 전부 백엔드 저장소에서 직접 확인한다. 추측하지 않는다.**
 
 ```
-https://raw.githubusercontent.com/heartbeat-kb-town/fitwallet-backend/openapi-spec/openapi.json
+heartbeat-kb-town/fitwallet-backend   (기준 브랜치: develop)
 ```
 
-백엔드 CI가 `develop` 머지마다 자동 발행한다. **백엔드를 띄울 필요가 없다.**
-여기 없는 엔드포인트는 백엔드 미구현이므로 목데이터로 둔다(위 규칙 참고).
+**OpenAPI 스펙은 더 이상 정본이 아니다.** 백엔드가 Swagger 어노테이션 강제를 풀고
+`openapi-spec` 브랜치 자동 발행을 중단했다([backend#109](https://github.com/heartbeat-kb-town/fitwallet-backend/pull/109)).
+그 브랜치는 갱신이 멈췄으니 **읽지 않는다.** 거기 없다고 미구현으로 판단하면
+이미 구현된 API를 목데이터로 짜게 된다.
 
-읽는 법 — 파일이 크니 통째로 읽지 말고 필요한 부분만 뽑는다:
+#### 읽는 법
+
+로컬에 클론이 있으면 그걸 읽는다. 프론트 저장소와 형제 디렉터리에 두는 것을 권장한다:
 
 ```bash
-SPEC=https://raw.githubusercontent.com/heartbeat-kb-town/fitwallet-backend/openapi-spec/openapi.json
-
-curl -s $SPEC | jq -r '.paths | keys[]'                    # 엔드포인트 목록
-curl -s $SPEC | jq '.paths["/api/user-cards"]'             # 특정 엔드포인트 계약
-curl -s $SPEC | jq '.components.schemas | keys[]'          # 스키마 목록
-curl -s $SPEC -o /tmp/openapi.json                         # 전체를 읽어야 할 때
+git -C ../fitwallet-backend switch develop && git -C ../fitwallet-backend pull   # 먼저 최신화
 ```
 
-- 응답은 `success`/`code`/`message`/`data` 봉투에 담긴다. **실제 데이터는 스키마의 `data`를 열어야 나온다**
-- 백엔드를 직접 띄웠다면 `http://localhost:8080/swagger-ui/index.html`도 같은 내용이다 (사람이 보기엔 이쪽이 편하다)
+클론이 없으면 원격에서 바로 읽는다 (`gh`는 이미 인증돼 있다):
+
+```bash
+BE=heartbeat-kb-town/fitwallet-backend
+gh api "repos/$BE/contents/src/main/java/com/fitwallet/domain/user/controller?ref=develop" --jq '.[].name'
+curl -s "https://raw.githubusercontent.com/$BE/develop/src/main/java/com/fitwallet/domain/user/controller/UserController.java"
+```
+
+#### 무엇을 어디서 보나
+
+경로는 전부 백엔드 저장소 기준이고, `{도메인}`은 `user` / `card` / `payment` / `benefit` / `store` / `report`다.
+
+| 확인할 것                | 볼 곳                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------ |
+| 엔드포인트·HTTP 메서드   | `src/main/java/com/fitwallet/domain/{도메인}/controller/*.java`                                        |
+| 요청 바디 필드           | `.../domain/{도메인}/dto/request/*.java`                                                               |
+| 응답 필드                | `.../domain/{도메인}/dto/response/*.java`                                                              |
+| 폼 검증 규칙·문구        | request DTO의 `@Pattern` / `@Size` / `@NotNull`의 `message`                                            |
+| 에러 `code`·`message`    | `.../domain/{도메인}/exception/{도메인}ErrorCode.java`, 공통은 `global/exception/CommonErrorCode.java` |
+| 성공 `code`·`message`    | `.../domain/{도메인}/dto/{도메인}SuccessCode.java`                                                     |
+| 응답 봉투                | `global/common/dto/ApiResponse.java`                                                                   |
+| **실제로 채워지는 필드** | `src/main/resources/mapper/{도메인}/*.xml`                                                             |
+
+```bash
+# 전체 엔드포인트 훑기 (로컬 클론에서)
+grep -rn "Mapping(" ../fitwallet-backend/src/main/java/com/fitwallet/domain/*/controller/
+```
+
+- ⚠️ **DTO에 필드가 있어도 매퍼 XML이 그 컬럼을 SELECT하지 않으면 항상 `null`이다.**
+  MyBatis `resultType` 매핑이 조용히 버린다. 응답 모양을 확정할 때는 **DTO와 매퍼 XML을 함께 본다.**
+  스펙으로는 절대 드러나지 않던 항목이라, 목데이터를 실제 호출로 바꿀 때 여기서 깨진다.
+- 컨트롤러에 없는 엔드포인트는 백엔드 미구현이므로 목데이터로 둔다(위 규칙 참고).
+- 이름만으로 의미가 안 드러나는 값은 백엔드가 주석/Javadoc에 남긴다.
+  예: `cardId` 경로 변수는 `card_product_id`가 아니라 `user_card_id`다. 컨트롤러 주석을 확인한다.
+- Swagger UI(`http://localhost:8080/swagger-ui/index.html`)는 **백엔드를 직접 띄웠을 때 경로를 훑는
+  보조 수단**이다. 어노테이션이 없는 엔드포인트도 많고, JSR-303 검증 규칙은 아예 실리지 않는다.
 - 개발 시 `/api` 요청은 vite proxy가 `localhost:8080`으로 넘긴다 (`vite.config.js`).
 
 ## 인증

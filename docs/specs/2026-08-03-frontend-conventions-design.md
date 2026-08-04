@@ -256,7 +256,11 @@ POST /api/user/signup                       POST /api/user/login
 
 > **후속(2026-08-04)** — 정본은 백엔드 CI가 `openapi-spec` 브랜치에 발행하는 `openapi.json`으로
 > 대체됐다. 위 엔드포인트 목록도 이 문서 작성 시점 기준이라 현재와 다르다.
-> 실제 작업 시에는 [CLAUDE.md](../../CLAUDE.md)의 "API 계약의 정본 — OpenAPI 스펙"을 본다.
+>
+> **후속(2026-08-05)** — 백엔드가 Swagger 어노테이션 강제를 풀고 `openapi-spec` 발행을 중단해
+> ([backend#109](https://github.com/heartbeat-kb-town/fitwallet-backend/pull/109)),
+> 정본이 다시 **백엔드 저장소 코드**로 바뀌었다. 스펙 URL과 Swagger UI는 정본이 아니다.
+> 실제 작업 시에는 [CLAUDE.md](../../CLAUDE.md)의 "API 계약의 정본 — 백엔드 저장소 코드"를 본다.
 
 ### 3.8 역할 분담 — 하이브리드
 
