@@ -7,6 +7,7 @@
  *   { path: '/home', name: 'home', component: () => import('@/views/HomeView.vue') },
   { path: '/payment', name: 'payment', component: () => import('@/views/PaymentView.vue') },
   { path: '/my-card', name: 'my-card', component: () => import('@/views/MyCardView.vue') },
+  { path: '/report', name: 'report', component: () => import('@/views/ReportView.vue') },
  *
  * 셸(`/app`)과 그 뒤의 catch-all 은 이관(#39)이 끝나면 함께 지운다.
  * 그때부터는 원래대로 배열 끝에 추가하면 된다.
@@ -28,6 +29,7 @@ export const routes = [
   { path: '/home', name: 'home', component: () => import('@/views/HomeView.vue') },
   { path: '/payment', name: 'payment', component: () => import('@/views/PaymentView.vue') },
   { path: '/my-card', name: 'my-card', component: () => import('@/views/MyCardView.vue') },
+  { path: '/report', name: 'report', component: () => import('@/views/ReportView.vue') },
   { path: '/search', name: 'search', component: () => import('@/views/SearchView.vue') },
   {
     path: '/merchants',
@@ -60,16 +62,9 @@ export const routes = [
 
   // 이관 중(#39): 아직 `views/` 로 옮기지 않은 화면 12개를 담는 임시 셸.
   // 셸 안에서 어느 화면을 볼지는 `?screen=` 으로 넘긴다 (이관이 끝나면 사라지는 임시 수단).
-  {
-    path: '/app',
-    name: 'app-shell',
-    component: () => import('@/views/AppShellView.vue'),
-    // 홈이 이관되면서(#64) 셸에 기본 화면이 없어졌다. 어느 화면인지 모르면 홈으로 보낸다.
-    beforeEnter: (to) => (to.query.screen ? true : { name: 'home' }),
-  },
-
   // 모르는 경로는 홈으로 보낸다. catch-all 이라 **항상 배열 마지막**이어야 한다.
   // `params: {}` 를 명시하는 이유: 생략하면 catch-all 이 물고 있는 `pathMatch` 파라미터가
   // 그대로 딸려가 "Discarded invalid param(s)" 경고가 콘솔에 찍힌다.
-  { path: '/:pathMatch(.*)*', redirect: () => ({ name: 'home', params: {} }) },
+  // `query: {}` 는 모르는 주소의 query 가 홈까지 따라오는 것을 막는다.
+  { path: '/:pathMatch(.*)*', redirect: () => ({ name: 'home', params: {}, query: {} }) },
 ]

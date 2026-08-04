@@ -1,25 +1,49 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Menu, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-vue-next'
-import iconHome from '../assets/icons/home.svg'
-import iconPayment from '../assets/icons/payment.svg'
-import iconMycard from '../assets/icons/mycard.svg'
-import iconReportActive from '../assets/icons/report-selected.svg'
-import iconFood from '../assets/icons/category-food.svg'
-import iconCafe from '../assets/icons/category-cafe.svg'
-import iconMart from '../assets/icons/category-mart.svg'
-import iconShopping from '../assets/icons/category-shopping.svg'
-import iconRefuel from '../assets/icons/category-refuel.svg'
-import iconTransport from '../assets/icons/potentialbenefit-transportation.svg'
+import iconHome from '@/assets/icons/home.svg'
+import iconPayment from '@/assets/icons/payment.svg'
+import iconMycard from '@/assets/icons/mycard.svg'
+import iconReportActive from '@/assets/icons/report-selected.svg'
+import iconFood from '@/assets/icons/category-food.svg'
+import iconCafe from '@/assets/icons/category-cafe.svg'
+import iconMart from '@/assets/icons/category-mart.svg'
+import iconShopping from '@/assets/icons/category-shopping.svg'
+import iconRefuel from '@/assets/icons/category-refuel.svg'
+import iconTransport from '@/assets/icons/potentialbenefit-transportation.svg'
 
-const props = defineProps({
-  initialCardId: { type: String, default: '' },
-})
+import { usePaymentStore } from '@/stores/paymentStore'
 
-const emit = defineEmits(['navigate', 'mypage'])
+const route = useRoute()
+const router = useRouter()
+const paymentStore = usePaymentStore()
+
+// 어느 카드의 상세를 볼지는 URL 이 정한다 (#59). 없으면 전체 리포트.
+const initialCardId = typeof route.query.cardId === 'string' ? route.query.cardId : ''
+
+// 돌아올 주소를 통째로 넘긴다 (#61).
+function openMyPage() {
+  router.push({ name: 'my-page', query: { returnTo: route.fullPath } })
+}
+
+// 하단 탭. 이제 전부 라우트다.
+function navigate(target) {
+  if (target === 'payment') {
+    // 결제 탭으로 들어가면 카드 선택부터 시작한다 (#66).
+    paymentStore.reset()
+    router.push({ name: 'payment' })
+    return
+  }
+  if (target === 'mycard') {
+    router.push({ name: 'my-card' })
+    return
+  }
+  router.push({ name: 'home' })
+}
 
 const month = ref(3)
-const page = ref(props.initialCardId ? 'received' : 'main')
+const page = ref(initialCardId ? 'received' : 'main')
 const missedTab = ref('app')
 const expanded = ref(new Set())
 const selectedCard = ref(0)
@@ -503,10 +527,6 @@ function selectCard(index) {
   expanded.value = new Set()
 }
 
-function navigate(target) {
-  emit('navigate', target)
-}
-
 function notify(message) {
   toast.value = message
   clearTimeout(toastTimer)
@@ -534,8 +554,8 @@ function animateCounts() {
 }
 
 onMounted(() => {
-  if (props.initialCardId) {
-    const index = receivedCards.findIndex((card) => card.id === props.initialCardId)
+  if (initialCardId) {
+    const index = receivedCards.findIndex((card) => card.id === initialCardId)
     selectedCard.value = index >= 0 ? index : 0
   }
   animateCounts()
@@ -577,12 +597,7 @@ onBeforeUnmount(() => {
           <ChevronRight :size="17" />
         </button>
       </div>
-      <button
-        class="report-menu"
-        type="button"
-        aria-label="마이페이지 열기"
-        @click="emit('mypage')"
-      >
+      <button class="report-menu" type="button" aria-label="마이페이지 열기" @click="openMyPage()">
         <Menu :size="23" />
       </button>
     </header>

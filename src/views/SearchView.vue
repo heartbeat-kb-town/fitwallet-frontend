@@ -46,8 +46,8 @@ function submitSearch() {
     recents.value = [value, ...recents.value].slice(0, 5)
   }
   router.push({
-    name: 'app-shell',
-    query: { screen: 'merchants', query: value, title: value, from: 'search' },
+    name: 'merchants',
+    query: { query: value, title: value, from: 'search' },
   })
 }
 </script>

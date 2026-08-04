@@ -42,15 +42,12 @@ function openMerchants({ categoryId, title, query = '' }) {
   router.push({ name: 'merchants', query: { categoryId, title, query } })
 }
 
-// 결제·내카드·리포트는 아직 셸에 있다 (#39 로 순차 이관 중).
-// `?screen=payment` 를 query 없이 넣으면 셸이 결제 상태를 채우지 않아
-// 기존 navigateTo('payment') 의 초기화와 같은 결과가 된다.
-function goToShell(screen, extra = {}) {
-  router.push({ name: 'app-shell', query: { screen, ...extra } })
+function goToMyCard() {
+  router.push({ name: 'my-card' })
 }
 
 function openReport(cardId = '') {
-  goToShell('report', cardId ? { cardId } : {})
+  router.push({ name: 'report', query: cardId ? { cardId } : {} })
 }
 
 // 하단 내비게이션 탭: icon(비활성/회색), iconActive(활성/노랑)
@@ -195,7 +192,7 @@ function selectTab(index, label) {
     return
   }
   if (index === 2) {
-    goToShell('mycard')
+    goToMyCard()
     return
   }
   if (index === 3) {

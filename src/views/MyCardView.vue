@@ -39,9 +39,8 @@ function openMyPage() {
   router.push({ name: 'my-page', query: { returnTo: route.fullPath } })
 }
 
-// 리포트는 아직 셸에 있다 (#39 로 순차 이관 중).
 function openReport() {
-  router.push({ name: 'app-shell', query: { screen: 'report' } })
+  router.push({ name: 'report' })
 }
 
 const months = ['2024.01', '2023.12', '2023.11']
