@@ -24,6 +24,11 @@ export const routes = [
     component: () => import('@/views/SignUpCompleteView.vue'),
   },
   { path: '/search', name: 'search', component: () => import('@/views/SearchView.vue') },
+  {
+    path: '/merchants',
+    name: 'merchants',
+    component: () => import('@/views/MerchantFlowView.vue'),
+  },
   { path: '/my-page', name: 'my-page', component: () => import('@/views/MyPageView.vue') },
   {
     path: '/card-management',

@@ -12,20 +12,28 @@ const authStore = useAuthStore()
 const showPinChange = ref(false)
 
 // 마이페이지는 홈·가맹점·결제·내카드·리포트 다섯 곳에서 열린다.
-// 셸이 `previousScreen` 으로 기억하던 값을 이관 중에는 `from` query 로 넘긴다.
+// 여는 쪽이 **돌아올 주소 전체**를 `returnTo` 로 넘긴다.
+//
+// 화면 이름(`from=merchants`)으로는 부족하다. 가맹점으로 돌아가려면 검색 조건
+// (`?query=스타벅스`)까지 알아야 하고, 이관이 끝난 화면은 셸에 있지도 않다. (#61)
 //
 // `router.back()` 은 아직 쓸 수 없다. 셸 안에서 화면을 바꾸는 것은 히스토리 항목을
 // 만들지 않아서, `/app` 으로 돌아가면 셸이 기본값인 홈으로 리셋된다.
-// 돌아갈 다섯 화면이 전부 라우트가 되면 `from` 을 버리고 `router.back()` 으로 바꾼다.
+// 남은 화면이 전부 라우트가 되면 `returnTo` 를 버리고 `router.back()` 으로 바꾼다.
 function goBack() {
-  const from = typeof route.query.from === 'string' ? route.query.from : 'home'
-  router.push({ name: 'app-shell', query: { screen: from } })
+  const returnTo = typeof route.query.returnTo === 'string' ? route.query.returnTo : ''
+  if (!returnTo) {
+    router.push({ name: 'app-shell' })
+    return
+  }
+  const target = router.resolve(returnTo)
+  router.push({ path: target.path, query: target.query })
 }
 
-// `from` 을 그대로 딸려 보낸다. 카드 관리에서 뒤로 누르면 마이페이지로 돌아오는데,
-// 그때도 원래 온 곳(홈·결제 …)을 잃지 않아야 기존 동작과 같다.
+// `returnTo` 를 그대로 딸려 보낸다. 카드 관리에서 뒤로 누르면 마이페이지로 돌아오는데,
+// 그때도 원래 온 곳을 잃지 않아야 기존 동작과 같다.
 function goToCardManagement() {
-  router.push({ name: 'card-management', query: { from: route.query.from } })
+  router.push({ name: 'card-management', query: { returnTo: route.query.returnTo } })
 }
 
 // TODO: 백엔드에 /logout 이 없다. 지금은 클라이언트 토큰만 비우므로
