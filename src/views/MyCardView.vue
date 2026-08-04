@@ -1,23 +1,48 @@
 <script setup>
 import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, ChevronRight, Menu } from 'lucide-vue-next'
-import iconHome from '../assets/icons/home.svg'
-import iconPayment from '../assets/icons/payment.svg'
-import iconMycardActive from '../assets/icons/mycard-selected.svg'
-import iconReport from '../assets/icons/report.svg'
-import iconCafe from '../assets/icons/category-cafe.svg'
-import iconFood from '../assets/icons/category-food.svg'
-import iconMart from '../assets/icons/category-mart.svg'
-import iconShopping from '../assets/icons/category-shopping.svg'
-import iconHospital from '../assets/icons/category-hospital.svg'
-import iconRefuel from '../assets/icons/category-refuel.svg'
-import iconTransport from '../assets/icons/potentialbenefit-transportation.svg'
-import iconTelecom from '../assets/icons/category-telecom.svg'
-import iconAll from '../assets/icons/category-all.svg'
-import cardSheet from '../assets/cards/payment-card-sheet.png'
-import pigFace from '../assets/icons/pig-face.svg'
+import iconHome from '@/assets/icons/home.svg'
+import iconPayment from '@/assets/icons/payment.svg'
+import iconMycardActive from '@/assets/icons/mycard-selected.svg'
+import iconReport from '@/assets/icons/report.svg'
+import iconCafe from '@/assets/icons/category-cafe.svg'
+import iconFood from '@/assets/icons/category-food.svg'
+import iconMart from '@/assets/icons/category-mart.svg'
+import iconShopping from '@/assets/icons/category-shopping.svg'
+import iconHospital from '@/assets/icons/category-hospital.svg'
+import iconRefuel from '@/assets/icons/category-refuel.svg'
+import iconTransport from '@/assets/icons/potentialbenefit-transportation.svg'
+import iconTelecom from '@/assets/icons/category-telecom.svg'
+import iconAll from '@/assets/icons/category-all.svg'
+import cardSheet from '@/assets/cards/payment-card-sheet.png'
+import pigFace from '@/assets/icons/pig-face.svg'
 
-const emit = defineEmits(['home', 'payment', 'mypage', 'report'])
+import { usePaymentStore } from '@/stores/paymentStore'
+
+const route = useRoute()
+const router = useRouter()
+const paymentStore = usePaymentStore()
+
+function goHome() {
+  router.push({ name: 'home' })
+}
+
+// 결제 탭으로 들어가면 카드 선택부터 시작한다 (#66).
+function openPayment() {
+  paymentStore.reset()
+  router.push({ name: 'payment' })
+}
+
+// 돌아올 주소를 통째로 넘긴다 (#61).
+function openMyPage() {
+  router.push({ name: 'my-page', query: { returnTo: route.fullPath } })
+}
+
+// 리포트는 아직 셸에 있다 (#39 로 순차 이관 중).
+function openReport() {
+  router.push({ name: 'app-shell', query: { screen: 'report' } })
+}
 
 const months = ['2024.01', '2023.12', '2023.11']
 const cards = [
@@ -557,7 +582,7 @@ function dateLabel(date) {
     <template v-if="view === 'main'">
       <header class="mycard-header">
         <h1>내 카드</h1>
-        <button class="icon-button" type="button" aria-label="메뉴 열기" @click="emit('mypage')">
+        <button class="icon-button" type="button" aria-label="메뉴 열기" @click="openMyPage()">
           <Menu :size="23" />
         </button>
       </header>
@@ -695,16 +720,16 @@ function dateLabel(date) {
       </div>
 
       <nav class="bottom-nav">
-        <button type="button" @click="emit('home')">
+        <button type="button" @click="goHome()">
           <img :src="iconHome" alt="" width="22" height="22" /><span>홈</span>
         </button>
-        <button type="button" @click="emit('payment')">
+        <button type="button" @click="openPayment()">
           <img :src="iconPayment" alt="" width="22" height="22" /><span>결제</span>
         </button>
         <button class="active" type="button">
           <img :src="iconMycardActive" alt="" width="22" height="22" /><span>내 카드</span>
         </button>
-        <button type="button" @click="emit('report')">
+        <button type="button" @click="openReport()">
           <img :src="iconReport" alt="" width="22" height="22" /><span>리포트</span>
         </button>
       </nav>
@@ -716,7 +741,7 @@ function dateLabel(date) {
           <ChevronLeft :size="22" />
         </button>
         <h1>이용 실적·혜택</h1>
-        <button type="button" aria-label="메뉴 열기" @click="emit('mypage')">
+        <button type="button" aria-label="메뉴 열기" @click="openMyPage()">
           <Menu :size="22" />
         </button>
       </header>
@@ -865,7 +890,7 @@ function dateLabel(date) {
           <ChevronLeft :size="22" />
         </button>
         <h1>카드별 세부 결제 내역</h1>
-        <button type="button" aria-label="메뉴 열기" @click="emit('mypage')">
+        <button type="button" aria-label="메뉴 열기" @click="openMyPage()">
           <Menu :size="22" />
         </button>
       </header>

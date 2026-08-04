@@ -6,6 +6,7 @@
  *
  *   { path: '/home', name: 'home', component: () => import('@/views/HomeView.vue') },
   { path: '/payment', name: 'payment', component: () => import('@/views/PaymentView.vue') },
+  { path: '/my-card', name: 'my-card', component: () => import('@/views/MyCardView.vue') },
  *
  * 셸(`/app`)과 그 뒤의 catch-all 은 이관(#39)이 끝나면 함께 지운다.
  * 그때부터는 원래대로 배열 끝에 추가하면 된다.
@@ -26,6 +27,7 @@ export const routes = [
   },
   { path: '/home', name: 'home', component: () => import('@/views/HomeView.vue') },
   { path: '/payment', name: 'payment', component: () => import('@/views/PaymentView.vue') },
+  { path: '/my-card', name: 'my-card', component: () => import('@/views/MyCardView.vue') },
   { path: '/search', name: 'search', component: () => import('@/views/SearchView.vue') },
   {
     path: '/merchants',
