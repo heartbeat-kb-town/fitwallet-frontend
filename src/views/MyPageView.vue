@@ -1,17 +1,40 @@
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import profileImage from '../assets/icons/pig-face.svg'
-import PaymentPinChange from './PaymentPinChange.vue'
+import { useRoute, useRouter } from 'vue-router'
+import profileImage from '@/assets/icons/pig-face.svg'
+import PaymentPinChange from '@/components/PaymentPinChange.vue'
 import { useAuthStore } from '@/stores/authStore'
 
-defineEmits(['back', 'manage-cards'])
-
+const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 
 const showPinChange = ref(false)
 
+// 마이페이지는 홈·가맹점·결제·내카드·리포트 다섯 곳에서 열린다.
+// 셸이 `previousScreen` 으로 기억하던 값을 이관 중에는 `from` query 로 넘긴다.
+//
+// `router.back()` 은 아직 쓸 수 없다. 셸 안에서 화면을 바꾸는 것은 히스토리 항목을
+// 만들지 않아서, `/app` 으로 돌아가면 셸이 기본값인 홈으로 리셋된다.
+// 돌아갈 다섯 화면이 전부 라우트가 되면 `from` 을 버리고 `router.back()` 으로 바꾼다.
+function goBack() {
+  const from = typeof route.query.from === 'string' ? route.query.from : 'home'
+  router.push({ name: 'app-shell', query: { screen: from } })
+}
+
+// 내 카드 관리는 아직 셸에 있다 (#39 로 순차 이관 중).
+// `from` 을 그대로 딸려 보낸다. 카드 관리에서 뒤로 누르면 마이페이지로 돌아오는데,
+// 그때도 원래 온 곳(홈·결제 …)을 잃지 않아야 기존 동작과 같다.
+function goToCardManagement() {
+  router.push({
+    name: 'app-shell',
+    query: { screen: 'card-management', from: route.query.from },
+  })
+}
+
+// TODO: 백엔드에 /logout 이 없다. 지금은 클라이언트 토큰만 비우므로
+// 서버가 발급한 refreshToken 쿠키는 살아 있다 (Max-Age 14일).
+// 엔드포인트가 생기면 서버에도 알려 쿠키까지 만료시킨다.
 function logout() {
   authStore.logout()
   router.push({ name: 'login' })
@@ -21,12 +44,7 @@ function logout() {
 <template>
   <section class="my-page-screen">
     <header class="my-page-header">
-      <button
-        class="my-page-back"
-        type="button"
-        aria-label="홈으로 돌아가기"
-        @click="$emit('back')"
-      >
+      <button class="my-page-back" type="button" aria-label="홈으로 돌아가기" @click="goBack()">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path
             d="M15 6L9 12L15 18"
@@ -71,7 +89,7 @@ function logout() {
               />
             </svg>
           </button>
-          <button type="button" @click="$emit('manage-cards')">
+          <button type="button" @click="goToCardManagement()">
             <span>내 카드 관리</span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
