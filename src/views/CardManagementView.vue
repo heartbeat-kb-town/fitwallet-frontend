@@ -1,14 +1,22 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Check, ChevronDown, ChevronUp, GripVertical } from 'lucide-vue-next'
-import cardSheet from '../assets/cards/payment-card-sheet.png'
+import cardSheet from '@/assets/cards/payment-card-sheet.png'
+import { useCardStore } from '@/stores/cardStore'
 
-const props = defineProps({
-  cards: { type: Array, required: true },
-})
+const route = useRoute()
+const router = useRouter()
+const cardStore = useCardStore()
 
-const emit = defineEmits(['back', 'reorder', 'primary'])
+const cards = computed(() => cardStore.cards)
 const draggingId = ref('')
+
+// 마이페이지가 넘겨준 `from`(원래 온 곳)을 그대로 되돌려준다.
+// 마이페이지 → 뒤로 → 원래 화면 순서가 유지돼야 기존 동작과 같다. (#52)
+function goBack() {
+  router.push({ name: 'my-page', query: { from: route.query.from } })
+}
 
 function startDrag(cardId, event) {
   draggingId.value = cardId
@@ -18,34 +26,28 @@ function startDrag(cardId, event) {
 
 function dropOn(targetId) {
   if (!draggingId.value || draggingId.value === targetId) return
-  const next = [...props.cards]
+  const next = [...cards.value]
   const from = next.findIndex((card) => card.id === draggingId.value)
   const to = next.findIndex((card) => card.id === targetId)
   const [moved] = next.splice(from, 1)
   next.splice(to, 0, moved)
-  emit(
-    'reorder',
-    next.map((card) => card.id),
-  )
+  cardStore.reorder(next.map((card) => card.id))
   draggingId.value = ''
 }
 
 function moveCard(index, direction) {
   const target = index + direction
-  if (target < 0 || target >= props.cards.length) return
-  const next = [...props.cards]
+  if (target < 0 || target >= cards.value.length) return
+  const next = [...cards.value]
   ;[next[index], next[target]] = [next[target], next[index]]
-  emit(
-    'reorder',
-    next.map((card) => card.id),
-  )
+  cardStore.reorder(next.map((card) => card.id))
 }
 </script>
 
 <template>
   <section class="card-management-screen">
     <header class="card-management-header">
-      <button type="button" aria-label="마이페이지로 돌아가기" @click="emit('back')">
+      <button type="button" aria-label="마이페이지로 돌아가기" @click="goBack()">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path
             d="M15 6L9 12L15 18"
@@ -99,7 +101,7 @@ function moveCard(index, direction) {
               class="primary-card-button"
               :class="{ active: index === 0 }"
               type="button"
-              @click="emit('primary', card.id)"
+              @click="cardStore.setPrimary(card.id)"
             >
               <span class="primary-card-check">
                 <Check v-if="index === 0" :size="12" :stroke-width="3" />
@@ -133,7 +135,7 @@ function moveCard(index, direction) {
       </div>
 
       <p class="card-management-note">변경한 순서는 바로 저장돼요.</p>
-      <button class="card-management-done" type="button" @click="emit('back')">완료</button>
+      <button class="card-management-done" type="button" @click="goBack()">완료</button>
     </div>
   </section>
 </template>
