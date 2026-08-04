@@ -1,26 +1,61 @@
 <script setup>
 import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Menu } from 'lucide-vue-next'
-import { categories } from '../data'
-import storeSearchIcon from '../assets/icons/category-store.svg'
-import benefitGiftIcon from '../assets/icons/category-benefit.svg'
-import iconHome from '../assets/icons/home.svg'
-import iconPayment from '../assets/icons/payment.svg'
-import iconMycard from '../assets/icons/mycard.svg'
-import iconReport from '../assets/icons/report.svg'
+import { categories } from '@/data'
+import { DEFAULT_CARDS } from '@/cardData'
+import storeSearchIcon from '@/assets/icons/category-store.svg'
+import benefitGiftIcon from '@/assets/icons/category-benefit.svg'
+import iconHome from '@/assets/icons/home.svg'
+import iconPayment from '@/assets/icons/payment.svg'
+import iconMycard from '@/assets/icons/mycard.svg'
+import iconReport from '@/assets/icons/report.svg'
 
-const props = defineProps({
-  request: {
-    type: Object,
-    default: () => ({ categoryId: 'cafe', title: '카페/디저트', query: '' }),
-  },
-  initialStoreName: {
-    type: String,
-    default: '',
-  },
-})
+const route = useRoute()
+const router = useRouter()
 
-const emit = defineEmits(['back', 'mypage', 'pay', 'navigate'])
+const str = (value, fallback = '') => (typeof value === 'string' ? value : fallback)
+
+// 무엇을 보여줄지는 URL 이 정한다 (#59). 기본값은 기존 props default 그대로다.
+const request = computed(() => ({
+  categoryId: str(route.query.categoryId, 'cafe'),
+  title: str(route.query.title, str(route.query.query) || '카페/디저트'),
+  query: str(route.query.query),
+}))
+
+// 결제에서 뒤로 왔을 때 그 가게 화면으로 복원하기 위한 값 (기존 merchantReturnStore)
+const initialStoreName = computed(() => str(route.query.store))
+
+// 검색에서 들어왔으면 뒤로가기가 검색으로 간다. 아니면 홈(셸 기본 화면).
+function goBack() {
+  if (route.query.from === 'search') router.push({ name: 'search' })
+  else router.push({ name: 'app-shell' })
+}
+
+// 돌아올 주소를 통째로 넘긴다. 화면 이름만으로는 검색 조건을 복원할 수 없다.
+function openMyPage() {
+  router.push({ name: 'my-page', query: { returnTo: route.fullPath } })
+}
+
+function navigateTo(target) {
+  router.push({ name: 'app-shell', query: { screen: target } })
+}
+
+// 셸의 startRecommendedPayment() 가 하던 일을 query 로 옮긴다.
+// cardIndex 는 정렬된 목록이 아니라 원본 DEFAULT_CARDS 를 가리킨다 — 기존 동작 그대로다.
+function payWith({ cardIndex, store }) {
+  router.push({
+    name: 'app-shell',
+    query: {
+      screen: 'payment',
+      cardId: DEFAULT_CARDS[cardIndex]?.id ?? '',
+      store,
+      phase: 'qr',
+      returnTo: route.fullPath,
+    },
+  })
+}
+
 const selectedStore = ref(null)
 const showPin = ref(false)
 const pendingPick = ref(null)
@@ -80,11 +115,11 @@ const starbucksStores = [
 ]
 
 const category = computed(
-  () => categories.find((item) => item.id === props.request.categoryId) ?? categories[0],
+  () => categories.find((item) => item.id === request.value.categoryId) ?? categories[0],
 )
-const isSearch = computed(() => Boolean(props.request.query))
+const isSearch = computed(() => Boolean(request.value.query))
 const stores = computed(() => {
-  const query = (props.request.query ?? '').replace(/\s/g, '').toLowerCase()
+  const query = (request.value.query ?? '').replace(/\s/g, '').toLowerCase()
   if (query.includes('스타벅스')) return starbucksStores
 
   const allStores = Object.values(storesByCategory).flat()
@@ -95,8 +130,8 @@ const stores = computed(() => {
 })
 
 // QR 결제에서 뒤로 돌아온 경우, 결제했던 가게의 피그의 PICK 화면을 다시 보여줍니다.
-if (props.initialStoreName) {
-  selectedStore.value = stores.value.find((store) => store.name === props.initialStoreName) ?? null
+if (initialStoreName.value) {
+  selectedStore.value = stores.value.find((store) => store.name === initialStoreName.value) ?? null
 }
 
 const cardPicks = [
@@ -186,7 +221,7 @@ function confirmPin() {
     })
     return
   }
-  emit('pay', { cardIndex: pendingPick.value.cardIndex, store: selectedStore.value.name })
+  payWith({ cardIndex: pendingPick.value.cardIndex, store: selectedStore.value.name })
   showPin.value = false
 }
 </script>
@@ -200,7 +235,7 @@ function confirmPin() {
             class="merchant-header-button"
             type="button"
             aria-label="뒤로가기"
-            @click="emit('back')"
+            @click="goBack()"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
           </button>
@@ -214,7 +249,7 @@ function confirmPin() {
             class="merchant-header-button"
             type="button"
             aria-label="마이페이지"
-            @click="emit('mypage')"
+            @click="openMyPage()"
           >
             <Menu :size="22" />
           </button>
@@ -259,7 +294,7 @@ function confirmPin() {
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
         </button>
         <h1>피그의 PICK</h1>
-        <button type="button" aria-label="마이페이지" @click="emit('mypage')">
+        <button type="button" aria-label="마이페이지" @click="openMyPage()">
           <Menu :size="22" />
         </button>
       </header>
@@ -319,10 +354,10 @@ function confirmPin() {
     </template>
 
     <nav class="bottom-nav merchant-bottom-nav">
-      <button type="button" @click="emit('navigate', 'home')">
+      <button type="button" @click="navigateTo('home')">
         <img :src="iconHome" alt="" width="22" height="22" /><span>홈</span>
       </button>
-      <button type="button" @click="emit('navigate', 'payment')">
+      <button type="button" @click="navigateTo('payment')">
         <img :src="iconPayment" alt="" width="22" height="22" /><span>결제</span>
       </button>
       <button type="button">

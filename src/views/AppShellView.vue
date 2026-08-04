@@ -11,9 +11,6 @@
  * 새 코드는 여기에 추가하지 않는다. 여기는 줄어들기만 하는 파일이다.
  */
 import { ref } from 'vue'
-// startRecommendedPayment 가 가맹점에서 받은 인덱스로 원본 목록을 참조한다.
-// 정렬된 목록이 아니라 원본이다 — 기존 동작이라 그대로 둔다.
-import { DEFAULT_CARDS } from '@/cardData'
 
 /**
  * 화면 간에 공유하는 상태는 **모듈 스코프**에 둔다. setup 안이 아니다.
@@ -30,12 +27,10 @@ import { DEFAULT_CARDS } from '@/cardData'
  * 마지막 화면이 나가면 이 블록도 파일과 함께 사라진다.
  */
 const reportCardId = ref('')
-const merchantEntry = ref('home')
-const merchantRequest = ref({ categoryId: 'cafe', title: '카페/디저트', query: '' })
 const paymentCardId = ref('')
 const paymentStore = ref('')
 const paymentStartPhase = ref('cards')
-const merchantReturnStore = ref('')
+const paymentReturnTo = ref('')
 </script>
 
 <script setup>
@@ -45,7 +40,6 @@ import HomeScreen from '@/components/HomeScreen.vue'
 import PaymentScreen from '@/components/PaymentScreen.vue'
 import MyCardScreen from '@/components/MyCardScreen.vue'
 import ReportScreen from '@/components/ReportScreen.vue'
-import MerchantFlow from '@/components/Merchantflow.vue'
 import { useCardStore } from '@/stores/cardStore'
 
 const route = useRoute()
@@ -68,32 +62,30 @@ watch(
 // AppShellView 를 삭제할 때 함께 사라진다.
 const screen = ref(typeof route.query.screen === 'string' ? route.query.screen : 'home')
 
-// 검색 화면(이관 완료 #59)에서 들어오면 검색 조건이 query 에 실려 온다.
-// 홈에서 들어올 때는 openMerchants() 가 직접 채운다.
-if (screen.value === 'merchants' && typeof route.query.query === 'string') {
-  merchantEntry.value = route.query.from === 'search' ? 'search' : 'home'
-  merchantRequest.value = {
-    categoryId: typeof route.query.categoryId === 'string' ? route.query.categoryId : 'cafe',
-    title: typeof route.query.title === 'string' ? route.query.title : route.query.query,
-    query: route.query.query,
-  }
-  merchantReturnStore.value = ''
+const str = (value, fallback = '') => (typeof value === 'string' ? value : fallback)
+
+// 가맹점 화면(이관 완료 #61)이 결제로 넘길 때 실어 보낸 값들.
+// 원래 셸의 startRecommendedPayment() 가 ref 에 채우던 것이다.
+if (screen.value === 'payment' && str(route.query.phase)) {
+  paymentCardId.value = str(route.query.cardId)
+  paymentStore.value = str(route.query.store)
+  paymentStartPhase.value = str(route.query.phase, 'cards')
+  paymentReturnTo.value = str(route.query.returnTo)
 }
 
 function openSearch() {
   router.push({ name: 'search' })
 }
 
-// 가맹점에서 뒤로: 검색으로 들어왔으면 검색 화면(라우트)으로, 아니면 셸 안의 홈으로.
-function backFromMerchants() {
-  if (merchantEntry.value === 'search') openSearch()
-  else screen.value = 'home'
-}
-
-// 마이페이지는 이관 완료(#52). 돌아올 화면은 `from` query 로 넘긴다.
+// 마이페이지는 이관 완료(#52). 돌아올 **주소**를 통째로 넘긴다 (#61).
 // (셸 안의 화면 전환은 히스토리를 만들지 않아 router.back() 을 아직 쓸 수 없다)
-function openMyPage(from) {
-  router.push({ name: 'my-page', query: { from } })
+function openMyPage(screenName) {
+  router.push({
+    name: 'my-page',
+    query: {
+      returnTo: router.resolve({ name: 'app-shell', query: { screen: screenName } }).fullPath,
+    },
+  })
 }
 
 function openReport(cardId = '') {
@@ -101,30 +93,23 @@ function openReport(cardId = '') {
   screen.value = 'report'
 }
 
-function openMerchants(request, from = 'home') {
-  merchantEntry.value = from
-  merchantRequest.value = {
-    categoryId: request?.categoryId ?? 'cafe',
-    title: request?.title ?? request?.query ?? '가맹점',
-    query: request?.query ?? '',
-  }
-  // 새로 들어오는 가맹점 화면은 가게 목록부터 보여줍니다.
-  merchantReturnStore.value = ''
-  screen.value = 'merchants'
+// 홈의 카테고리 타일에서 가맹점 화면(라우트)으로.
+function openMerchants(request) {
+  router.push({
+    name: 'merchants',
+    query: {
+      categoryId: request?.categoryId ?? 'cafe',
+      title: request?.title ?? request?.query ?? '가맹점',
+      query: request?.query ?? '',
+    },
+  })
 }
 
+// QR 결제에서 뒤로가기 → 결제했던 가게의 피그의 PICK 화면으로 복원합니다.
+// 가맹점이 넘겨준 주소에 가게 이름만 얹어 되돌아간다.
 function returnToMerchant() {
-  // QR 결제에서 뒤로가기 → 결제했던 가게의 피그의 PICK 화면으로 복원합니다.
-  merchantReturnStore.value = paymentStore.value
-  screen.value = 'merchants'
-}
-
-function startRecommendedPayment({ cardIndex, store }) {
-  paymentCardId.value = DEFAULT_CARDS[cardIndex]?.id ?? ''
-  paymentStore.value = store
-  // 가맹점에서 비밀번호까지 입력했으므로 결제 화면은 QR 단계부터 시작합니다.
-  paymentStartPhase.value = 'qr'
-  screen.value = 'payment'
+  const target = router.resolve(paymentReturnTo.value || { name: 'merchants' })
+  router.push({ path: target.path, query: { ...target.query, store: paymentStore.value } })
 }
 
 function navigateTo(nextScreen) {
@@ -138,18 +123,8 @@ function navigateTo(nextScreen) {
 </script>
 
 <template>
-  <MerchantFlow
-    v-if="screen === 'merchants'"
-    :request="merchantRequest"
-    :initial-store-name="merchantReturnStore"
-    @back="backFromMerchants"
-    @mypage="openMyPage('merchants')"
-    @pay="startRecommendedPayment"
-    @navigate="navigateTo"
-  />
-
   <PaymentScreen
-    v-else-if="screen === 'payment'"
+    v-if="screen === 'payment'"
     :cards="cardStore.cards"
     :initial-card-id="paymentCardId"
     :merchant-name="paymentStore"
@@ -183,6 +158,6 @@ function navigateTo(nextScreen) {
     @mypage="openMyPage('home')"
     @navigate="navigateTo"
     @report="openReport"
-    @merchants="openMerchants($event, 'home')"
+    @merchants="openMerchants"
   />
 </template>

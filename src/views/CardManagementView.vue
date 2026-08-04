@@ -12,10 +12,10 @@ const cardStore = useCardStore()
 const cards = computed(() => cardStore.cards)
 const draggingId = ref('')
 
-// 마이페이지가 넘겨준 `from`(원래 온 곳)을 그대로 되돌려준다.
-// 마이페이지 → 뒤로 → 원래 화면 순서가 유지돼야 기존 동작과 같다. (#52)
+// 마이페이지가 넘겨준 `returnTo`(원래 온 주소)를 그대로 되돌려준다.
+// 마이페이지 → 뒤로 → 원래 화면 순서가 유지돼야 기존 동작과 같다. (#52, #61)
 function goBack() {
-  router.push({ name: 'my-page', query: { from: route.query.from } })
+  router.push({ name: 'my-page', query: { returnTo: route.query.returnTo } })
 }
 
 function startDrag(cardId, event) {
