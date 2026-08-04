@@ -1,4 +1,25 @@
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+/* Tailwind v4.
+   `@import 'tailwindcss'` 대신 theme·utilities 만 가져오고 Preflight(전역 리셋)는 뺐다.
+   Preflight 는 html 에 line-height: 1.5 를 걸어버리는데, 아래 4700줄은 line-height 를
+   지정한 적이 없어 전부 normal(≈1.2) 로 그려진 코드다. 리셋을 넣으면 텍스트 블록마다
+   높이가 늘어 화면 아래로 갈수록 밀린다 (홈 카테고리 타일 109px → 112.8px 로 확인).
+   기존 화면을 Tailwind 로 이관하고 나면 그때 Preflight 를 켜는 것을 검토한다. */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/* 디자인 토큰. 색상 하드코딩(#FFCC00) 대신 bg-primary / text-ink / border-line 처럼 쓴다.
+   토큰에 없는 색이 필요하면 여기에 먼저 추가한다. (기존 src/data.js 의 colors 를 흡수) */
+@theme {
+  --color-primary: #ffcc00;
+  --color-primary-dark: #e6a800;
+  --color-ink: #1a1a1a;
+  --color-sub: #60584c;
+  --color-line: #e9e4dc;
+  --color-icon-bg: #fff8e5;
+  --color-muted: #d4c4ab;
+}
 
 :root {
   font-family:

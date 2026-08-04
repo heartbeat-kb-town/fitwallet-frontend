@@ -32,7 +32,7 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
 | 라우터                     | **부트스트랩됨** — 라우트 추가는 `router/routes.js` |
 | Pinia                      | **부트스트랩됨** — store 를 만들면 바로 동작한다    |
 | `src/api/client.js`        | **파일 없음**                                       |
-| Tailwind `@theme` 토큰     | **정의 전** (색상은 아직 `src/data.js`의 `colors`)  |
+| Tailwind `@theme` 토큰     | **정의됨** — 유틸리티 사용 가능 (Preflight 는 제외) |
 | `src/views/` 이관          | **미착수** — 화면 14개가 `src/components/`에 있음   |
 | `@tanstack/vue-query` 제거 | **미착수** — `package.json`에 남아 있음             |
 | 폴더 구조·네이밍·Git 규칙  | **즉시 적용** — 코드 없이도 바로 지킬 수 있다       |
@@ -139,23 +139,12 @@ export const getUserCards = () => client.get('/user-cards')
 
 두 함수의 **호출부 코드가 같아야 한다.** 그래야 실제 호출로 교체할 때 화면을 안 고친다.
 
-### 실제 호출 가능한 엔드포인트
+### API 계약의 정본 — OpenAPI 스펙
+
+**엔드포인트 목록, 필드명, 타입은 전부 아래 스펙에서 확인한다. 추측하지 않는다.**
 
 ```
-GET  /api/user-cards                        GET  /api/store/search
-GET  /api/card/{cardId}/summary             GET  /api/store/keywords
-GET  /api/card/{cardId}/transactions        DEL  /api/store/keywords/recent/{searchHistoryId}
-POST /api/card                              DEL  /api/store/keywords/recent
-POST /api/cards/mydata                      POST /api/payment/pin/verify
-GET  /api/benefit/expected                  POST /api/payment/qr
-POST /api/user/signup                       POST /api/user/login
-```
-
-- 그 외(**리포트 전체**, 토큰 재발급/로그아웃)는 목데이터로 둔다.
-- 필드명·타입의 **정본은 Swagger**다: `http://localhost:8080/swagger-ui/index.html`. 추측하지 말고 확인한다.
-  **이 목록도 스냅샷일 뿐이다.** 백엔드가 계속 커지는 중이라 도메인 API 파일을 만들 때는
-  그때 백엔드를 최신으로 pull·재시작하고 Swagger를 다시 확인한다.
-  (이 목록은 2026-08-04 기준 14개다. 직전 스냅샷 12개에서 `cards/mydata`, `payment/qr`가 늘었다.)
+develop
 - 개발 시 `/api` 요청은 vite proxy가 `localhost:8080`으로 넘긴다 (`vite.config.js`).
 
 ## 인증
@@ -260,8 +249,11 @@ export const useCardStore = defineStore('card', () => {
 - 클래스가 길어져 읽기 어려우면 `@apply` 대신 **컴포넌트로 분리**한다.
 
 ```css
-/* src/style.css 상단 (아직 미적용) */
-@import 'tailwindcss';
+/* src/style.css 상단 (적용 완료) */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
 @theme {
   --color-primary: #ffcc00;
   --color-primary-dark: #e6a800;
@@ -272,6 +264,13 @@ export const useCardStore = defineStore('card', () => {
   --color-muted: #d4c4ab;
 }
 ```
+
+**Preflight(Tailwind 전역 리셋)는 일부러 빼놨다.** `@import 'tailwindcss'` 한 줄로 가져오면
+Preflight가 딸려 오는데, 그게 `html`에 `line-height: 1.5`를 건다. 기존 `style.css` 4740줄은
+line-height를 지정한 적이 없어 전부 `normal`(≈1.2)로 그려진 코드라, 리셋이 들어가면 텍스트
+블록마다 높이가 늘어 화면 아래로 갈수록 밀린다 (홈 카테고리 타일 109px → 112.8px로 확인).
+그래서 theme·utilities만 가져온다. 기존 화면을 전부 Tailwind로 이관한 뒤에 Preflight를 켜는
+것을 검토한다.
 
 모바일 앱 UI라 `.phone` 컨테이너 고정폭을 쓴다. 브레이크포인트 대응은 당장 하지 않는다.
 

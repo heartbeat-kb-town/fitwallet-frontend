@@ -254,6 +254,10 @@ POST /api/user/signup                       POST /api/user/login
 목데이터로 남는 것: 리포트 전체, 토큰 재발급/로그아웃.
 필드명과 타입의 정본은 `http://localhost:8080/swagger-ui/index.html`이다.
 
+> **후속(2026-08-04)** — 정본은 백엔드 CI가 `openapi-spec` 브랜치에 발행하는 `openapi.json`으로
+> 대체됐다. 위 엔드포인트 목록도 이 문서 작성 시점 기준이라 현재와 다르다.
+> 실제 작업 시에는 [CLAUDE.md](../../CLAUDE.md)의 "API 계약의 정본 — OpenAPI 스펙"을 본다.
+
 ### 3.8 역할 분담 — 하이브리드
 
 **Phase 1 (초반)**
