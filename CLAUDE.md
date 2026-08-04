@@ -2,12 +2,15 @@
 
 최적의 결제수단을 추천하고 놓친 혜택을 알려주는 스마트 전자지갑 fitwallet의 프론트엔드.
 
-> 컴포넌트 구조, 상태 관리 규칙 등 세부 컨벤션은 아직 확정 전이다.
-> 확정되는 대로 이 문서에 섹션을 추가한다. 지금 규정하는 것은 **Git/GitHub 작업 플로우**뿐이다.
+> 개발 컨벤션의 결정 배경과 근거는 [docs/specs/2026-08-03-frontend-conventions-design.md](./docs/specs/2026-08-03-frontend-conventions-design.md)에 있다.
+> 이 문서는 그 결론을 **실제 작업 지침**으로 옮긴 것이다.
 
 ## 기술 스택
 
-Vue 3 + Vite / Pinia / Vue Router / TanStack Query / Tailwind CSS / Zod / axios
+Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
+
+- 상태 관리는 **Pinia 단독**이다. `@tanstack/vue-query`는 쓰지 않는다 (아직 설치돼 있으나 제거 예정).
+- `zod`는 **폼 검증에만** 쓴다. API 응답 검증에는 쓰지 않는다.
 
 ## 빌드
 
@@ -17,6 +20,288 @@ Vue 3 + Vite / Pinia / Vue Router / TanStack Query / Tailwind CSS / Zod / axios
 - 포맷: `npm run format` (`prettier . --write`)
 - 커밋 시 lefthook pre-commit 훅이 스테이징된 파일에 ESLint `--fix` + Prettier를 자동 적용한다
   (`npm install` 하면 `prepare` 스크립트가 `lefthook install`을 실행)
+
+## 현재 적용 상태 (작업 전 반드시 확인)
+
+**아래 개발 규칙은 확정됐지만, 상당수가 아직 코드에 적용되지 않았다.**
+현재 `src`는 동작하는 UI 프로토타입이고 앱 골격이 아니다.
+규칙만 믿고 코드를 짜면 "규칙대로 짰는데 안 돌아가는" 상황이 생긴다.
+
+| 규칙                       | 상태                                                 |
+| -------------------------- | ---------------------------------------------------- |
+| 라우터                     | **미부트스트랩** — 새 화면을 만들기 전에 이 작업부터 |
+| `src/api/client.js`        | **파일 없음**                                        |
+| Tailwind `@theme` 토큰     | **정의 전** (색상은 아직 `src/data.js`의 `colors`)   |
+| `src/views/` 이관          | **미착수** — 화면 14개가 `src/components/`에 있음    |
+| `@tanstack/vue-query` 제거 | **미착수** — `package.json`에 남아 있음              |
+| 폴더 구조·네이밍·Git 규칙  | **즉시 적용** — 코드 없이도 바로 지킬 수 있다        |
+
+**지금 코드가 어떻게 돼 있나**
+
+- `src/App.vue`가 `screen` ref 하나로 14개 화면을 `v-if`로 갈아끼우는 **수동 스위처**다.
+  `<RouterView />`도 `app.use(router)`도 없다.
+- 스타일은 전역 `src/style.css` 4740줄 한 파일이고 `<style scoped>`가 하나도 없다.
+- 목데이터 `src/data.js` / `src/cardData.js`를 화면이 직접 import한다.
+
+**따라서**
+
+- 표에서 "미착수/미부트스트랩"인 항목에 의존하는 작업을 시작할 때는,
+  그 부트스트랩을 **별도 이슈로 먼저 만들고** 진행한다. 다른 작업 PR에 끼워 넣지 않는다.
+- 기존 14개 화면을 수정할 때는 기존 방식(스위처 + 전역 CSS)을 그대로 따른다.
+  한 PR에서 규칙 이관과 기능 변경을 같이 하지 않는다.
+- 표의 항목이 적용되면 **이 표를 같이 갱신한다.**
+
+## 폴더 구조
+
+```
+src/
+├─ api/                     axios 를 만지는 유일한 곳
+│  ├─ client.js             인스턴스 + 인터셉터 + ApiError
+│  ├─ mock/                 백엔드 미구현분 목데이터
+│  └─ {도메인}Api.js        userApi / cardApi / storeApi / benefitApi / paymentApi / reportApi
+├─ router/
+│  ├─ index.js
+│  └─ routes.js             라우트 추가는 배열 끝에 한 줄
+├─ stores/                  authStore.js, cardStore.js …
+├─ composables/             useAsyncState.js, useToast.js …
+├─ views/                   라우트와 1:1 대응하는 화면
+├─ components/
+│  ├─ common/               BaseButton, BaseToast … 프로젝트 전역 재사용
+│  └─ {도메인}/             card/, payment/, report/ … 해당 도메인 전용
+├─ constants/               매직 넘버·문자열
+├─ utils/                   순수 함수 (포맷터 등)
+└─ assets/
+```
+
+- 컴포넌트를 둘 위치는 **재사용 범위**로 정한다. 두 도메인 이상에서 쓰면 `common/`, 아니면 `{도메인}/`.
+- 파일이 300줄을 넘으면 분리를 검토한다.
+
+## 네이밍 규칙
+
+| 대상          | 규칙                                    | 예시                           |
+| ------------- | --------------------------------------- | ------------------------------ |
+| 화면(뷰)      | PascalCase + `View` 접미사              | `HomeView.vue`                 |
+| 컴포넌트      | PascalCase, 2단어 이상                  | `CardListItem.vue`             |
+| 공용 컴포넌트 | `Base` 접두사                           | `BaseButton.vue`               |
+| API 파일      | `{도메인}Api.js`                        | `cardApi.js`                   |
+| API 함수      | HTTP 동사 + 대상 (camelCase)            | `getUserCards()`, `postCard()` |
+| store         | `use{도메인}Store` / `{도메인}Store.js` | `useAuthStore`                 |
+| composable    | `use` 접두사                            | `useAsyncState`                |
+| 상수          | SCREAMING_SNAKE_CASE                    | `MAX_CARD_COUNT`               |
+| 라우트 `name` | kebab-case                              | `card-detail`                  |
+| emit 이벤트   | kebab-case                              | `@card-select`                 |
+| boolean prop  | `is` / `has` / `can` 접두사             | `isLoading`, `hasBenefit`      |
+
+- 파일명 대소문자를 틀리지 않는다. macOS 로컬은 통과해도 CI·배포에서 깨진다 (`Merchantflow.vue` 사례, #18).
+
+## API 레이어
+
+**`axios`를 직접 import하는 곳은 `src/api/client.js` 하나뿐이다.**
+화면과 store는 반드시 `api/{도메인}Api.js`를 거친다.
+
+### 응답 봉투는 인터셉터에서 한 번만 벗긴다
+
+백엔드 응답은 `{ success, code, message, data }` 봉투로 온다.
+
+```js
+// src/api/client.js
+client.interceptors.response.use(
+  (res) => res.data.data, // 봉투를 여기서 한 번만 벗긴다
+  (error) => {
+    /* 아래 "에러 처리" 참고 */
+  },
+)
+```
+
+**규칙: `api/*Api.js` 함수의 반환값은 항상 `data` 알맹이다.**
+화면과 store에 `res.data.data`가 등장하면 잘못 짠 것이다.
+
+### 목데이터도 같은 모양으로 맞춘다
+
+백엔드에 엔드포인트가 있으면 실제 호출하고, 없으면 목데이터를 반환하되 `TODO(mock)` 주석을 단다.
+**목데이터는 반드시 봉투 모양(`{ success, code, message, data }`)으로 정의하고, api 함수가 벗겨서 내보낸다.**
+
+```js
+// 백엔드 미구현
+import { monthlyReport } from './mock/report'
+// TODO(mock): 백엔드 미구현
+export const getMonthlyReport = async () => monthlyReport.data
+
+// 실제 호출
+export const getUserCards = () => client.get('/user-cards')
+```
+
+두 함수의 **호출부 코드가 같아야 한다.** 그래야 실제 호출로 교체할 때 화면을 안 고친다.
+
+### 실제 호출 가능한 엔드포인트
+
+```
+GET  /api/user-cards                        GET  /api/store/search
+GET  /api/card/{cardId}/summary             GET  /api/store/keywords
+GET  /api/card/{cardId}/transactions        DEL  /api/store/keywords/recent/{searchHistoryId}
+POST /api/card                              DEL  /api/store/keywords/recent
+GET  /api/benefit/expected                  POST /api/payment/pin/verify
+POST /api/user/signup                       POST /api/user/login
+```
+
+- 그 외(**리포트 전체**, 토큰 재발급/로그아웃)는 목데이터로 둔다.
+- 필드명·타입의 **정본은 Swagger**다: `http://localhost:8080/swagger-ui/index.html`. 추측하지 말고 확인한다.
+- 개발 시 `/api` 요청은 vite proxy가 `localhost:8080`으로 넘긴다 (`vite.config.js`).
+
+## 인증
+
+백엔드가 하이브리드 방식으로 구현을 마쳤다.
+
+- **Access Token**: 로그인 응답 `data.accessToken`을 **메모리**(`client.js` 모듈 변수)에 보관하고
+  `Authorization: Bearer {token}` 헤더로 보낸다.
+  **`localStorage` / `sessionStorage`에 절대 넣지 않는다.**
+- **Refresh Token**: 백엔드가 HttpOnly 쿠키(`refreshToken`, SameSite=Strict, Path=/)로 내려준다.
+  JS가 읽을 수 없다. 프론트는 axios에 **`withCredentials: true`** 를 켜기만 하면 된다.
+  이걸 안 켜면 `Set-Cookie` 자체가 저장되지 않는다.
+
+> 왜 메모리인가: refresh를 HttpOnly로 감싼 설계라, access를 localStorage에 두면 XSS 방어가 무의미해진다.
+
+`setAccessToken()` / `clearAccessToken()`을 `client.js`에서 export하고 로그인·로그아웃 시 갈아끼운다.
+
+### 현재 제약 — 재발급·로그아웃 엔드포인트 미구현
+
+메모리 보관이라 **새로고침하면 access token이 날아간다.**
+원래는 앱 부팅 시 재발급 API로 복구하지만, 백엔드에 `/reissue`와 `/logout`이 아직 없다.
+
+- 그전까지 401 처리는 **재발급 시도 없이** access token을 비우고 로그인 화면으로 보낸다.
+- 엔드포인트가 생기면 `401 → 재발급 → 원요청 재시도`로 교체한다 (경로는 백엔드 확정 후 반영).
+
+라우터 가드는 `meta.requiresAuth`가 있는 라우트에서 토큰이 없으면 `login`으로 리다이렉트한다.
+
+## 에러 처리
+
+| 상황                      | 표현                                | 담당         |
+| ------------------------- | ----------------------------------- | ------------ |
+| 입력값 검증 실패          | 해당 입력창 아래 인라인 메시지      | 화면         |
+| 400/404/409 비즈니스 에러 | 토스트에 백엔드 `message` 그대로    | 화면         |
+| 401                       | 토큰 비우고 로그인 이동             | **인터셉터** |
+| 500 · 네트워크            | 토스트 "일시적인 오류가 발생했어요" | 화면         |
+
+- **`alert()` 금지.** 사용자에게 보이는 에러는 전부 `useToast()`를 거친다.
+- 401은 인터셉터가 전담한다. 화면에서 401을 따로 처리하지 않는다.
+- 검증 실패를 토스트로 띄우지 않는다. 어느 입력창이 문제인지 알려주지 못한다.
+- 인터셉터는 `ApiError(code, message, status)`로 감싸서 reject한다.
+
+## 상태 관리
+
+- **서버 데이터** → Pinia store
+- **여러 화면이 공유하는 클라이언트 상태**(로그인 등) → Pinia store
+- **그 화면 안에서만 쓰는 상태**(입력값, 모달 열림) → `ref` / `reactive`
+- store 간 순환 참조 금지.
+
+### 비동기 action은 반드시 `useAsyncState`를 경유한다
+
+`isLoading` / `error` / `try-catch`를 손으로 짜지 않는다. 사람마다 모양이 갈린다.
+
+```js
+// src/composables/useAsyncState.js
+export function useAsyncState(fn, initialValue = null) {
+  const data = ref(initialValue) // 초기값을 받아야 v-for 가 터지지 않는다
+  const isLoading = ref(false)
+  const error = ref(null)
+
+  async function execute(...args) {
+    isLoading.value = true
+    error.value = null
+    try {
+      return (data.value = await fn(...args))
+    } catch (e) {
+      error.value = e
+      throw e
+    } finally {
+      isLoading.value = false
+    }
+  }
+  return { data, isLoading, error, execute }
+}
+```
+
+```js
+// src/stores/cardStore.js
+export const useCardStore = defineStore('card', () => {
+  const {
+    data: cards,
+    isLoading,
+    error,
+    execute: fetchCards,
+  } = useAsyncState(cardApi.getUserCards, [])
+  return { cards, isLoading, error, fetchCards }
+})
+```
+
+## 스타일
+
+**새로 짜는 마크업은 Tailwind 유틸리티를 쓴다.** 새 CSS 파일이나 `<style scoped>`를 만들지 않는다.
+
+- 디자인 토큰은 `@theme`로 정의하고 `bg-primary`, `text-ink`, `border-line`처럼 쓴다.
+- **색상 하드코딩(`#FFCC00`) 금지.** 반드시 토큰을 쓴다. 토큰에 없는 색이 필요하면 토큰을 먼저 추가한다.
+- 기존 `src/style.css` 4740줄은 **동결**이다. 기존 화면의 버그 수정만 허용하고, **새 클래스 추가는 금지**한다.
+- 클래스가 길어져 읽기 어려우면 `@apply` 대신 **컴포넌트로 분리**한다.
+
+```css
+/* src/style.css 상단 (아직 미적용) */
+@import 'tailwindcss';
+@theme {
+  --color-primary: #ffcc00;
+  --color-primary-dark: #e6a800;
+  --color-ink: #1a1a1a;
+  --color-sub: #60584c;
+  --color-line: #e9e4dc;
+  --color-icon-bg: #fff8e5;
+  --color-muted: #d4c4ab;
+}
+```
+
+모바일 앱 UI라 `.phone` 컨테이너 고정폭을 쓴다. 브레이크포인트 대응은 당장 하지 않는다.
+
+## 공용 컴포넌트
+
+`src/components/common/`에 두고 `Base` 접두사를 붙인다.
+아래는 위 규칙을 실제로 강제하는 장치라, 골격 담당이 초반에 만든다.
+
+| 컴포넌트                       | 역할                                       |
+| ------------------------------ | ------------------------------------------ |
+| `BaseButton.vue`               | primary / secondary / ghost variant        |
+| `BaseInput.vue`                | 라벨 + 인라인 에러 메시지 슬롯 (검증 규칙) |
+| `BaseToast.vue` + `useToast()` | 에러 표시 창구 (에러 처리 규칙)            |
+| `BaseSpinner.vue`              | 로딩                                       |
+| `BaseModal.vue`                | 모달                                       |
+
+화면에서 버튼·입력창·모달을 새로 만들기 전에 `common/`에 있는지 먼저 확인한다.
+
+## 협업 규칙 (2인)
+
+### 역할 분담 — 하이브리드
+
+**Phase 1 (초반):** 한 명이 공통 골격을 몰아서 깔고, 다른 한 명은 골격과 겹치지 않는 화면 작업을 한다.
+
+| 골격 담당                                 | 화면 담당                                                   |
+| ----------------------------------------- | ----------------------------------------------------------- |
+| 라우터 부트스트랩 + `routes.js`           | 기존 화면 → `views/` 이관 (한 화면 = 한 PR)                 |
+| `api/client.js` + 인터셉터 + `ApiError`   | 목데이터 → `api/mock/` 이관                                 |
+| `authStore` + 로그인·회원가입 연동        | 대형 파일 분해 (`MyCardScreen` 938줄, `ReportScreen` 815줄) |
+| `useAsyncState`, Tailwind 토큰, `common/` |                                                             |
+
+**Phase 2 (골격 완성 후):** 도메인 단위로 나눈다.
+
+- A: 인증 · 마이페이지 · 카드관리 · 결제
+- B: 홈 · 가맹점검색 · 리포트
+
+### 충돌 방지 3계명
+
+1. **`src/App.vue`와 `src/style.css`는 골격 담당만 수정한다.** 둘 다 지금 최대 충돌 지점이다.
+2. **`routes.js`는 배열 끝에 한 줄씩만 추가한다.** 중간에 끼워 넣거나 정렬하지 않는다.
+3. **화면 하나 = 이슈 하나 = PR 하나.** 여러 화면을 한 PR에 묶지 않고, 작업 시작 전 `git pull origin develop`.
+
+### 환경변수
+
+- `.env.example`을 `.env`로 복사해 쓴다. `.env`는 커밋하지 않는다.
+- 클라이언트에 노출되므로 **비밀 키를 넣지 않는다.** `VITE_` 접두사가 붙은 값만 코드에서 읽힌다.
 
 ## Git 컨벤션
 
