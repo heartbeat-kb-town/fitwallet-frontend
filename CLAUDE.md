@@ -32,7 +32,7 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
 | 라우터                     | **부트스트랩됨** — 라우트 추가는 `router/routes.js` |
 | Pinia                      | **부트스트랩됨** — store 를 만들면 바로 동작한다    |
 | `src/api/client.js`        | **파일 없음**                                       |
-| Tailwind `@theme` 토큰     | **정의 전** (색상은 아직 `src/data.js`의 `colors`)  |
+| Tailwind `@theme` 토큰     | **정의됨** — 유틸리티 사용 가능 (Preflight 는 제외) |
 | `src/views/` 이관          | **미착수** — 화면 14개가 `src/components/`에 있음   |
 | `@tanstack/vue-query` 제거 | **미착수** — `package.json`에 남아 있음             |
 | 폴더 구조·네이밍·Git 규칙  | **즉시 적용** — 코드 없이도 바로 지킬 수 있다       |
@@ -246,8 +246,11 @@ export const useCardStore = defineStore('card', () => {
 - 클래스가 길어져 읽기 어려우면 `@apply` 대신 **컴포넌트로 분리**한다.
 
 ```css
-/* src/style.css 상단 (아직 미적용) */
-@import 'tailwindcss';
+/* src/style.css 상단 (적용 완료) */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
 @theme {
   --color-primary: #ffcc00;
   --color-primary-dark: #e6a800;
@@ -258,6 +261,13 @@ export const useCardStore = defineStore('card', () => {
   --color-muted: #d4c4ab;
 }
 ```
+
+**Preflight(Tailwind 전역 리셋)는 일부러 빼놨다.** `@import 'tailwindcss'` 한 줄로 가져오면
+Preflight가 딸려 오는데, 그게 `html`에 `line-height: 1.5`를 건다. 기존 `style.css` 4740줄은
+line-height를 지정한 적이 없어 전부 `normal`(≈1.2)로 그려진 코드라, 리셋이 들어가면 텍스트
+블록마다 높이가 늘어 화면 아래로 갈수록 밀린다 (홈 카테고리 타일 109px → 112.8px로 확인).
+그래서 theme·utilities만 가져온다. 기존 화면을 전부 Tailwind로 이관한 뒤에 Preflight를 켜는
+것을 검토한다.
 
 모바일 앱 UI라 `.phone` 컨테이너 고정폭을 쓴다. 브레이크포인트 대응은 당장 하지 않는다.
 
