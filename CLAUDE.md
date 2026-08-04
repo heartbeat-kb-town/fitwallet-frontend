@@ -35,15 +35,15 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
 | `src/api/client.js`        | **추가됨** — `useAsyncState`도 함께 (도메인 API는 아직) |
 | Tailwind `@theme` 토큰     | **정의됨** — 유틸리티 사용 가능 (Preflight 는 제외)     |
 | `components/common/`       | **추가됨** — `Base*` 5종 + `useToast()`                 |
-| `src/views/` 이관          | **진행 중(#39)** — 13개 중 12개 완료, 나머지는 셸에     |
+| `src/views/` 이관          | **완료** — 화면 14개가 라우트와 1:1                     |
 | `@tanstack/vue-query` 제거 | **완료** — 의존성에서 제거됨                            |
 | 폴더 구조·네이밍·Git 규칙  | **즉시 적용** — 코드 없이도 바로 지킬 수 있다           |
 
 **지금 코드가 어떻게 돼 있나**
 
 - `src/App.vue`는 `<RouterView />` + `<BaseToast />`만 남았다. **더 이상 고치지 않는다.**
-  아직 이관하지 않은 화면 1개는 `src/views/AppShellView.vue`의 수동 스위처가 담당한다.
-  화면을 이관할 때마다 셸에서 한 장씩 빠져나가고, 마지막에 셸 파일과 라우트를 함께 지운다(#39).
+  화면은 전부 `src/views/`에 있고 라우트와 1:1이다. 새 화면은 `views/`에 만들고
+  `routes.js`의 catch-all 바로 위에 한 줄 추가한다.
 - 스타일은 전역 `src/style.css` 4740줄 한 파일이고 `<style scoped>`가 하나도 없다.
 - 목데이터 `src/data.js` / `src/cardData.js`를 화면이 직접 import한다.
 
@@ -51,7 +51,7 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
 
 - 표에서 "미착수/미부트스트랩"인 항목에 의존하는 작업을 시작할 때는,
   그 부트스트랩을 **별도 이슈로 먼저 만들고** 진행한다. 다른 작업 PR에 끼워 넣지 않는다.
-- 아직 셸에 남아 있는 화면을 수정할 때는 기존 방식(스위처 + 전역 CSS)을 그대로 따른다.
+- 기존 화면을 수정할 때는 전역 CSS를 그대로 따른다.
   한 PR에서 규칙 이관과 기능 변경을 같이 하지 않는다.
 - 표의 항목이 적용되면 **이 표를 같이 갱신한다.**
 

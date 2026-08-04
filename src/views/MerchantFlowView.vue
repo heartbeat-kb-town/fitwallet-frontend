@@ -45,7 +45,11 @@ function navigateTo(target) {
     router.push({ name: 'payment' })
     return
   }
-  router.push({ name: 'app-shell', query: { screen: target } })
+  if (target === 'mycard') {
+    router.push({ name: 'my-card' })
+    return
+  }
+  router.push({ name: 'home' })
 }
 
 // 셸의 startRecommendedPayment() 가 하던 일. #66 에서 paymentStore 로 옮겼다.

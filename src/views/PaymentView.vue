@@ -33,9 +33,12 @@ function openMyPage() {
   router.push({ name: 'my-page', query: { returnTo: route.fullPath } })
 }
 
-// 내카드·리포트는 아직 셸에 있다 (#39 로 순차 이관 중).
-function goToShell(screen) {
-  router.push({ name: 'app-shell', query: { screen } })
+function goToMyCard() {
+  router.push({ name: 'my-card' })
+}
+
+function openReport() {
+  router.push({ name: 'report' })
 }
 
 // 가맹점에서 진입한 결제 → 결제했던 가게의 피그의 PICK 화면으로 복원.
@@ -309,11 +312,11 @@ onBeforeUnmount(clearFlowTimers)
           <img :src="iconPaymentActive" alt="" width="22" height="22" />
           <span>결제</span>
         </button>
-        <button type="button" @click="goToShell('mycard')">
+        <button type="button" @click="goToMyCard()">
           <img :src="iconMycard" alt="" width="22" height="22" />
           <span>내 카드</span>
         </button>
-        <button type="button" @click="goToShell('report')">
+        <button type="button" @click="openReport()">
           <img :src="iconReport" alt="" width="22" height="22" />
           <span>리포트</span>
         </button>
@@ -470,9 +473,7 @@ onBeforeUnmount(clearFlowTimers)
       </div>
 
       <div class="payment-done-actions">
-        <button class="benefit-button" type="button" @click="goToShell('report')">
-          혜택 보러가기
-        </button>
+        <button class="benefit-button" type="button" @click="openReport()">혜택 보러가기</button>
         <button class="home-button" type="button" @click="goHome()">홈으로</button>
       </div>
     </section>
