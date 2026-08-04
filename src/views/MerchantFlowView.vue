@@ -29,7 +29,7 @@ const initialStoreName = computed(() => str(route.query.store))
 // 검색에서 들어왔으면 뒤로가기가 검색으로 간다. 아니면 홈(셸 기본 화면).
 function goBack() {
   if (route.query.from === 'search') router.push({ name: 'search' })
-  else router.push({ name: 'app-shell' })
+  else router.push({ name: 'home' })
 }
 
 // 돌아올 주소를 통째로 넘긴다. 화면 이름만으로는 검색 조건을 복원할 수 없다.

@@ -29,7 +29,7 @@ async function selectWord(word) {
 
 // 홈은 셸의 기본 화면이라 query 없이 셸로 보내면 된다.
 function goHome() {
-  router.push({ name: 'app-shell' })
+  router.push({ name: 'home' })
 }
 
 // 검색 조건은 store 가 아니라 URL 에 싣는다. 이 조건은 가맹점 화면 하나가 읽고,

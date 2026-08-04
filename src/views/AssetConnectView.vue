@@ -13,7 +13,7 @@ function goBack() {
 // TODO(#27): 마이데이터 연동(POST /api/cards/mydata)은 별도 이슈다.
 //            홈은 셸의 기본 화면이라 query 없이 셸로 보내면 된다.
 function connect() {
-  router.push({ name: 'app-shell' })
+  router.push({ name: 'home' })
 }
 </script>
 
