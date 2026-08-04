@@ -13,6 +13,7 @@ import MyCardScreen from './components/MyCardScreen.vue'
 import ReportScreen from './components/ReportScreen.vue'
 import MerchantFlow from './components/Merchantflow.vue'
 import CardManagement from './components/CardManagement.vue'
+import BaseToast from './components/common/BaseToast.vue'
 import { DEFAULT_CARDS } from './cardData'
 
 const screen = ref('login')
@@ -210,6 +211,9 @@ function setPrimaryCard(cardId) {
         @reorder="reorderCards"
         @primary="setPrimaryCard"
       />
+
+      <!-- 앱에 한 번만 놓는다. 어느 화면에서든 useToast().showToast() 로 띄운다. -->
+      <BaseToast />
     </section>
   </main>
 </template>
