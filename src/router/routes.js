@@ -24,6 +24,11 @@ export const routes = [
     component: () => import('@/views/SignUpCompleteView.vue'),
   },
   {
+    path: '/asset-connect',
+    name: 'asset-connect',
+    component: () => import('@/views/AssetConnectView.vue'),
+  },
+  {
     path: '/pin/register',
     name: 'pin-register',
     component: () => import('@/views/PinRegisterView.vue'),

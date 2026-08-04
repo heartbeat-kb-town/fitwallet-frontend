@@ -1,15 +1,26 @@
 <script setup>
 import { ref } from 'vue'
-import AppIcon from './AppIcon.vue'
+import { useRouter } from 'vue-router'
+import AppIcon from '@/components/AppIcon.vue'
 
-defineEmits(['back', 'done'])
+const router = useRouter()
 const agreed = ref(false)
+
+function goBack() {
+  router.push({ name: 'signup-complete' })
+}
+
+// TODO(#27): 마이데이터 연동(POST /api/cards/mydata)은 별도 이슈다.
+//            홈은 셸의 기본 화면이라 query 없이 셸로 보내면 된다.
+function connect() {
+  router.push({ name: 'app-shell' })
+}
 </script>
 
 <template>
   <div class="screen asset-screen">
     <header class="flow-header centered-title">
-      <button type="button" aria-label="가입 완료로 돌아가기" @click="$emit('back')">
+      <button type="button" aria-label="가입 완료로 돌아가기" @click="goBack()">
         <AppIcon name="back" :size="22" />
       </button>
       <h1>금융 자산 연결하기</h1>
@@ -78,7 +89,7 @@ const agreed = ref(false)
     </div>
 
     <footer class="asset-footer">
-      <button class="primary-button" type="button" @click="$emit('done')">연결하고 시작하기</button>
+      <button class="primary-button" type="button" @click="connect()">연결하고 시작하기</button>
     </footer>
   </div>
 </template>

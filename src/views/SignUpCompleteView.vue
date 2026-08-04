@@ -3,10 +3,8 @@ import { useRouter } from 'vue-router'
 
 const router = useRouter()
 
-// 내 자산 연결 화면은 아직 셸에 있다 (#39 로 순차 이관 중).
-// AssetConnectView 가 생기면 이 줄이 name: 'asset-connect' 로 바뀐다.
 function goToAssetConnect() {
-  router.push({ name: 'app-shell', query: { screen: 'asset-connect' } })
+  router.push({ name: 'asset-connect' })
 }
 </script>
 
