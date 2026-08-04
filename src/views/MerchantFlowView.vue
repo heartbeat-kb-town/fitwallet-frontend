@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Menu } from 'lucide-vue-next'
 import { categories } from '@/data'
 import { DEFAULT_CARDS } from '@/cardData'
+import { usePaymentStore } from '@/stores/paymentStore'
 import storeSearchIcon from '@/assets/icons/category-store.svg'
 import benefitGiftIcon from '@/assets/icons/category-benefit.svg'
 import iconHome from '@/assets/icons/home.svg'
@@ -13,6 +14,7 @@ import iconReport from '@/assets/icons/report.svg'
 
 const route = useRoute()
 const router = useRouter()
+const paymentStore = usePaymentStore()
 
 const str = (value, fallback = '') => (typeof value === 'string' ? value : fallback)
 
@@ -38,22 +40,23 @@ function openMyPage() {
 }
 
 function navigateTo(target) {
+  if (target === 'payment') {
+    paymentStore.reset()
+    router.push({ name: 'payment' })
+    return
+  }
   router.push({ name: 'app-shell', query: { screen: target } })
 }
 
-// 셸의 startRecommendedPayment() 가 하던 일을 query 로 옮긴다.
+// 셸의 startRecommendedPayment() 가 하던 일. #66 에서 paymentStore 로 옮겼다.
 // cardIndex 는 정렬된 목록이 아니라 원본 DEFAULT_CARDS 를 가리킨다 — 기존 동작 그대로다.
 function payWith({ cardIndex, store }) {
-  router.push({
-    name: 'app-shell',
-    query: {
-      screen: 'payment',
-      cardId: DEFAULT_CARDS[cardIndex]?.id ?? '',
-      store,
-      phase: 'qr',
-      returnTo: route.fullPath,
-    },
+  paymentStore.startFromMerchant({
+    cardId: DEFAULT_CARDS[cardIndex]?.id ?? '',
+    merchantName: store,
+    returnTo: route.fullPath,
   })
+  router.push({ name: 'payment' })
 }
 
 const selectedStore = ref(null)

@@ -18,8 +18,16 @@ import iconReport from '@/assets/icons/report.svg'
 import iconReportActive from '@/assets/icons/report-selected.svg'
 import iconLocation from '@/assets/icons/location.svg'
 import { categories, favoritePlaces, cards, benefitProfiles, benefitIcons, events } from '@/data'
+import { usePaymentStore } from '@/stores/paymentStore'
 
 const router = useRouter()
+const paymentStore = usePaymentStore()
+
+// 결제 탭으로 들어가면 카드 선택부터 시작한다 (기존 navigateTo('payment') 의 초기화).
+function openPayment() {
+  paymentStore.reset()
+  router.push({ name: 'payment' })
+}
 
 function openSearch() {
   router.push({ name: 'search' })
@@ -183,7 +191,7 @@ function categoryIcon(name) {
 function selectTab(index, label) {
   activeTab.value = index
   if (index === 1) {
-    goToShell('payment')
+    openPayment()
     return
   }
   if (index === 2) {

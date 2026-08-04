@@ -1,25 +1,51 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Menu } from 'lucide-vue-next'
-import iconHome from '../assets/icons/home.svg'
-import iconPaymentActive from '../assets/icons/payment-selected.svg'
-import iconMycard from '../assets/icons/mycard.svg'
-import iconReport from '../assets/icons/report.svg'
-import cardSheet from '../assets/cards/payment-card-sheet.png'
-import waitingPig from '../assets/icons/pig-waiting.svg'
-import completePig from '../assets/icons/pig-thorwcard.svg'
-import { DEFAULT_CARDS } from '../cardData'
+import iconHome from '@/assets/icons/home.svg'
+import iconPaymentActive from '@/assets/icons/payment-selected.svg'
+import iconMycard from '@/assets/icons/mycard.svg'
+import iconReport from '@/assets/icons/report.svg'
+import cardSheet from '@/assets/cards/payment-card-sheet.png'
+import waitingPig from '@/assets/icons/pig-waiting.svg'
+import completePig from '@/assets/icons/pig-thorwcard.svg'
+import { DEFAULT_CARDS } from '@/cardData'
 
-const emit = defineEmits(['home', 'mypage', 'report', 'mycard', 'merchant-back'])
-const props = defineProps({
-  cards: { type: Array, default: () => DEFAULT_CARDS },
-  initialCardId: { type: String, default: '' },
-  merchantName: { type: String, default: '' },
-  startPhase: { type: String, default: 'cards' },
-})
+import { useCardStore } from '@/stores/cardStore'
+import { usePaymentStore } from '@/stores/paymentStore'
 
-const cards = computed(() => (props.cards?.length ? props.cards : DEFAULT_CARDS))
-const initialIndex = cards.value.findIndex((card) => card.id === props.initialCardId)
+const route = useRoute()
+const router = useRouter()
+const cardStore = useCardStore()
+const paymentStore = usePaymentStore()
+
+// 진입 시점의 맥락을 고정한다. 화면이 떠 있는 동안 store 가 바뀌어도 흔들리지 않게.
+const merchantName = paymentStore.merchantName
+const startPhase = paymentStore.startPhase
+const paymentReturnTo = paymentStore.returnTo
+
+function goHome() {
+  router.push({ name: 'home' })
+}
+
+// 돌아올 주소를 통째로 넘긴다 (#61).
+function openMyPage() {
+  router.push({ name: 'my-page', query: { returnTo: route.fullPath } })
+}
+
+// 내카드·리포트는 아직 셸에 있다 (#39 로 순차 이관 중).
+function goToShell(screen) {
+  router.push({ name: 'app-shell', query: { screen } })
+}
+
+// 가맹점에서 진입한 결제 → 결제했던 가게의 피그의 PICK 화면으로 복원.
+function backToMerchant() {
+  const target = router.resolve(paymentReturnTo || { name: 'merchants' })
+  router.push({ path: target.path, query: { ...target.query, store: merchantName } })
+}
+
+const cards = computed(() => (cardStore.cards?.length ? cardStore.cards : DEFAULT_CARDS))
+const initialIndex = cards.value.findIndex((card) => card.id === paymentStore.cardId)
 const activeIndex = ref(initialIndex >= 0 ? initialIndex : 0)
 const pointerStartY = ref(null)
 const pointerMoved = ref(false)
@@ -158,9 +184,9 @@ watch(phase, (nextPhase) => {
 
 function qrBack() {
   clearFlowTimers()
-  if (props.startPhase === 'qr') {
+  if (startPhase === 'qr') {
     // 가맹점(피그의 PICK)에서 진입한 결제 → 피그의 PICK 화면으로 돌아갑니다.
-    emit('merchant-back')
+    backToMerchant()
     return
   }
   // 결제 탭에서 진입한 결제 → 카드 선택(결제) 화면으로 돌아갑니다.
@@ -169,7 +195,7 @@ function qrBack() {
 
 onMounted(() => {
   // 가맹점에서 카드를 고르고 비밀번호까지 입력한 경우, 바로 QR 결제 단계부터 시작합니다.
-  if (props.startPhase === 'qr') {
+  if (startPhase === 'qr') {
     qrTab.value = 'scan'
     secondsLeft.value = 180
     phase.value = 'qr'
@@ -184,7 +210,7 @@ onBeforeUnmount(clearFlowTimers)
     <template v-if="phase === 'cards' || phase === 'pin'">
       <header class="payment-header">
         <h1>결제</h1>
-        <button class="icon-button" type="button" aria-label="메뉴 열기" @click="emit('mypage')">
+        <button class="icon-button" type="button" aria-label="메뉴 열기" @click="openMyPage()">
           <Menu :size="23" />
         </button>
       </header>
@@ -275,7 +301,7 @@ onBeforeUnmount(clearFlowTimers)
       </div>
 
       <nav class="bottom-nav">
-        <button type="button" @click="emit('home')">
+        <button type="button" @click="goHome()">
           <img :src="iconHome" alt="" width="22" height="22" />
           <span>홈</span>
         </button>
@@ -283,11 +309,11 @@ onBeforeUnmount(clearFlowTimers)
           <img :src="iconPaymentActive" alt="" width="22" height="22" />
           <span>결제</span>
         </button>
-        <button type="button" @click="emit('mycard')">
+        <button type="button" @click="goToShell('mycard')">
           <img :src="iconMycard" alt="" width="22" height="22" />
           <span>내 카드</span>
         </button>
-        <button type="button" @click="emit('report')">
+        <button type="button" @click="goToShell('report')">
           <img :src="iconReport" alt="" width="22" height="22" />
           <span>리포트</span>
         </button>
@@ -444,8 +470,10 @@ onBeforeUnmount(clearFlowTimers)
       </div>
 
       <div class="payment-done-actions">
-        <button class="benefit-button" type="button" @click="emit('report')">혜택 보러가기</button>
-        <button class="home-button" type="button" @click="emit('home')">홈으로</button>
+        <button class="benefit-button" type="button" @click="goToShell('report')">
+          혜택 보러가기
+        </button>
+        <button class="home-button" type="button" @click="goHome()">홈으로</button>
       </div>
     </section>
   </section>
