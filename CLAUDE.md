@@ -103,7 +103,11 @@ src/
 
 ### 응답 봉투는 인터셉터에서 한 번만 벗긴다
 
-백엔드 응답은 `{ success, code, message, data }` 봉투로 온다.
+백엔드 응답은 `{ success, code, message, data, errors }` 봉투로 온다. (Swagger 스키마 9종 전부 동일)
+
+`errors`는 검증 실패(400 `INVALID_INPUT_VALUE`)일 때만 채워지는 필드별 사유다.
+`[{ field: 'loginId', reason: '아이디는 필수입니다.' }, ...]` 형태이고, 이게 아래 "에러 처리"의
+**입력창 아래 인라인 메시지**를 만드는 재료다.
 
 ```js
 // src/api/client.js
@@ -142,12 +146,16 @@ GET  /api/user-cards                        GET  /api/store/search
 GET  /api/card/{cardId}/summary             GET  /api/store/keywords
 GET  /api/card/{cardId}/transactions        DEL  /api/store/keywords/recent/{searchHistoryId}
 POST /api/card                              DEL  /api/store/keywords/recent
-GET  /api/benefit/expected                  POST /api/payment/pin/verify
+POST /api/cards/mydata                      POST /api/payment/pin/verify
+GET  /api/benefit/expected                  POST /api/payment/qr
 POST /api/user/signup                       POST /api/user/login
 ```
 
 - 그 외(**리포트 전체**, 토큰 재발급/로그아웃)는 목데이터로 둔다.
 - 필드명·타입의 **정본은 Swagger**다: `http://localhost:8080/swagger-ui/index.html`. 추측하지 말고 확인한다.
+  **이 목록도 스냅샷일 뿐이다.** 백엔드가 계속 커지는 중이라 도메인 API 파일을 만들 때는
+  그때 백엔드를 최신으로 pull·재시작하고 Swagger를 다시 확인한다.
+  (이 목록은 2026-08-04 기준 14개다. 직전 스냅샷 12개에서 `cards/mydata`, `payment/qr`가 늘었다.)
 - 개발 시 `/api` 요청은 vite proxy가 `localhost:8080`으로 넘긴다 (`vite.config.js`).
 
 ## 인증
@@ -177,17 +185,23 @@ POST /api/user/signup                       POST /api/user/login
 
 ## 에러 처리
 
-| 상황                      | 표현                                | 담당         |
-| ------------------------- | ----------------------------------- | ------------ |
-| 입력값 검증 실패          | 해당 입력창 아래 인라인 메시지      | 화면         |
-| 400/404/409 비즈니스 에러 | 토스트에 백엔드 `message` 그대로    | 화면         |
-| 401                       | 토큰 비우고 로그인 이동             | **인터셉터** |
-| 500 · 네트워크            | 토스트 "일시적인 오류가 발생했어요" | 화면         |
+| 상황                                         | 표현                                | 담당         |
+| -------------------------------------------- | ----------------------------------- | ------------ |
+| 입력값 검증 실패 (400 `INVALID_INPUT_VALUE`) | 해당 입력창 아래 인라인 메시지      | 화면         |
+| 400/404/409 비즈니스 에러                    | 토스트에 백엔드 `message` 그대로    | 화면         |
+| 401 `INVALID_CREDENTIALS` (로그인 실패)      | 토스트에 백엔드 `message` 그대로    | 화면         |
+| 401 `UNAUTHORIZED` (세션 끊김)               | 토큰 비우고 로그인 이동             | **인터셉터** |
+| 500 · 네트워크                               | 토스트 "일시적인 오류가 발생했어요" | 화면         |
 
 - **`alert()` 금지.** 사용자에게 보이는 에러는 전부 `useToast()`를 거친다.
-- 401은 인터셉터가 전담한다. 화면에서 401을 따로 처리하지 않는다.
+- **401이 전부 세션 만료가 아니다.** 아이디·비밀번호가 틀리면 백엔드는
+  `401 INVALID_CREDENTIALS`를 준다. 이걸 세션 끊김으로 처리하면 로그인 실패 메시지가
+  사용자에게 도달하지 못하고 로그인 화면으로 되튕긴다.
+  그래서 인터셉터는 `/user/login`·`/user/signup`에서 나온 401을 건드리지 않는다.
+- 세션이 끊긴 401은 인터셉터가 전담한다. 화면에서 따로 처리하지 않는다.
 - 검증 실패를 토스트로 띄우지 않는다. 어느 입력창이 문제인지 알려주지 못한다.
-- 인터셉터는 `ApiError(code, message, status)`로 감싸서 reject한다.
+  `ApiError.reasonFor('loginId')`로 해당 입력창 메시지를 꺼내 쓴다.
+- 인터셉터는 `ApiError(code, message, status, errors)`로 감싸서 reject한다.
 
 ## 상태 관리
 
