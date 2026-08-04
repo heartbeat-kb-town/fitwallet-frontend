@@ -1,11 +1,21 @@
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import profileImage from '../assets/icons/pig-face.svg'
 import PaymentPinChange from './PaymentPinChange.vue'
+import { useAuthStore } from '@/stores/authStore'
 
 defineEmits(['back', 'manage-cards'])
 
+const router = useRouter()
+const authStore = useAuthStore()
+
 const showPinChange = ref(false)
+
+function logout() {
+  authStore.logout()
+  router.push({ name: 'login' })
+}
 </script>
 
 <template>
@@ -76,7 +86,7 @@ const showPinChange = ref(false)
         </div>
       </section>
 
-      <button class="my-logout" type="button" aria-disabled="true">
+      <button class="my-logout" type="button" @click="logout()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path
             d="M16 17L21 12L16 7"
