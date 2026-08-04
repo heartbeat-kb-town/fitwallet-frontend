@@ -31,7 +31,6 @@ const reportCardId = ref('')
 
 <script setup>
 import { useRoute, useRouter } from 'vue-router'
-import MyCardScreen from '@/components/MyCardScreen.vue'
 import ReportScreen from '@/components/ReportScreen.vue'
 import { usePaymentStore } from '@/stores/paymentStore'
 
@@ -44,10 +43,10 @@ const paymentStore = usePaymentStore()
 // AppShellView 를 삭제할 때 함께 사라진다.
 const screen = ref(typeof route.query.screen === 'string' ? route.query.screen : 'home')
 
-// 셸에 남은 화면이 아니면 홈으로 보낸다.
+// 셸에 남은 화면(리포트)이 아니면 홈으로 보낸다.
 // `/app` 라우트의 beforeEnter 는 같은 라우트 안에서 query 만 바뀔 때는 실행되지 않아서,
 // 여기서 한 번 더 막는다. (셸이 삭제되면 함께 사라진다)
-if (!['mycard', 'report'].includes(screen.value)) {
+if (screen.value !== 'report') {
   router.replace({ name: 'home' })
 }
 
@@ -71,36 +70,23 @@ function openMyPage(screenName) {
   })
 }
 
-function openReport(cardId = '') {
-  reportCardId.value = cardId
-  screen.value = 'report'
-}
-
 // 결제 탭으로 들어가면 카드 선택부터 시작한다 (기존 초기화 동작).
 function openPayment() {
   paymentStore.reset()
   router.push({ name: 'payment' })
 }
 
-// 리포트 화면의 하단 탭. 홈·결제는 라우트가 됐고 내카드만 아직 셸 안이다.
+// 리포트 화면의 하단 탭. 이제 전부 라우트다.
 function navigateTo(nextScreen) {
-  if (nextScreen === 'home') return goHome()
   if (nextScreen === 'payment') return openPayment()
-  screen.value = nextScreen
+  if (nextScreen === 'mycard') return router.push({ name: 'my-card' })
+  goHome()
 }
 </script>
 
 <template>
-  <MyCardScreen
-    v-if="screen === 'mycard'"
-    @home="goHome"
-    @payment="openPayment"
-    @mypage="openMyPage('mycard')"
-    @report="openReport()"
-  />
-
   <ReportScreen
-    v-else-if="screen === 'report'"
+    v-if="screen === 'report'"
     :key="`report-${reportCardId}`"
     :initial-card-id="reportCardId"
     @navigate="navigateTo"
