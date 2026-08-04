@@ -5,6 +5,7 @@
  * 중간에 끼워 넣거나 정렬하지 않는다 (2인 동시 작업 시 충돌을 막기 위함).
  *
  *   { path: '/home', name: 'home', component: () => import('@/views/HomeView.vue') },
+  { path: '/payment', name: 'payment', component: () => import('@/views/PaymentView.vue') },
  *
  * 셸(`/app`)과 그 뒤의 catch-all 은 이관(#39)이 끝나면 함께 지운다.
  * 그때부터는 원래대로 배열 끝에 추가하면 된다.
@@ -24,6 +25,7 @@ export const routes = [
     component: () => import('@/views/SignUpCompleteView.vue'),
   },
   { path: '/home', name: 'home', component: () => import('@/views/HomeView.vue') },
+  { path: '/payment', name: 'payment', component: () => import('@/views/PaymentView.vue') },
   { path: '/search', name: 'search', component: () => import('@/views/SearchView.vue') },
   {
     path: '/merchants',

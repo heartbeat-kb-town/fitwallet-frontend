@@ -35,14 +35,14 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
 | `src/api/client.js`        | **추가됨** — `useAsyncState`도 함께 (도메인 API는 아직) |
 | Tailwind `@theme` 토큰     | **정의됨** — 유틸리티 사용 가능 (Preflight 는 제외)     |
 | `components/common/`       | **추가됨** — `Base*` 5종 + `useToast()`                 |
-| `src/views/` 이관          | **진행 중(#39)** — 13개 중 10개 완료, 나머지는 셸에     |
+| `src/views/` 이관          | **진행 중(#39)** — 13개 중 11개 완료, 나머지는 셸에     |
 | `@tanstack/vue-query` 제거 | **완료** — 의존성에서 제거됨                            |
 | 폴더 구조·네이밍·Git 규칙  | **즉시 적용** — 코드 없이도 바로 지킬 수 있다           |
 
 **지금 코드가 어떻게 돼 있나**
 
 - `src/App.vue`는 `<RouterView />` + `<BaseToast />`만 남았다. **더 이상 고치지 않는다.**
-  아직 이관하지 않은 화면 3개는 `src/views/AppShellView.vue`의 수동 스위처가 담당한다.
+  아직 이관하지 않은 화면 2개는 `src/views/AppShellView.vue`의 수동 스위처가 담당한다.
   화면을 이관할 때마다 셸에서 한 장씩 빠져나가고, 마지막에 셸 파일과 라우트를 함께 지운다(#39).
 - 스타일은 전역 `src/style.css` 4740줄 한 파일이고 `<style scoped>`가 하나도 없다.
 - 목데이터 `src/data.js` / `src/cardData.js`를 화면이 직접 import한다.

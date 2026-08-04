@@ -27,54 +27,33 @@ import { ref } from 'vue'
  * 마지막 화면이 나가면 이 블록도 파일과 함께 사라진다.
  */
 const reportCardId = ref('')
-const paymentCardId = ref('')
-const paymentStore = ref('')
-const paymentStartPhase = ref('cards')
-const paymentReturnTo = ref('')
 </script>
 
 <script setup>
-import { watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import PaymentScreen from '@/components/PaymentScreen.vue'
 import MyCardScreen from '@/components/MyCardScreen.vue'
 import ReportScreen from '@/components/ReportScreen.vue'
-import { useCardStore } from '@/stores/cardStore'
+import { usePaymentStore } from '@/stores/paymentStore'
 
 const route = useRoute()
 const router = useRouter()
-const cardStore = useCardStore()
-
-// 카드 순서가 바뀌면 결제 화면에 미리 골라둔 카드가 무효가 된다.
-// 원래 셸의 reorderCards()/setPrimaryCard() 가 갖고 있던 부수효과인데,
-// cardStore 는 결제 도메인을 모르므로 여기서 잇는다.
-// 결제 화면이 이관되면 그쪽 store 로 옮겨간다.
-watch(
-  () => cardStore.order,
-  () => {
-    paymentCardId.value = ''
-  },
-)
+const paymentStore = usePaymentStore()
 
 // 이관 중에만 쓰는 진입점. 라우팅된 화면이 셸 안의 특정 화면으로 들어올 때 쓴다.
 // 이건 마운트마다 새로 읽어야 하므로 위와 달리 setup 안에 둔다.
 // AppShellView 를 삭제할 때 함께 사라진다.
 const screen = ref(typeof route.query.screen === 'string' ? route.query.screen : 'home')
 
-const str = (value, fallback = '') => (typeof value === 'string' ? value : fallback)
-
-// 가맹점 화면(이관 완료 #61)이 결제로 넘길 때 실어 보낸 값들.
-// 원래 셸의 startRecommendedPayment() 가 ref 에 채우던 것이다.
-// 홈(이관 완료 #64)이 혜택 카드에서 리포트를 열 때 실어 보낸 값.
-if (screen.value === 'report') {
-  reportCardId.value = str(route.query.cardId)
+// 셸에 남은 화면이 아니면 홈으로 보낸다.
+// `/app` 라우트의 beforeEnter 는 같은 라우트 안에서 query 만 바뀔 때는 실행되지 않아서,
+// 여기서 한 번 더 막는다. (셸이 삭제되면 함께 사라진다)
+if (!['mycard', 'report'].includes(screen.value)) {
+  router.replace({ name: 'home' })
 }
 
-if (screen.value === 'payment' && str(route.query.phase)) {
-  paymentCardId.value = str(route.query.cardId)
-  paymentStore.value = str(route.query.store)
-  paymentStartPhase.value = str(route.query.phase, 'cards')
-  paymentReturnTo.value = str(route.query.returnTo)
+// 홈(이관 완료 #64)이 혜택 카드에서 리포트를 열 때 실어 보낸 값.
+if (screen.value === 'report') {
+  reportCardId.value = typeof route.query.cardId === 'string' ? route.query.cardId : ''
 }
 
 function goHome() {
@@ -97,46 +76,25 @@ function openReport(cardId = '') {
   screen.value = 'report'
 }
 
-// QR 결제에서 뒤로가기 → 결제했던 가게의 피그의 PICK 화면으로 복원합니다.
-// 가맹점이 넘겨준 주소에 가게 이름만 얹어 되돌아간다.
-function returnToMerchant() {
-  const target = router.resolve(paymentReturnTo.value || { name: 'merchants' })
-  router.push({ path: target.path, query: { ...target.query, store: paymentStore.value } })
+// 결제 탭으로 들어가면 카드 선택부터 시작한다 (기존 초기화 동작).
+function openPayment() {
+  paymentStore.reset()
+  router.push({ name: 'payment' })
 }
 
-// 리포트 화면의 하단 탭. 홈은 라우트가 됐고 나머지는 아직 셸 안이다.
+// 리포트 화면의 하단 탭. 홈·결제는 라우트가 됐고 내카드만 아직 셸 안이다.
 function navigateTo(nextScreen) {
-  if (nextScreen === 'home') {
-    goHome()
-    return
-  }
-  if (nextScreen === 'payment') {
-    paymentCardId.value = ''
-    paymentStore.value = ''
-    paymentStartPhase.value = 'cards'
-  }
+  if (nextScreen === 'home') return goHome()
+  if (nextScreen === 'payment') return openPayment()
   screen.value = nextScreen
 }
 </script>
 
 <template>
-  <PaymentScreen
-    v-if="screen === 'payment'"
-    :cards="cardStore.cards"
-    :initial-card-id="paymentCardId"
-    :merchant-name="paymentStore"
-    :start-phase="paymentStartPhase"
-    @home="goHome"
-    @mypage="openMyPage('payment')"
-    @report="openReport()"
-    @mycard="screen = 'mycard'"
-    @merchant-back="returnToMerchant"
-  />
-
   <MyCardScreen
-    v-else-if="screen === 'mycard'"
+    v-if="screen === 'mycard'"
     @home="goHome"
-    @payment="screen = 'payment'"
+    @payment="openPayment"
     @mypage="openMyPage('mycard')"
     @report="openReport()"
   />
