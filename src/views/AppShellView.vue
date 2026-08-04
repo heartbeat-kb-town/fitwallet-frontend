@@ -11,8 +11,7 @@
  * 새 코드는 여기에 추가하지 않는다. 여기는 줄어들기만 하는 파일이다.
  */
 import { computed, ref } from 'vue'
-import { useRoute } from 'vue-router'
-import SignUpComplete from '@/components/SignUpComplete.vue'
+import { useRoute, useRouter } from 'vue-router'
 import AssetConnectScreen from '@/components/AssetConnectScreen.vue'
 import HomeScreen from '@/components/HomeScreen.vue'
 import SearchScreen from '@/components/SearchScreen.vue'
@@ -25,6 +24,12 @@ import CardManagement from '@/components/CardManagement.vue'
 import { DEFAULT_CARDS } from '@/cardData'
 
 const route = useRoute()
+const router = useRouter()
+
+// 가입 완료 화면은 이관 완료(#47). 셸에서 그쪽으로 나갈 때는 라우터를 쓴다.
+function goToSignUpComplete() {
+  router.push({ name: 'signup-complete' })
+}
 
 // 이관 중에만 쓰는 진입점. 라우팅된 화면이 셸 안의 특정 화면으로 들어올 때 쓴다.
 // (예: LoginView → 회원가입) 해당 화면이 이관되면 이 query 도 함께 사라진다.
@@ -104,11 +109,9 @@ function setPrimaryCard(cardId) {
 </script>
 
 <template>
-  <SignUpComplete v-if="screen === 'complete'" @connect="screen = 'asset-connect'" />
-
   <AssetConnectScreen
-    v-else-if="screen === 'asset-connect'"
-    @back="screen = 'complete'"
+    v-if="screen === 'asset-connect'"
+    @back="goToSignUpComplete"
     @done="screen = 'home'"
   />
 

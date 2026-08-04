@@ -10,7 +10,7 @@ const signupStore = useSignupStore()
 //       (동작 변경이라 이관 PR 에서는 넣지 않았다 — #45)
 function handleComplete() {
   signupStore.reset()
-  router.push({ name: 'app-shell', query: { screen: 'complete' } })
+  router.push({ name: 'signup-complete' })
 }
 </script>
 
