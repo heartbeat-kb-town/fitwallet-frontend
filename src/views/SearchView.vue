@@ -1,7 +1,8 @@
 <script setup>
 import { nextTick, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
-const emit = defineEmits(['back', 'search'])
+const router = useRouter()
 
 const searchInput = ref(null)
 const query = ref('')
@@ -26,6 +27,15 @@ async function selectWord(word) {
   submitSearch()
 }
 
+// 홈은 셸의 기본 화면이라 query 없이 셸로 보내면 된다.
+function goHome() {
+  router.push({ name: 'app-shell' })
+}
+
+// 검색 조건은 store 가 아니라 URL 에 싣는다. 이 조건은 가맹점 화면 하나가 읽고,
+// 무엇을 보여줄지를 서술하는 값이라 라우트에 있는 게 맞다 (#39 기준표 두 번째 줄).
+// 가맹점 화면이 이관되면 `/merchants?query=…&title=…` 형태가 된다.
+// `from` 은 가맹점의 뒤로가기가 검색으로 돌아오기 위한 진입 경로다 (#52 패턴).
 function submitSearch() {
   const value = query.value.trim()
   if (!value) {
@@ -35,14 +45,17 @@ function submitSearch() {
   if (!recents.value.includes(value)) {
     recents.value = [value, ...recents.value].slice(0, 5)
   }
-  emit('search', { query: value, title: value })
+  router.push({
+    name: 'app-shell',
+    query: { screen: 'merchants', query: value, title: value, from: 'search' },
+  })
 }
 </script>
 
 <template>
   <div class="search-screen">
     <header class="search-header">
-      <button class="back-button" type="button" aria-label="뒤로가기" @click="emit('back')">
+      <button class="back-button" type="button" aria-label="뒤로가기" @click="goHome()">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="m15 18-6-6 6-6" />
         </svg>
@@ -119,7 +132,7 @@ function submitSearch() {
     </div>
 
     <nav class="search-bottom-nav" aria-label="하단 메뉴">
-      <button class="active" type="button" @click="emit('back')">
+      <button class="active" type="button" @click="goHome()">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" />
         </svg>

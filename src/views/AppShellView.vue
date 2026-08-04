@@ -42,7 +42,6 @@ const merchantReturnStore = ref('')
 import { watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import HomeScreen from '@/components/HomeScreen.vue'
-import SearchScreen from '@/components/SearchScreen.vue'
 import PaymentScreen from '@/components/PaymentScreen.vue'
 import MyCardScreen from '@/components/MyCardScreen.vue'
 import ReportScreen from '@/components/ReportScreen.vue'
@@ -68,6 +67,28 @@ watch(
 // 이건 마운트마다 새로 읽어야 하므로 위와 달리 setup 안에 둔다.
 // AppShellView 를 삭제할 때 함께 사라진다.
 const screen = ref(typeof route.query.screen === 'string' ? route.query.screen : 'home')
+
+// 검색 화면(이관 완료 #59)에서 들어오면 검색 조건이 query 에 실려 온다.
+// 홈에서 들어올 때는 openMerchants() 가 직접 채운다.
+if (screen.value === 'merchants' && typeof route.query.query === 'string') {
+  merchantEntry.value = route.query.from === 'search' ? 'search' : 'home'
+  merchantRequest.value = {
+    categoryId: typeof route.query.categoryId === 'string' ? route.query.categoryId : 'cafe',
+    title: typeof route.query.title === 'string' ? route.query.title : route.query.query,
+    query: route.query.query,
+  }
+  merchantReturnStore.value = ''
+}
+
+function openSearch() {
+  router.push({ name: 'search' })
+}
+
+// 가맹점에서 뒤로: 검색으로 들어왔으면 검색 화면(라우트)으로, 아니면 셸 안의 홈으로.
+function backFromMerchants() {
+  if (merchantEntry.value === 'search') openSearch()
+  else screen.value = 'home'
+}
 
 // 마이페이지는 이관 완료(#52). 돌아올 화면은 `from` query 로 넘긴다.
 // (셸 안의 화면 전환은 히스토리를 만들지 않아 router.back() 을 아직 쓸 수 없다)
@@ -117,17 +138,11 @@ function navigateTo(nextScreen) {
 </script>
 
 <template>
-  <SearchScreen
-    v-if="screen === 'search'"
-    @back="screen = 'home'"
-    @search="openMerchants($event, 'search')"
-  />
-
   <MerchantFlow
-    v-else-if="screen === 'merchants'"
+    v-if="screen === 'merchants'"
     :request="merchantRequest"
     :initial-store-name="merchantReturnStore"
-    @back="screen = merchantEntry"
+    @back="backFromMerchants"
     @mypage="openMyPage('merchants')"
     @pay="startRecommendedPayment"
     @navigate="navigateTo"
@@ -164,7 +179,7 @@ function navigateTo(nextScreen) {
 
   <HomeScreen
     v-else
-    @search="screen = 'search'"
+    @search="openSearch"
     @mypage="openMyPage('home')"
     @navigate="navigateTo"
     @report="openReport"
