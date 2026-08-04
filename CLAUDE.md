@@ -27,19 +27,21 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
 현재 `src`는 동작하는 UI 프로토타입이고 앱 골격이 아니다.
 규칙만 믿고 코드를 짜면 "규칙대로 짰는데 안 돌아가는" 상황이 생긴다.
 
-| 규칙                       | 상태                                                 |
-| -------------------------- | ---------------------------------------------------- |
-| 라우터                     | **미부트스트랩** — 새 화면을 만들기 전에 이 작업부터 |
-| `src/api/client.js`        | **파일 없음**                                        |
-| Tailwind `@theme` 토큰     | **정의 전** (색상은 아직 `src/data.js`의 `colors`)   |
-| `src/views/` 이관          | **미착수** — 화면 14개가 `src/components/`에 있음    |
-| `@tanstack/vue-query` 제거 | **미착수** — `package.json`에 남아 있음              |
-| 폴더 구조·네이밍·Git 규칙  | **즉시 적용** — 코드 없이도 바로 지킬 수 있다        |
+| 규칙                       | 상태                                                |
+| -------------------------- | --------------------------------------------------- |
+| 라우터                     | **부트스트랩됨** — 라우트 추가는 `router/routes.js` |
+| Pinia                      | **부트스트랩됨** — store 를 만들면 바로 동작한다    |
+| `src/api/client.js`        | **파일 없음**                                       |
+| Tailwind `@theme` 토큰     | **정의 전** (색상은 아직 `src/data.js`의 `colors`)  |
+| `src/views/` 이관          | **미착수** — 화면 14개가 `src/components/`에 있음   |
+| `@tanstack/vue-query` 제거 | **미착수** — `package.json`에 남아 있음             |
+| 폴더 구조·네이밍·Git 규칙  | **즉시 적용** — 코드 없이도 바로 지킬 수 있다       |
 
 **지금 코드가 어떻게 돼 있나**
 
 - `src/App.vue`가 `screen` ref 하나로 14개 화면을 `v-if`로 갈아끼우는 **수동 스위처**다.
-  `<RouterView />`도 `app.use(router)`도 없다.
+  `app.use(router)`는 붙었지만 `<RouterView />`는 아직 없다. 라우터는 화면을 `src/views/`로
+  옮기면서 화면 단위로 넘겨받는다.
 - 스타일은 전역 `src/style.css` 4740줄 한 파일이고 `<style scoped>`가 하나도 없다.
 - 목데이터 `src/data.js` / `src/cardData.js`를 화면이 직접 import한다.
 
