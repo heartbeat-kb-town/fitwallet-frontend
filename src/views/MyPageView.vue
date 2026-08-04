@@ -3,9 +3,11 @@ import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import profileImage from '@/assets/icons/pig-face.svg'
 import PaymentPinChange from '@/components/PaymentPinChange.vue'
+import { useAuthStore } from '@/stores/authStore'
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 
 const showPinChange = ref(false)
 
@@ -24,6 +26,14 @@ function goBack() {
 // 그때도 원래 온 곳(홈·결제 …)을 잃지 않아야 기존 동작과 같다.
 function goToCardManagement() {
   router.push({ name: 'card-management', query: { from: route.query.from } })
+}
+
+// TODO: 백엔드에 /logout 이 없다. 지금은 클라이언트 토큰만 비우므로
+// 서버가 발급한 refreshToken 쿠키는 살아 있다 (Max-Age 14일).
+// 엔드포인트가 생기면 서버에도 알려 쿠키까지 만료시킨다.
+function logout() {
+  authStore.logout()
+  router.push({ name: 'login' })
 }
 </script>
 
@@ -90,7 +100,7 @@ function goToCardManagement() {
         </div>
       </section>
 
-      <button class="my-logout" type="button" aria-disabled="true">
+      <button class="my-logout" type="button" @click="logout()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path
             d="M16 17L21 12L16 7"

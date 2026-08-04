@@ -4,16 +4,46 @@ import { useRouter } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
 import PasswordEye from '@/components/PasswordEye.vue'
 import titleImage from '@/assets/title.png'
+import { useAuthStore } from '@/stores/authStore'
+import { useToast } from '@/composables/useToast'
 
 const router = useRouter()
+const authStore = useAuthStore()
+const { showToast } = useToast()
 
 const id = ref('')
 const password = ref('')
 const passwordVisible = ref(false)
 
-// TODO(#27): 실제 로그인 연동은 authStore + userApi 가 붙을 때 처리한다.
-//            지금은 기존 프로토타입과 동일하게 입력값 검증 없이 홈으로 보낸다.
-function login() {
+// 입력창 아래에 붙는 인라인 메시지. 백엔드 검증 실패(400)의 필드별 사유를 담는다.
+const fieldErrors = ref({})
+
+async function login() {
+  // 이전 시도의 메시지를 남겨두면 어느 시도의 결과인지 헷갈린다.
+  fieldErrors.value = {}
+
+  try {
+    await authStore.login({ loginId: id.value, password: password.value })
+    router.push({ name: 'app-shell' })
+  } catch (error) {
+    // 검증 실패는 토스트로 띄우지 않는다. 어느 입력창이 문제인지 알려주지 못한다.
+    if (error.code === 'INVALID_INPUT_VALUE') {
+      fieldErrors.value = {
+        loginId: error.reasonFor('loginId'),
+        password: error.reasonFor('password'),
+      }
+      return
+    }
+
+    // 아이디·비밀번호 불일치(401 INVALID_CREDENTIALS)는 특정 입력창의 문제가 아니라
+    // 조합의 문제다. 백엔드 message 를 그대로 보여준다.
+    // 응답 자체가 없는 네트워크 오류면 백엔드 message 도 없으므로 문구를 통일한다.
+    showToast(error.status ? error.message : '일시적인 오류가 발생했어요')
+  }
+}
+
+// TODO: 카카오 소셜 인증이 아직 없다. 기존 프로토타입처럼 그냥 통과시킨다.
+function loginWithKakao() {
   router.push({ name: 'app-shell' })
 }
 
@@ -41,6 +71,9 @@ function goToSignUp() {
           <AppIcon name="user" />
           <input v-model="id" placeholder="아이디를 입력하세요" />
         </div>
+        <p v-if="fieldErrors.loginId" class="mt-1.5 text-[13px] text-danger">
+          {{ fieldErrors.loginId }}
+        </p>
       </label>
 
       <label class="field">
@@ -54,9 +87,14 @@ function goToSignUp() {
           />
           <PasswordEye :visible="passwordVisible" @toggle="passwordVisible = !passwordVisible" />
         </div>
+        <p v-if="fieldErrors.password" class="mt-1.5 text-[13px] text-danger">
+          {{ fieldErrors.password }}
+        </p>
       </label>
 
-      <button class="primary-button" type="button" @click="login()">로그인</button>
+      <button class="primary-button" type="button" :disabled="authStore.isLoading" @click="login()">
+        {{ authStore.isLoading ? '로그인 중…' : '로그인' }}
+      </button>
 
       <div class="social-divider">
         <span></span>
@@ -64,7 +102,7 @@ function goToSignUp() {
         <span></span>
       </div>
 
-      <button class="kakao-button" type="button" @click="login()">
+      <button class="kakao-button" type="button" @click="loginWithKakao()">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
           <path
             d="M12 3C6.48 3 2 6.69 2 11.25c0 2.91 1.87 5.47 4.69 6.94L5.5 21l4.13-2.13c.77.11 1.56.17 2.37.17 5.52 0 10-3.69 10-8.25S17.52 3 12 3z"
