@@ -5,20 +5,45 @@ let locationConsented = false
 
 <script setup>
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { Menu, ChevronDown, ChevronRight, X } from 'lucide-vue-next'
-import iconSearch from '../assets/icons/search.svg'
-import iconHomeActive from '../assets/icons/click-home.svg'
-import iconHome from '../assets/icons/home.svg'
-import iconPayment from '../assets/icons/payment.svg'
-import iconPaymentActive from '../assets/icons/payment-selected.svg'
-import iconMycard from '../assets/icons/mycard.svg'
-import iconMycardActive from '../assets/icons/mycard-selected.svg'
-import iconReport from '../assets/icons/report.svg'
-import iconReportActive from '../assets/icons/report-selected.svg'
-import iconLocation from '../assets/icons/location.svg'
-import { categories, favoritePlaces, cards, benefitProfiles, benefitIcons, events } from '../data'
+import iconSearch from '@/assets/icons/search.svg'
+import iconHomeActive from '@/assets/icons/click-home.svg'
+import iconHome from '@/assets/icons/home.svg'
+import iconPayment from '@/assets/icons/payment.svg'
+import iconPaymentActive from '@/assets/icons/payment-selected.svg'
+import iconMycard from '@/assets/icons/mycard.svg'
+import iconMycardActive from '@/assets/icons/mycard-selected.svg'
+import iconReport from '@/assets/icons/report.svg'
+import iconReportActive from '@/assets/icons/report-selected.svg'
+import iconLocation from '@/assets/icons/location.svg'
+import { categories, favoritePlaces, cards, benefitProfiles, benefitIcons, events } from '@/data'
 
-const emit = defineEmits(['search', 'mypage', 'navigate', 'report', 'merchants'])
+const router = useRouter()
+
+function openSearch() {
+  router.push({ name: 'search' })
+}
+
+// 돌아올 주소를 통째로 넘긴다 (#61).
+function openMyPage() {
+  router.push({ name: 'my-page', query: { returnTo: '/home' } })
+}
+
+function openMerchants({ categoryId, title, query = '' }) {
+  router.push({ name: 'merchants', query: { categoryId, title, query } })
+}
+
+// 결제·내카드·리포트는 아직 셸에 있다 (#39 로 순차 이관 중).
+// `?screen=payment` 를 query 없이 넣으면 셸이 결제 상태를 채우지 않아
+// 기존 navigateTo('payment') 의 초기화와 같은 결과가 된다.
+function goToShell(screen, extra = {}) {
+  router.push({ name: 'app-shell', query: { screen, ...extra } })
+}
+
+function openReport(cardId = '') {
+  goToShell('report', cardId ? { cardId } : {})
+}
 
 // 하단 내비게이션 탭: icon(비활성/회색), iconActive(활성/노랑)
 const navItems = [
@@ -131,7 +156,7 @@ function notify(message) {
 function chooseCategory(category) {
   selectedCategory.value = category.id
   if (locationConsented) {
-    emit('merchants', { categoryId: category.id, title: category.name })
+    openMerchants({ categoryId: category.id, title: category.name })
     return
   }
   consentCategory.value = category
@@ -142,7 +167,7 @@ function confirmLocation() {
   consentCategory.value = null
   locationConsented = true
   if (category) {
-    emit('merchants', { categoryId: category.id, title: category.name })
+    openMerchants({ categoryId: category.id, title: category.name })
   }
 }
 
@@ -158,15 +183,15 @@ function categoryIcon(name) {
 function selectTab(index, label) {
   activeTab.value = index
   if (index === 1) {
-    emit('navigate', 'payment')
+    goToShell('payment')
     return
   }
   if (index === 2) {
-    emit('navigate', 'mycard')
+    goToShell('mycard')
     return
   }
   if (index === 3) {
-    emit('report')
+    openReport()
     return
   }
   if (index !== 0) {
@@ -187,14 +212,14 @@ function selectTab(index, label) {
         <strong>김지연님</strong>
       </div>
     </div>
-    <button class="icon-button" aria-label="마이페이지 열기" @click="emit('mypage')">
+    <button class="icon-button" aria-label="마이페이지 열기" @click="openMyPage()">
       <Menu :size="23" />
     </button>
   </header>
 
   <div class="scroll-content">
     <div class="search-wrap">
-      <button class="search-bar" @click="emit('search')">
+      <button class="search-bar" @click="openSearch()">
         <img :src="iconSearch" alt="" width="19" height="19" />
         <span>어떤 혜택을 찾으시나요?</span>
       </button>
@@ -223,7 +248,7 @@ function selectTab(index, label) {
           :key="place.id"
           class="place-card"
           @click="
-            emit('merchants', {
+            openMerchants({
               categoryId: place.categoryId,
               title: place.name,
               query: place.name,
@@ -404,7 +429,7 @@ function selectTab(index, label) {
             <span>총 {{ profile.totalCount }}건 · {{ won(profile.totalSpend) }} 결제</span>
             <strong>총 {{ won(receivedDiscount) }} 할인</strong>
           </div>
-          <button class="primary-button" @click="emit('report', benefitCard.id)">
+          <button class="primary-button" @click="openReport(benefitCard.id)">
             받은 혜택 리포트 보기
           </button>
         </div>

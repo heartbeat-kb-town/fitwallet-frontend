@@ -24,7 +24,7 @@ async function login() {
 
   try {
     await authStore.login({ loginId: id.value, password: password.value })
-    router.push({ name: 'app-shell' })
+    router.push({ name: 'home' })
   } catch (error) {
     // 검증 실패는 토스트로 띄우지 않는다. 어느 입력창이 문제인지 알려주지 못한다.
     if (error.code === 'INVALID_INPUT_VALUE') {
@@ -44,7 +44,7 @@ async function login() {
 
 // TODO: 카카오 소셜 인증이 아직 없다. 기존 프로토타입처럼 그냥 통과시킨다.
 function loginWithKakao() {
-  router.push({ name: 'app-shell' })
+  router.push({ name: 'home' })
 }
 
 function goToSignUp() {

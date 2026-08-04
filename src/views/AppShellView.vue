@@ -36,7 +36,6 @@ const paymentReturnTo = ref('')
 <script setup>
 import { watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import HomeScreen from '@/components/HomeScreen.vue'
 import PaymentScreen from '@/components/PaymentScreen.vue'
 import MyCardScreen from '@/components/MyCardScreen.vue'
 import ReportScreen from '@/components/ReportScreen.vue'
@@ -66,6 +65,11 @@ const str = (value, fallback = '') => (typeof value === 'string' ? value : fallb
 
 // 가맹점 화면(이관 완료 #61)이 결제로 넘길 때 실어 보낸 값들.
 // 원래 셸의 startRecommendedPayment() 가 ref 에 채우던 것이다.
+// 홈(이관 완료 #64)이 혜택 카드에서 리포트를 열 때 실어 보낸 값.
+if (screen.value === 'report') {
+  reportCardId.value = str(route.query.cardId)
+}
+
 if (screen.value === 'payment' && str(route.query.phase)) {
   paymentCardId.value = str(route.query.cardId)
   paymentStore.value = str(route.query.store)
@@ -73,8 +77,8 @@ if (screen.value === 'payment' && str(route.query.phase)) {
   paymentReturnTo.value = str(route.query.returnTo)
 }
 
-function openSearch() {
-  router.push({ name: 'search' })
+function goHome() {
+  router.push({ name: 'home' })
 }
 
 // 마이페이지는 이관 완료(#52). 돌아올 **주소**를 통째로 넘긴다 (#61).
@@ -93,18 +97,6 @@ function openReport(cardId = '') {
   screen.value = 'report'
 }
 
-// 홈의 카테고리 타일에서 가맹점 화면(라우트)으로.
-function openMerchants(request) {
-  router.push({
-    name: 'merchants',
-    query: {
-      categoryId: request?.categoryId ?? 'cafe',
-      title: request?.title ?? request?.query ?? '가맹점',
-      query: request?.query ?? '',
-    },
-  })
-}
-
 // QR 결제에서 뒤로가기 → 결제했던 가게의 피그의 PICK 화면으로 복원합니다.
 // 가맹점이 넘겨준 주소에 가게 이름만 얹어 되돌아간다.
 function returnToMerchant() {
@@ -112,7 +104,12 @@ function returnToMerchant() {
   router.push({ path: target.path, query: { ...target.query, store: paymentStore.value } })
 }
 
+// 리포트 화면의 하단 탭. 홈은 라우트가 됐고 나머지는 아직 셸 안이다.
 function navigateTo(nextScreen) {
+  if (nextScreen === 'home') {
+    goHome()
+    return
+  }
   if (nextScreen === 'payment') {
     paymentCardId.value = ''
     paymentStore.value = ''
@@ -129,7 +126,7 @@ function navigateTo(nextScreen) {
     :initial-card-id="paymentCardId"
     :merchant-name="paymentStore"
     :start-phase="paymentStartPhase"
-    @home="screen = 'home'"
+    @home="goHome"
     @mypage="openMyPage('payment')"
     @report="openReport()"
     @mycard="screen = 'mycard'"
@@ -138,7 +135,7 @@ function navigateTo(nextScreen) {
 
   <MyCardScreen
     v-else-if="screen === 'mycard'"
-    @home="screen = 'home'"
+    @home="goHome"
     @payment="screen = 'payment'"
     @mypage="openMyPage('mycard')"
     @report="openReport()"
@@ -148,16 +145,7 @@ function navigateTo(nextScreen) {
     v-else-if="screen === 'report'"
     :key="`report-${reportCardId}`"
     :initial-card-id="reportCardId"
-    @navigate="screen = $event"
-    @mypage="openMyPage('report')"
-  />
-
-  <HomeScreen
-    v-else
-    @search="openSearch"
-    @mypage="openMyPage('home')"
     @navigate="navigateTo"
-    @report="openReport"
-    @merchants="openMerchants"
+    @mypage="openMyPage('report')"
   />
 </template>

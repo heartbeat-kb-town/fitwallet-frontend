@@ -23,7 +23,7 @@ const showPinChange = ref(false)
 function goBack() {
   const returnTo = typeof route.query.returnTo === 'string' ? route.query.returnTo : ''
   if (!returnTo) {
-    router.push({ name: 'app-shell' })
+    router.push({ name: 'home' })
     return
   }
   const target = router.resolve(returnTo)
