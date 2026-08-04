@@ -33,6 +33,7 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
 | Pinia                      | **부트스트랩됨** — store 를 만들면 바로 동작한다        |
 | `src/api/client.js`        | **추가됨** — `useAsyncState`도 함께 (도메인 API는 아직) |
 | Tailwind `@theme` 토큰     | **정의됨** — 유틸리티 사용 가능 (Preflight 는 제외)     |
+| `components/common/`       | **추가됨** — `Base*` 5종 + `useToast()`                 |
 | `src/views/` 이관          | **미착수** — 화면 14개가 `src/components/`에 있음       |
 | `@tanstack/vue-query` 제거 | **미착수** — `package.json`에 남아 있음                 |
 | 폴더 구조·네이밍·Git 규칙  | **즉시 적용** — 코드 없이도 바로 지킬 수 있다           |
@@ -295,7 +296,10 @@ line-height를 지정한 적이 없어 전부 `normal`(≈1.2)로 그려진 코�
 ## 공용 컴포넌트
 
 `src/components/common/`에 두고 `Base` 접두사를 붙인다.
-아래는 위 규칙을 실제로 강제하는 장치라, 골격 담당이 초반에 만든다.
+아래는 위 규칙을 실제로 강제하는 장치다. **5종 모두 추가돼 있으니 바로 쓰면 된다.**
+
+`BaseToast`는 `App.vue`에 이미 한 번 걸려 있다. 화면에서 또 놓지 않는다.
+어디서든 `useToast().showToast('메시지')`만 부르면 된다.
 
 | 컴포넌트                       | 역할                                       |
 | ------------------------------ | ------------------------------------------ |

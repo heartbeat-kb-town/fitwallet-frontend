@@ -19,6 +19,11 @@
   --color-line: #e9e4dc;
   --color-icon-bg: #fff8e5;
   --color-muted: #d4c4ab;
+
+  /* 에러 표시용. 기존 화면(.pick-ineligible 등)이 쓰던 값을 그대로 토큰화했다.
+     검증 실패 인라인 메시지와 토스트가 이 색을 쓴다. */
+  --color-danger: #d62828;
+  --color-danger-bg: #fdecea;
 }
 
 :root {
