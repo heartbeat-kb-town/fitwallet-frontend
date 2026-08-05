@@ -393,6 +393,39 @@ line-height를 지정한 적이 없어 전부 `normal`(≈1.2)로 그려진 코�
 
 - `.env.example`을 `.env`로 복사해 쓴다. `.env`는 커밋하지 않는다.
 - 클라이언트에 노출되므로 **비밀 키를 넣지 않는다.** `VITE_` 접두사가 붙은 값만 코드에서 읽힌다.
+- **`VITE_API_BASE_URL`은 개발·배포 모두 `/api`다.** 여기에 백엔드 주소를 넣지 않는다.
+  이유는 아래 "배포" 참고.
+
+## 배포 (Cloudflare Workers)
+
+`wrangler.jsonc` 하나로 **정적 자산과 `/api` 프록시를 같이** 배포한다.
+
+```
+                    run_worker_first: ["/api/*"]
+                              │
+      /api/*  ────────────────┴──▶  worker/index.js ──HTTP──▶ 백엔드(Elastic Beanstalk)
+      그 외    ───────────────────▶  dist (정적 자산)
+                                       └─ 매칭 실패 시 index.html (SPA 폴백)
+```
+
+- **개발의 vite proxy와 같은 구조다.** 브라우저가 보기엔 화면과 API가 같은 오리진이라
+  CORS 설정이 필요 없고, refreshToken 쿠키의 `SameSite=Strict`가 그대로 통한다.
+  **백엔드 수정이 필요 없다.**
+- 백엔드가 `http://`인데도 동작하는 이유가 이것이다. 브라우저는 Worker와 HTTPS로만
+  대화하므로 mixed content 차단에 걸리지 않는다. `VITE_API_BASE_URL`에 백엔드 주소를
+  직접 넣는 방식은 이 때문에 **성립하지 않는다.**
+- 백엔드 주소는 `wrangler.jsonc`의 `vars.BACKEND_ORIGIN`이다. Worker **런타임** 설정이라
+  주소가 바뀌어도 재빌드가 필요 없고 브라우저 번들에도 안 들어간다.
+  `VITE_*`는 빌드 타임에 번들로 박히므로 여기 쓰면 안 된다.
+- `not_found_handling: "single-page-application"`이 없으면 `createWebHistory` 라우터의
+  경로(`/home` 등)가 새로고침·직접 진입에서 전부 404다.
+- 로컬에서 배포본 그대로 확인: `npm run build && npm run preview:worker`
+- 배포: `npm run deploy`
+
+> ⚠️ **Worker ↔ 백엔드 구간은 평문 HTTP다.** 로그인 비밀번호와 토큰이 암호화 없이 지난다.
+> `*.elasticbeanstalk.com`은 ACM 인증서를 발급받을 수 없어(도메인 소유 확인 불가)
+> 백엔드 HTTPS에는 커스텀 도메인이 필요하다. 팀원·테스트 계정만 쓰는 동안의 한시적 타협이며,
+> **실사용자를 받기 전에 반드시 해소한다** (#82).
 
 ## Git 컨벤션
 
