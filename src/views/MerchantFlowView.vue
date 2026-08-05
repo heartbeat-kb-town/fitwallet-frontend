@@ -1,9 +1,9 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Menu } from 'lucide-vue-next'
 import { categories } from '@/data'
-import { DEFAULT_CARDS } from '@/cardData'
+import { useCardStore } from '@/stores/cardStore'
 import { usePaymentStore } from '@/stores/paymentStore'
 import storeSearchIcon from '@/assets/icons/category-store.svg'
 import benefitGiftIcon from '@/assets/icons/category-benefit.svg'
@@ -14,7 +14,10 @@ import iconReport from '@/assets/icons/report.svg'
 
 const route = useRoute()
 const router = useRouter()
+const cardStore = useCardStore()
 const paymentStore = usePaymentStore()
+
+onMounted(() => cardStore.ensureCards())
 
 const str = (value, fallback = '') => (typeof value === 'string' ? value : fallback)
 
@@ -53,10 +56,13 @@ function navigateTo(target) {
 }
 
 // 셸의 startRecommendedPayment() 가 하던 일. #66 에서 paymentStore 로 옮겼다.
-// cardIndex 는 정렬된 목록이 아니라 원본 DEFAULT_CARDS 를 가리킨다 — 기존 동작 그대로다.
+//
+// cardIndex 는 피그의 PICK 추천 목록에서의 자리다. 추천 API(`/benefit/expected`)를 아직
+// 붙이지 않아 보유 카드 목록의 같은 자리를 가리키는 것으로 대신한다.
+// TODO(#76 후속): 추천 API 를 붙이면 인덱스가 아니라 카드 id 를 그대로 받는다.
 function payWith({ cardIndex, store }) {
   paymentStore.startFromMerchant({
-    cardId: DEFAULT_CARDS[cardIndex]?.id ?? '',
+    cardId: cardStore.cards[cardIndex]?.id ?? '',
     merchantName: store,
     returnTo: route.fullPath,
   })
