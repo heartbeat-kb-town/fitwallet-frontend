@@ -81,7 +81,18 @@ client.interceptors.response.use(
   // 봉투 { success, code, message, data } 를 여기서 한 번만 벗긴다.
   // api/*Api.js 의 반환값은 항상 data 알맹이다.
   // 화면과 store 에 res.data.data 가 등장하면 잘못 짠 것이다.
-  (res) => res.data?.data,
+  (res) => {
+    // 봉투가 아닌 200 응답을 걸러낸다.
+    //
+    // 프록시가 잘못 걸려 정적 파일 서버가 index.html 을 200 으로 돌려주면
+    // res.data 는 HTML 문자열이고 res.data?.data 는 조용히 undefined 가 된다.
+    // 그대로 두면 에러 한 번 없이 빈 화면이 뜨고, 원인을 찾을 단서도 남지 않는다.
+    // 배포 환경에서 실제로 이렇게 실패했다 (#62).
+    if (!res.data || typeof res.data !== 'object' || !('success' in res.data)) {
+      throw new ApiError('INVALID_RESPONSE', '서버 응답 형식이 올바르지 않습니다.', res.status)
+    }
+    return res.data.data
+  },
   (error) => {
     const status = error.response?.status
     const envelope = error.response?.data
