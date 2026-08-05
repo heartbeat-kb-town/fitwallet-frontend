@@ -1,105 +1,129 @@
 import axios from 'axios'
+import { ref } from 'vue'
 
 /**
- * 공통 API 클라이언트.
+ * 백엔드 봉투에서 벗겨낸 에러.
  *
- * 백엔드의 공통 응답 래퍼(ApiResponse: success/data/message/code)를 자동으로 처리한다.
- * 각 도메인 API 를 만들 때 이 `api` 를 갖다 쓰기만 하면 된다.
+ * 인터셉터가 실패 응답을 전부 이걸로 감싸서 reject 한다.
+ * 화면은 code·message·status 만 보고 분기하면 되고 axios 형태를 알 필요가 없다.
  *
- * 【사용법】
- *   const data = await api.get(url)   // interceptor 가 이미 래퍼를 벗겨 data 만 반환
+ * errors 는 검증 실패(400 INVALID_INPUT_VALUE)일 때만 채워지는 필드별 사유다.
+ *   [{ field: 'loginId', reason: '아이디는 필수입니다.' }, ...]
+ * 검증 실패는 토스트가 아니라 해당 입력창 아래 인라인 메시지로 보여준다.
+ * 어느 입력창이 문제인지 알려주지 못하면 사용자가 고칠 수 없다.
  *
- * 실패 시에는 ApiError 가 throw 되므로 try-catch 로 잡는다:
- *   try { const user = await api.post('/auth/login', form) }
- *   catch (e) { e.message // "이미 가입된 이메일", e.code // "EMAIL_EXISTS" }
+ * data 는 실패 응답에도 봉투에 실려 오는 알맹이다. 대부분 null 이지만
+ * 화면이 꼭 알아야 하는 값이 여기 담겨 오는 경우가 있다.
+ *   PIN_MISMATCH → { remainingAttempts: 4 }  (5회 넘게 틀리면 잠긴다)
+ * 버리면 "몇 번 남았는지" 를 사용자에게 알려줄 방법이 없다.
  */
-
-/** 백엔드가 success:false 로 응답했거나 네트워크가 실패했을 때 던지는 에러. */
 export class ApiError extends Error {
-  constructor(message, code, status) {
+  constructor(code, message, status, errors = [], data = null) {
     super(message)
     this.name = 'ApiError'
-    this.code = code // 백엔드 ErrorCode enum 이름 (예: "EMAIL_EXISTS")
-    this.status = status // HTTP 상태 코드
+    this.code = code
+    this.status = status
+    this.errors = errors
+    this.data = data
+  }
+
+  /** 검증 실패 시 특정 입력창에 붙일 메시지를 꺼낸다. */
+  reasonFor(field) {
+    return this.errors.find((e) => e.field === field)?.reason
   }
 }
 
-// ===== JWT 토큰 관리 (localStorage) =====
-// axios 가 authStore 에 직접 의존하지 않도록 헬퍼로 분리한다(순환 의존 회피).
-// 인증 도메인(로그인/로그아웃)이 setAccessToken / clearAccessToken 을 호출한다.
-const ACCESS_TOKEN_KEY = 'fw.accessToken'
+// 401 이라고 다 세션 만료가 아니다. 백엔드가 주는 401 은 셋이고 그중 하나만 세션 끊김이다.
+//
+//   UNAUTHORIZED        (common)  진짜 세션 끊김        → 인터셉터가 토큰을 비운다
+//   INVALID_CREDENTIALS (user)    아이디·비밀번호 불일치 → 화면이 사용자에게 보여준다
+//   PIN_MISMATCH        (payment) 결제 비밀번호 불일치   → 화면이 사용자에게 보여준다
+//
+// 경로 목록이 아니라 **코드**로 가른다. 경로로 가르면 비즈니스 401 을 주는 엔드포인트가
+// 늘 때마다 목록에 넣는 것을 잊고, 그 화면에서 사용자가 조용히 로그아웃된다.
+// 실제로 결제 PIN 이 그렇게 새어 나갔다 (#79).
+const BUSINESS_401_CODES = ['INVALID_CREDENTIALS', 'PIN_MISMATCH']
 
-export function getAccessToken() {
-  return localStorage.getItem(ACCESS_TOKEN_KEY)
+// access token 은 메모리에만 둔다. localStorage / sessionStorage 에 절대 넣지 않는다.
+// refresh 를 HttpOnly 쿠키로 감싼 설계라, access 를 스토리지에 두면 XSS 방어가 무의미해진다.
+// 대신 새로고침하면 날아간다. 백엔드에 /reissue 가 생기면 앱 부팅 시 복구한다.
+//
+// 평범한 모듈 변수가 아니라 ref 다. store 가 isLoggedIn 같은 computed 로 이걸 보는데,
+// 일반 변수면 값이 바뀌어도 computed 가 다시 계산되지 않는다.
+// 토큰의 유일한 보관처를 여기 하나로 두기 위해 store 로 복사하지 않고 여기를 반응형으로 만든다.
+const accessToken = ref(null)
+
+export const setAccessToken = (token) => {
+  accessToken.value = token
 }
 
-export function setAccessToken(token) {
-  localStorage.setItem(ACCESS_TOKEN_KEY, token)
+export const clearAccessToken = () => {
+  accessToken.value = null
 }
 
-export function clearAccessToken() {
-  localStorage.removeItem(ACCESS_TOKEN_KEY)
-}
+export const getAccessToken = () => accessToken.value
 
-const instance = axios.create({
-  // 개발 시 vite proxy(/api → 8080)를 쓰므로 /api 로 둔다. .env 로 덮어쓸 수 있다.
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
-  timeout: 10_000,
-  headers: { 'Content-Type': 'application/json' },
+const client = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api',
+  // refreshToken HttpOnly 쿠키를 주고받으려면 반드시 켜야 한다.
+  // 끄면 Set-Cookie 자체가 저장되지 않는다.
+  withCredentials: true,
 })
 
-// 요청 interceptor: JWT 자동 첨부. 개별 API 함수에서 헤더를 직접 붙이지 않는다.
-instance.interceptors.request.use((config) => {
-  const token = getAccessToken()
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+client.interceptors.request.use((config) => {
+  if (accessToken.value) {
+    config.headers.Authorization = `Bearer ${accessToken.value}`
   }
   return config
 })
 
-// 응답 interceptor: ApiResponse 래퍼를 벗기고, 실패는 ApiError 로 변환한다.
-instance.interceptors.response.use(
-  (response) => {
-    const body = response.data
-
-    // 공통 래퍼 형태가 아니면 그대로 통과 (파일 다운로드 등)
-    if (body == null || typeof body !== 'object' || !('success' in body)) {
-      return response.data
+client.interceptors.response.use(
+  // 봉투 { success, code, message, data } 를 여기서 한 번만 벗긴다.
+  // api/*Api.js 의 반환값은 항상 data 알맹이다.
+  // 화면과 store 에 res.data.data 가 등장하면 잘못 짠 것이다.
+  (res) => {
+    // 봉투가 아닌 200 응답을 걸러낸다.
+    //
+    // 프록시가 잘못 걸려 정적 파일 서버가 index.html 을 200 으로 돌려주면
+    // res.data 는 HTML 문자열이고 res.data?.data 는 조용히 undefined 가 된다.
+    // 그대로 두면 에러 한 번 없이 빈 화면이 뜨고, 원인을 찾을 단서도 남지 않는다.
+    // 배포 환경에서 실제로 이렇게 실패했다 (#62).
+    if (!res.data || typeof res.data !== 'object' || !('success' in res.data)) {
+      throw new ApiError('INVALID_RESPONSE', '서버 응답 형식이 올바르지 않습니다.', res.status)
     }
-
-    if (!body.success) {
-      throw new ApiError(body.message ?? '요청에 실패했습니다.', body.code, response.status)
-    }
-
-    return body.data // 래퍼를 벗겨 data 만 반환
+    return res.data.data
   },
   (error) => {
-    const body = error.response?.data
-    const status = error.response?.status ?? null
+    const status = error.response?.status
+    const envelope = error.response?.data
+    const isBusiness401 = BUSINESS_401_CODES.includes(envelope?.code)
 
-    // 인증 만료 등 401 → 저장된 토큰 정리 (로그인 리다이렉트는 라우터 가드에서)
-    if (status === 401) {
+    // 세션이 끊긴 401 은 인터셉터가 전담한다. 화면에서 따로 처리하지 않는다.
+    // 비즈니스 401 은 건드리지 않는다 (위 BUSINESS_401_CODES 참고).
+    //
+    // 코드를 모르는 401 — 응답 봉투가 아예 없는 경우 — 은 세션 만료로 본다.
+    // 판단이 안 될 때는 로그인으로 보내는 쪽이 안전하다.
+    //
+    // TODO: 백엔드에 /reissue 가 생기면 401 → 재발급 → 원요청 재시도로 교체한다.
+    //       지금은 재발급 시도 없이 토큰만 비운다.
+    // TODO: 로그인 화면으로 보내는 것은 views 이관 후에 붙인다.
+    //       지금은 App.vue 의 수동 스위처가 화면을 쥐고 있어 라우터로 보내도 화면이 바뀌지 않는다.
+    if (status === 401 && !isBusiness401) {
       clearAccessToken()
     }
 
-    throw new ApiError(
-      body?.message ?? error.message ?? '네트워크 오류가 발생했습니다.',
-      body?.code ?? null,
-      status,
+    return Promise.reject(
+      new ApiError(
+        envelope?.code,
+        // 네트워크 오류처럼 응답 자체가 없으면 백엔드 message 도 없다.
+        envelope?.message ?? error.message,
+        status,
+        envelope?.errors ?? [],
+        // 실패 응답에도 알맹이가 실려 오는 경우가 있다 (PIN_MISMATCH 의 remainingAttempts).
+        envelope?.data ?? null,
+      ),
     )
   },
 )
 
-/**
- * 래퍼가 벗겨진 data 를 반환하는 API 헬퍼.
- * endpoint 함수는 이 결과를 Zod 로 파싱한다. (래퍼를 다시 파싱하지 않는다)
- */
-export const api = {
-  get: (url, config) => instance.get(url, config),
-  post: (url, data, config) => instance.post(url, data, config),
-  put: (url, data, config) => instance.put(url, data, config),
-  patch: (url, data, config) => instance.patch(url, data, config),
-  delete: (url, config) => instance.delete(url, config),
-}
-
-export default instance
+export default client

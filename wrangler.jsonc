@@ -1,7 +1,28 @@
 {
   "name": "fitwallet-frontend",
   "compatibility_date": "2026-07-28",
+
+  // `/api/*` 를 백엔드로 넘기는 프록시. 개발의 vite proxy 에 대응한다 (#62).
+  "main": "worker/index.js",
+
   "assets": {
-    "directory": "./dist"
-  }
+    "directory": "./dist",
+
+    // 라우터가 createWebHistory 라 `/home` 같은 경로에 해당하는 파일이 dist 에 없다.
+    // 이게 없으면 새로고침이나 직접 링크 진입이 전부 404 다.
+    "not_found_handling": "single-page-application",
+
+    // 여기 매칭되는 경로만 Worker 가 받고, 나머지는 정적 자산으로 간다.
+    // 이 줄이 없으면 위의 SPA 폴백이 `/api/*` 까지 삼켜서 index.html 을 돌려준다.
+    "run_worker_first": ["/api/*"],
+  },
+
+  "vars": {
+    // 비밀이 아니라 공개 URL 이므로 secret 이 아닌 vars 에 둔다.
+    // 저장소에 남아 있어야 "배포본이 어디를 보는지" 가 코드로 드러난다.
+    //
+    // 프론트 번들에는 들어가지 않는다. 백엔드 주소를 아는 것은 Worker 하나뿐이고,
+    // 브라우저는 계속 자기 자신의 `/api` 를 부른다 (.env.example 참고).
+    "BACKEND_ORIGIN": "http://fitwallet-backend-prod.ap-northeast-2.elasticbeanstalk.com",
+  },
 }

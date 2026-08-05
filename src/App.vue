@@ -1,9 +1,14 @@
 <script setup>
-import { RouterView } from 'vue-router'
-
-// 레이아웃 틀. 네비바·상단바 등 고정 요소는 여기(RouterView 위/아래)에 배치한다.
+import BaseToast from './components/common/BaseToast.vue'
 </script>
 
 <template>
-  <RouterView />
+  <main class="stage">
+    <section class="phone">
+      <RouterView />
+
+      <!-- 앱에 한 번만 놓는다. 어느 화면에서든 useToast().showToast() 로 띄운다. -->
+      <BaseToast />
+    </section>
+  </main>
 </template>
