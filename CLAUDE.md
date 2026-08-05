@@ -429,9 +429,19 @@ line-height를 지정한 적이 없어 전부 `normal`(≈1.2)로 그려진 코�
   경로(`/home` 등)가 새로고침·직접 진입에서 전부 404다.
 - 로컬에서 배포본 그대로 확인: `npm run build && npm run preview:worker`
 
-### 배포는 push 하면 자동으로 된다
+### 배포 경로 — 프로덕션은 `main` 뿐이다
 
-Cloudflare **Workers Builds**(Git 연동)가 `wrangler.jsonc`를 읽고 `wrangler deploy`를 돌린다.
+Cloudflare **Workers Builds**(Git 연동)가 `wrangler.jsonc`를 읽고 push 마다 빌드한다.
+**어느 브랜치냐에 따라 결과가 다르다.**
+
+| push 대상         | 실행되는 명령                  | 결과                              |
+| ----------------- | ------------------------------ | --------------------------------- |
+| `main` (프로덕션) | `npx wrangler deploy`          | **프로덕션 갱신**                 |
+| 그 외 모든 브랜치 | `npx wrangler versions upload` | 프리뷰 버전만 생성. 프로덕션 불변 |
+
+그래서 **프로덕션을 갱신하려면 `develop` → `main` 릴리스 PR을 머지해야 한다.**
+작업 브랜치를 push 해도 라이브는 그대로다 (2026-08-05 이전에는 아니었다 — #85).
+
 `npm run deploy`는 수동 배포용이고 평소에는 쓰지 않는다. 손으로 돌리면 Git 연동이 올린 것과
 어긋나므로, 대시보드에서 이력을 확인해야 하는 상황이 아니면 건드리지 않는다.
 
@@ -445,13 +455,15 @@ Cloudflare **Workers Builds**(Git 연동)가 `wrangler.jsonc`를 읽고 `wrangle
   gh api "repos/$R/commits/$S/check-runs" --jq '.check_runs[].output.summary' | grep "Version ID"
   ```
 
-> 🔥 **지금은 어느 브랜치를 push 하든 프로덕션이 그 브랜치로 갈린다** (#85).
-> 머지도 리뷰도 필요 없다. 실제로 2026-08-05에 서로 다른 두 사람의 작업 브랜치가
-> PR이 열려 있는 상태에서 프로덕션에 나갔다.
+- 잘못 배포됐으면 `npx wrangler rollback {version-id}`로 되돌린다.
+
+> ⚠️ **비프로덕션 Deploy command에는 `npx`가 필요하다.** `wrangler versions upload`로만
+> 적으면 빌드 환경 PATH에 `wrangler`가 없어 빌드가 실패한다. 설정을 바꿀 일이 있으면 주의한다.
 >
-> **그때까지는 작업 브랜치 push = 라이브 반영이다.** 깨진 상태를 push 하지 않는다.
-> 되돌리려면 정상 커밋을 다시 push 하거나 `npx wrangler rollback {version-id}`를 쓴다.
-> 이 제약이 풀리면 이 문단을 지우고 실제 정책(어느 브랜치가 프로덕션인가)으로 교체한다.
+> 그리고 `main`을 오래 방치하지 않는다. **프로덕션에 나가는 것은 `main`이므로,
+> `main`이 뒤처져 있으면 다음 릴리스가 그만큼 큰 덩어리로 나간다.**
+> 실제로 `main`이 73커밋 뒤처진 채 방치돼 있었고, 그동안 프로덕션이 최신이었던 것은
+> #85 버그(모든 브랜치가 프로덕션을 덮어씀) 때문이었다.
 
 > ⚠️ **Worker ↔ 백엔드 구간은 평문 HTTP다.** 로그인 비밀번호와 토큰이 암호화 없이 지난다.
 > `*.elasticbeanstalk.com`은 ACM 인증서를 발급받을 수 없어(도메인 소유 확인 불가)
