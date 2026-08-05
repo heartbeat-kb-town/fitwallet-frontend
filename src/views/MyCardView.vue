@@ -18,6 +18,8 @@ import iconAll from '@/assets/icons/category-all.svg'
 import cardSheet from '@/assets/cards/payment-card-sheet.png'
 import pigFace from '@/assets/icons/pig-face.svg'
 
+import * as cardApi from '@/api/cardApi'
+import { useAsyncState } from '@/composables/useAsyncState'
 import { useCardStore } from '@/stores/cardStore'
 import { usePaymentStore } from '@/stores/paymentStore'
 
@@ -47,67 +49,6 @@ function openReport() {
   router.push({ name: 'report' })
 }
 
-const months = ['2024.01', '2023.12', '2023.11']
-
-/**
- * 이용 실적과 구간별 혜택.
- *
- * TODO(mock): 백엔드에 `GET /api/card/{cardId}/usage` 가 있지만 아직 붙이지 않았다.
- *             이 파일이 962줄이라 보유 카드 목록 연동(#76)과 한 PR 에 묶으면 리뷰가 안 된다.
- *             후속 이슈에서 실제 호출로 교체한다.
- *
- * 카드 id 가 아니라 **목록에서의 자리**로 붙는다. 목록은 이제 실제 API 에서 오므로
- * 여기 값은 화면에 뜬 카드의 진짜 실적이 아니다. 자리 수가 모자라면 처음부터 다시 돈다.
- */
-const CARD_USAGE_MOCK = [
-  {
-    performance: 180000,
-    tiers: [0, 300000, 600000, 900000],
-    noRequirement: true,
-    benefitRanges: ['실적 조건 없음'],
-    benefits: [['전 가맹점 0.5% 캐시백', '대중교통 5% 할인', '스타벅스 10% 할인']],
-  },
-  {
-    performance: 520000,
-    tiers: [0, 500000, 1000000, 1500000],
-    benefitRanges: [
-      '0원 이상 ~ 50만원 미만',
-      '50만원 이상 ~ 100만원 미만',
-      '100만원 이상 ~ 150만원 미만',
-      '150만원 이상',
-    ],
-    benefits: [
-      ['전 가맹점 0.5% 캐시백'],
-      ['전 가맹점 1.0% 캐시백', 'CU 5% 할인'],
-      ['전 가맹점 1.5% 캐시백', '스타벅스 10% 할인'],
-      ['전 가맹점 2.0% 캐시백', '모든 카페 15% 할인'],
-    ],
-  },
-  {
-    performance: 500000,
-    tiers: [0, 1000000, 2000000, 3000000],
-    benefitRanges: [
-      '0원 이상 ~ 100만원 미만',
-      '100만원 이상 ~ 200만원 미만',
-      '200만원 이상 ~ 300만원 미만',
-      '300만원 이상',
-    ],
-    benefits: [
-      ['국내외 전 가맹점 1.0% 적립'],
-      ['전 가맹점 1.2% 적립', '주유 리터당 50원 할인'],
-      ['전 가맹점 1.5% 적립', '항공 마일리지 2배 적립'],
-      ['전 가맹점 2.0% 적립', '해외 결제 수수료 면제'],
-    ],
-  },
-  {
-    performance: 750000,
-    tiers: [0, 500000],
-    singleTier: true,
-    benefitRanges: ['50만원 이상'],
-    benefits: [['친환경 가맹점 3% 적립', '대중교통 5% 할인', '해외 결제 수수료 면제']],
-  },
-]
-
 /**
  * 목록을 아직 못 받았을 때 쓰는 빈 카드.
  *
@@ -127,357 +68,22 @@ const EMPTY_CARD = {
 }
 
 /**
- * 카드별 결제 내역.
+ * 카테고리명 → 화면 아이콘.
  *
- * TODO(mock): `GET /api/card/{cardId}/transactions` 로 교체한다.
- *             `CARD_USAGE_MOCK` 과 같은 후속 이슈에서 함께 붙인다.
- *             여기도 카드 id 가 아니라 목록에서의 자리로 붙는다.
+ * 백엔드가 `categoryImageUrl` 을 함께 주지만 시드에서는 전부 null 이다.
+ * URL 이 오면 그걸 쓰고, 없으면 이름으로 로컬 아이콘을 찾는다.
+ * 모르는 카테고리는 빈 원으로 두고 이름을 지어내지 않는다.
  */
-const TRANSACTION_SETS_MOCK = [
-  {
-    2024.01: [
-      {
-        cat: 'transport',
-        merchant: '서울 지하철',
-        date: '2024.01.24',
-        time: '08:10',
-        detail: '교통',
-        amount: 1400,
-      },
-      {
-        cat: 'shopping',
-        merchant: '교보문고',
-        date: '2024.01.22',
-        time: '14:30',
-        detail: '일시불',
-        amount: 18000,
-      },
-      {
-        cat: 'telecom',
-        merchant: 'KT 통신요금',
-        date: '2024.01.21',
-        time: '10:00',
-        detail: '공과금납부',
-        amount: 35000,
-        note: true,
-      },
-      {
-        cat: 'cafe',
-        merchant: '폴바셋 강남점',
-        date: '2024.01.20',
-        time: '11:00',
-        detail: '카페',
-        amount: 6800,
-      },
-    ],
-    2023.12: [
-      {
-        cat: 'food',
-        merchant: '맥도날드',
-        date: '2023.12.29',
-        time: '12:30',
-        detail: '푸드',
-        amount: 8500,
-      },
-      {
-        cat: 'transport',
-        merchant: 'T머니',
-        date: '2023.12.28',
-        time: '08:05',
-        detail: '교통',
-        amount: 5000,
-      },
-    ],
-    2023.11: [
-      {
-        cat: 'cafe',
-        merchant: '메가커피',
-        date: '2023.11.30',
-        time: '09:20',
-        detail: '카페',
-        amount: 2500,
-      },
-      {
-        cat: 'shopping',
-        merchant: '알라딘',
-        date: '2023.11.28',
-        time: '15:10',
-        detail: '일시불',
-        amount: 12000,
-      },
-    ],
-  },
-  {
-    2024.01: [
-      {
-        cat: 'cafe',
-        merchant: '스타벅스 강남점',
-        date: '2024.01.24',
-        time: '09:15',
-        detail: '카페/디저트',
-        amount: 4500,
-      },
-      {
-        cat: 'mart',
-        merchant: 'CU 편의점',
-        date: '2024.01.24',
-        time: '14:30',
-        detail: '편의점/마트',
-        amount: 2800,
-      },
-      {
-        cat: 'food',
-        merchant: '본죽 역삼점',
-        date: '2024.01.22',
-        time: '12:05',
-        detail: '푸드',
-        amount: 12000,
-      },
-      {
-        cat: 'transport',
-        merchant: '서울 지하철',
-        date: '2024.01.21',
-        time: '08:22',
-        detail: '교통',
-        amount: 1400,
-      },
-      {
-        cat: 'shopping',
-        merchant: '다이소',
-        date: '2024.01.19',
-        time: '16:40',
-        detail: '쇼핑',
-        amount: 8500,
-      },
-    ],
-    2023.12: [
-      {
-        cat: 'shopping',
-        merchant: '쿠팡',
-        date: '2023.12.28',
-        time: '11:15',
-        detail: '쇼핑',
-        amount: 32900,
-      },
-      {
-        cat: 'cafe',
-        merchant: '이디야커피',
-        date: '2023.12.26',
-        time: '10:00',
-        detail: '카페/디저트',
-        amount: 3800,
-      },
-      {
-        cat: 'mart',
-        merchant: '이마트24',
-        date: '2023.12.25',
-        time: '20:10',
-        detail: '편의점/마트',
-        amount: 5400,
-      },
-    ],
-    2023.11: [
-      {
-        cat: 'medical',
-        merchant: '서울내과의원',
-        date: '2023.11.30',
-        time: '14:00',
-        detail: '병원',
-        amount: 15000,
-        note: true,
-      },
-      {
-        cat: 'cafe',
-        merchant: '투썸플레이스',
-        date: '2023.11.28',
-        time: '11:30',
-        detail: '카페/디저트',
-        amount: 5500,
-      },
-      {
-        cat: 'transport',
-        merchant: '카카오T',
-        date: '2023.11.27',
-        time: '22:10',
-        detail: '교통',
-        amount: 9200,
-      },
-    ],
-  },
-  {
-    2024.01: [
-      {
-        cat: 'cafe',
-        merchant: '스타벅스 강남점',
-        date: '2024.01.24',
-        time: '08:42',
-        detail: '일시불',
-        amount: 5800,
-      },
-      {
-        cat: 'shopping',
-        merchant: '쿠팡',
-        date: '2024.01.23',
-        time: '11:15',
-        detail: '일시불',
-        amount: 32900,
-      },
-      {
-        cat: 'all',
-        merchant: '한국전력',
-        date: '2024.01.22',
-        time: '14:30',
-        detail: '공과금',
-        amount: 45200,
-        note: true,
-      },
-      {
-        cat: 'mart',
-        merchant: '이마트 역삼점',
-        date: '2024.01.21',
-        time: '19:23',
-        detail: '일시불',
-        amount: 68500,
-      },
-      {
-        cat: 'transport',
-        merchant: '카카오T',
-        date: '2024.01.21',
-        time: '09:14',
-        detail: '교통',
-        amount: 3200,
-      },
-    ],
-    2023.12: [
-      {
-        cat: 'gas',
-        merchant: 'GS칼텍스 주유소',
-        date: '2023.12.30',
-        time: '15:00',
-        detail: '주유',
-        amount: 65000,
-      },
-      {
-        cat: 'shopping',
-        merchant: '올리브영',
-        date: '2023.12.28',
-        time: '17:20',
-        detail: '일시불',
-        amount: 32500,
-      },
-      {
-        cat: 'food',
-        merchant: '교촌치킨',
-        date: '2023.12.27',
-        time: '19:45',
-        detail: '일시불',
-        amount: 21000,
-      },
-    ],
-    2023.11: [
-      {
-        cat: 'gas',
-        merchant: 'SK 주유소',
-        date: '2023.11.29',
-        time: '09:00',
-        detail: '주유',
-        amount: 58000,
-      },
-      {
-        cat: 'mart',
-        merchant: '홈플러스',
-        date: '2023.11.27',
-        time: '18:30',
-        detail: '일시불',
-        amount: 43500,
-      },
-    ],
-  },
-  {
-    2024.01: [
-      {
-        cat: 'medical',
-        merchant: '헬스장 월정액',
-        date: '2024.01.23',
-        time: '00:00',
-        detail: '일시불',
-        amount: 70000,
-      },
-      {
-        cat: 'mart',
-        merchant: '이마트24',
-        date: '2024.01.23',
-        time: '20:10',
-        detail: '편의점',
-        amount: 9500,
-      },
-      {
-        cat: 'all',
-        merchant: '한국가스공사',
-        date: '2024.01.20',
-        time: '09:00',
-        detail: '공과금납부',
-        amount: 28000,
-        note: true,
-      },
-      {
-        cat: 'shopping',
-        merchant: 'CGV 영화관',
-        date: '2024.01.19',
-        time: '18:30',
-        detail: '일시불',
-        amount: 13000,
-      },
-    ],
-    2023.12: [
-      {
-        cat: 'medical',
-        merchant: '헬스장 월정액',
-        date: '2023.12.20',
-        time: '00:00',
-        detail: '일시불',
-        amount: 70000,
-      },
-      {
-        cat: 'food',
-        merchant: '버거킹',
-        date: '2023.12.20',
-        time: '13:15',
-        detail: '푸드',
-        amount: 9900,
-      },
-    ],
-    2023.11: [
-      {
-        cat: 'medical',
-        merchant: '헬스장 월정액',
-        date: '2023.11.15',
-        time: '00:00',
-        detail: '일시불',
-        amount: 70000,
-      },
-      {
-        cat: 'shopping',
-        merchant: '유니클로',
-        date: '2023.11.15',
-        time: '16:00',
-        detail: '쇼핑',
-        amount: 49900,
-      },
-    ],
-  },
-]
-
-const categoryImages = {
-  cafe: iconCafe,
-  food: iconFood,
-  mart: iconMart,
-  shopping: iconShopping,
-  medical: iconHospital,
-  gas: iconRefuel,
-  transport: iconTransport,
-  telecom: iconTelecom,
-  all: iconAll,
+const CATEGORY_ICONS = {
+  '카페/디저트': iconCafe,
+  '편의점/마트': iconMart,
+  쇼핑: iconShopping,
+  푸드: iconFood,
+  병원: iconHospital,
+  주유: iconRefuel,
+  교통: iconTransport,
+  통신: iconTelecom,
+  전체: iconAll,
 }
 
 const activeIndex = ref(0)
@@ -486,6 +92,26 @@ const monthIndex = ref(0)
 const selectedTier = ref(0)
 const touchStartX = ref(0)
 
+/**
+ * 조회할 수 있는 최근 3개월. 최신이 앞이다 (`['2026-08', '2026-07', '2026-06']`).
+ *
+ * 백엔드가 응답에 실어 주므로 화면이 정하지 않는다. 첫 조회는 `yearMonth` 없이 보내고
+ * (백엔드가 현재 월을 쓴다) 그때 받은 목록으로 월 선택기를 채운다.
+ */
+const months = ref([])
+
+const {
+  data: usage,
+  isLoading: isUsageLoading,
+  execute: fetchUsage,
+} = useAsyncState(cardApi.getCardUsage)
+
+const {
+  data: transactionDetail,
+  isLoading: isTransactionsLoading,
+  execute: fetchTransactions,
+} = useAsyncState(cardApi.getCardTransactions)
+
 const cards = computed(() => cardStore.cards)
 
 // 목록이 줄어들면(카드 해지 등) 펼쳐둔 자리가 목록 밖으로 나갈 수 있다.
@@ -493,28 +119,133 @@ watch(cards, (list) => {
   if (activeIndex.value >= list.length) activeIndex.value = 0
 })
 
-// 목데이터를 자리로 붙이는 자리. 카드가 4장을 넘으면 처음부터 다시 돈다.
-const mockIndex = computed(() => activeIndex.value % CARD_USAGE_MOCK.length)
-
-/**
- * 펼쳐 놓은 카드 한 장.
- *
- * 실제 API 가 주는 값(`cardStore`)이 목데이터를 덮어쓰도록 **맨 뒤에 편다.**
- * 실적·혜택은 아직 목데이터라 겹치는 키가 없지만, 후속 이슈에서 usage 를 붙일 때
- * 순서가 뒤집혀 있으면 실제 값이 목데이터에 가려진다.
- */
+/** 펼쳐 놓은 카드 한 장. 목록이 아직 안 왔으면 빈 카드로 그린다. */
 const activeCard = computed(() => ({
   ...EMPTY_CARD,
-  ...CARD_USAGE_MOCK[mockIndex.value],
   ...(cards.value[activeIndex.value] ?? {}),
 }))
 
-const transactions = computed(
-  () => TRANSACTION_SETS_MOCK[mockIndex.value]?.[months[monthIndex.value]] ?? [],
+/**
+ * 펼친 카드의 선택 월 실적과 결제 내역을 받아온다.
+ *
+ * 실적과 내역을 함께 부르는 이유: 메인 화면이 둘 다 보여준다.
+ * 실패는 각 호출의 `error` 에 담기고 화면은 빈 상태로 그린다 —
+ * 하나가 실패해도 나머지는 보여주는 편이 낫다.
+ */
+async function loadCardDetail() {
+  const cardId = activeCard.value.id
+  if (!cardId) return
+
+  // 목록을 받기 전이면 yearMonth 를 생략한다. 백엔드가 현재 월로 채우고
+  // availableYearMonths 를 함께 내려준다.
+  const yearMonth = months.value[monthIndex.value]
+  const params = yearMonth ? { yearMonth } : undefined
+
+  await Promise.all([
+    fetchUsage(cardId, params).catch(() => {}),
+    fetchTransactions(cardId, params).catch(() => {}),
+  ])
+
+  const available = usage.value?.availableYearMonths ?? transactionDetail.value?.availableYearMonths
+  if (available?.length) months.value = available
+}
+
+// 카드를 바꾸면 그 카드의 실적·내역을 다시 받는다. 월 선택과 구간 선택도 처음으로 돌린다.
+watch(
+  () => activeCard.value.id,
+  (cardId) => {
+    if (!cardId) return
+    monthIndex.value = 0
+    selectedTier.value = 0
+    loadCardDetail()
+  },
 )
-const recentTransactions = computed(
-  () => TRANSACTION_SETS_MOCK[mockIndex.value]?.[months[0]]?.slice(0, 3) ?? [],
+
+watch(monthIndex, loadCardDetail)
+
+// ── 이용 실적 ──────────────────────────────────────────────────────────
+// tierType 이 화면 분기의 기준이다. 예전에는 목데이터의 noRequirement / singleTier
+// 플래그를 봤는데, 백엔드가 같은 뜻을 열거형 하나로 준다.
+const hasNoRequirement = computed(() => usage.value?.tierType === 'NO_REQUIREMENT')
+const isSingleTier = computed(() => usage.value?.tierType === 'SINGLE_TIER')
+
+/**
+ * 실적을 채웠는지. 백엔드가 판단해서 준다.
+ *
+ * 예전에는 "기준이 하나뿐인 카드 = 달성" 으로 그렸는데 그건 사실이 아니다.
+ * 기준이 하나여도 못 채울 수 있다 (실측: 89,800원 / 기준 300,000원).
+ */
+const isAchieved = computed(() => usage.value?.performanceStatus === 'ACHIEVED')
+
+const performance = computed(() => Number(usage.value?.usageSummary?.recognizedAmount ?? 0))
+const currentTier = computed(() => usage.value?.currentTier?.tierOrder ?? 0)
+const remaining = computed(() => Number(usage.value?.amountUntilNextTier ?? 0))
+const progress = computed(() => Number(usage.value?.tierProgressRate ?? 0))
+const tiers = computed(() => usage.value?.tiers ?? [])
+
+const achievementTitle = computed(() => {
+  if (isSingleTier.value) return isAchieved.value ? '전월 실적 달성!' : '실적이 조금 부족해요'
+  return `${currentTier.value}구간 실적 달성!`
+})
+
+const achievementDescription = computed(() => {
+  // 다음 구간이 없으면 더 올라갈 곳이 없다. 채웠는지에 따라 문구가 갈린다.
+  if (!usage.value?.nextTier) {
+    return isAchieved.value ? '다음 달 혜택이 모두 적용될 예정이에요.' : '최고 구간이에요.'
+  }
+  return `${won(remaining.value)} 추가 이용 시 다음 ${usage.value.nextTier.tierName} 혜택 적용`
+})
+
+/**
+ * 혜택을 꺼낼 구간.
+ *
+ * 실적 조건이 없으면 구간이 아니라 `defaultBenefits` 에 담겨 온다.
+ * 기준이 하나뿐이면(SINGLE_TIER) 화면에 구간 버튼을 안 띄우므로,
+ * 사용자가 실적을 채웠을 때 받는 혜택 — 즉 마지막 구간 — 을 보여준다.
+ */
+const shownBenefits = computed(() => {
+  const list = hasNoRequirement.value
+    ? (usage.value?.defaultBenefits ?? [])
+    : ((isSingleTier.value ? tiers.value.at(-1) : tiers.value[selectedTier.value])?.benefits ?? [])
+
+  // "스타벅스 환급할인 20%" 처럼 이름과 값을 붙인다. valueLabel 은 백엔드가 만들어 준다
+  // (정액 주유 혜택의 리터당 단위 같은 것까지 반영돼 있어 화면이 다시 계산하지 않는다).
+  return list.map((benefit) => [benefit.benefitName, benefit.valueLabel].filter(Boolean).join(' '))
+})
+
+/** 구간 버튼 아래 표시할 금액 범위. 최고 구간은 위쪽이 열려 있다. */
+function tierRangeLabel(tier) {
+  if (!tier) return ''
+  const min = won(Number(tier.minimumAmount ?? 0))
+  if (tier.maximumAmount == null) return `${min} 이상`
+  return `${min} 이상 ~ ${won(Number(tier.maximumAmount))} 미만`
+}
+
+// ── 결제 내역 ──────────────────────────────────────────────────────────
+/** 백엔드 결제 내역 한 건을 화면이 쓰는 모양으로 옮긴다. */
+function toTransaction(item) {
+  // paidAt 은 ISO-8601 (2026-07-21T21:16:30). 화면은 날짜와 시각을 따로 쓴다.
+  const [date = '', time = ''] = String(item.paidAt ?? '').split('T')
+  return {
+    id: item.transactionId,
+    // 가맹점을 특정하지 못한 거래는 storeName·categoryName 이 null 로 온다.
+    merchant: item.storeName ?? '가맹점 미확인',
+    date: date.replaceAll('-', '.'),
+    time: time.slice(0, 5),
+    detail: item.categoryName ?? '',
+    amount: Number(item.paymentAmount ?? 0),
+    categoryName: item.categoryName,
+    categoryImageUrl: item.categoryImageUrl,
+    // 실적 미인정일 때만 배지를 띄운다.
+    isExcluded: item.performanceIncluded === false,
+  }
+}
+
+const transactions = computed(() =>
+  (transactionDetail.value?.transactions?.content ?? []).map(toTransaction),
 )
+const recentTransactions = computed(() => transactions.value.slice(0, 3))
+
 const groupedTransactions = computed(() => {
   const groups = []
   transactions.value.forEach((transaction) => {
@@ -524,33 +255,24 @@ const groupedTransactions = computed(() => {
   })
   return groups
 })
-const totalAmount = computed(() =>
-  transactions.value.reduce((sum, transaction) => sum + transaction.amount, 0),
-)
-const currentTier = computed(() => {
-  let result = 0
-  activeCard.value.tiers.forEach((tier, index) => {
-    if (activeCard.value.performance >= tier) result = index
-  })
-  return result
-})
-const nextTier = computed(
-  () =>
-    activeCard.value.tiers.find((tier) => tier > activeCard.value.performance) ??
-    activeCard.value.tiers.at(-1),
-)
-const remaining = computed(() => Math.max(0, nextTier.value - activeCard.value.performance))
-const progress = computed(() =>
-  Math.min(
-    100,
-    Math.round((activeCard.value.performance / Math.max(1, activeCard.value.tiers.at(-1))) * 100),
-  ),
-)
-const shownBenefits = computed(() => {
-  if (activeCard.value.noRequirement || activeCard.value.singleTier) {
-    return activeCard.value.benefits[0]
-  }
-  return activeCard.value.benefits[selectedTier.value]
+
+/**
+ * 화면 상단 금액. 목록을 더해서 만들지 않는다.
+ *
+ * 현재 월 신용카드는 전날까지 반영된 저장 금액이라 이번 묶음의 합계와 다르다.
+ * 커서 방식이라 애초에 화면에 전부 있지도 않다.
+ */
+const totalAmount = computed(() => Number(transactionDetail.value?.paymentSummary?.amount ?? 0))
+
+function categoryIcon(transaction) {
+  return transaction.categoryImageUrl || CATEGORY_ICONS[transaction.categoryName] || ''
+}
+
+/** '2026-08' → '2026.08'. 백엔드는 yyyy-MM 으로 주고 화면은 점으로 쓴다. */
+const monthLabel = computed(() => (months.value[monthIndex.value] ?? '').replace('-', '.'))
+const monthTitle = computed(() => {
+  const [year, month] = (months.value[monthIndex.value] ?? '').split('-')
+  return year ? `${year}년 ${month}월` : ''
 })
 
 function won(value) {
@@ -579,12 +301,18 @@ function openView(nextView) {
 }
 
 function back() {
-  if (view.value === 'transactions-from-performance') view.value = 'performance'
-  else view.value = 'main'
+  if (view.value === 'transactions-from-performance') {
+    view.value = 'performance'
+    return
+  }
+  // 메인은 언제나 이번 달을 보여준다. 하위 화면에서 지난달을 보다 나왔는데
+  // "최근 이용 내역" 이 그 달로 남아 있으면 어느 달인지 알 수 없다.
+  monthIndex.value = 0
+  view.value = 'main'
 }
 
 function moveMonth(direction) {
-  monthIndex.value = Math.max(0, Math.min(months.length - 1, monthIndex.value + direction))
+  monthIndex.value = Math.max(0, Math.min(months.value.length - 1, monthIndex.value + direction))
 }
 
 function cardImageStyle(card, compact = false) {
@@ -676,21 +404,22 @@ function dateLabel(date) {
                 자세히 <ChevronRight :size="14" />
               </button>
             </div>
+            <p v-if="isTransactionsLoading" class="px-1 py-4 text-center text-[13px] text-sub">
+              불러오는 중이에요
+            </p>
+            <p
+              v-else-if="!recentTransactions.length"
+              class="px-1 py-4 text-center text-[13px] text-sub"
+            >
+              이번 달 이용 내역이 없어요
+            </p>
             <div
               v-for="transaction in recentTransactions"
-              :key="`${transaction.date}-${transaction.merchant}`"
+              :key="transaction.id"
               class="mycard-recent-row"
             >
-              <div
-                class="mycard-category-icon"
-                :class="{ empty: !categoryImages[transaction.cat] }"
-              >
-                <img
-                  v-if="categoryImages[transaction.cat]"
-                  :src="categoryImages[transaction.cat]"
-                  :class="{ wide: transaction.cat === 'telecom' || transaction.cat === 'all' }"
-                  alt=""
-                />
+              <div class="mycard-category-icon" :class="{ empty: !categoryIcon(transaction) }">
+                <img v-if="categoryIcon(transaction)" :src="categoryIcon(transaction)" alt="" />
               </div>
               <div class="mycard-transaction-copy">
                 <strong>{{ transaction.merchant }}</strong>
@@ -708,7 +437,10 @@ function dateLabel(date) {
               </button>
             </div>
 
-            <template v-if="activeCard.noRequirement">
+            <p v-if="isUsageLoading" class="px-1 py-4 text-center text-[13px] text-sub">
+              불러오는 중이에요
+            </p>
+            <template v-else-if="hasNoRequirement">
               <h3>전월 실적 조건 없음</h3>
               <div class="mycard-achievement">
                 <strong>실적을 채우지 않아도 카드 혜택을 받을 수 있어요!</strong>
@@ -719,12 +451,18 @@ function dateLabel(date) {
               <div class="mycard-performance-summary">
                 <div>
                   <span>이번 달 실적</span>
-                  <strong>{{ won(activeCard.performance) }}</strong>
-                  <small v-if="!activeCard.singleTier">
-                    다음 {{ currentTier + 1 }}구간까지 <b>{{ won(remaining) }}</b> 남음
+                  <strong>{{ won(performance) }}</strong>
+                  <small v-if="!isSingleTier && usage?.nextTier">
+                    다음 {{ usage.nextTier.tierName }}까지 <b>{{ won(remaining) }}</b> 남음
                   </small>
                 </div>
-                <em>{{ activeCard.singleTier ? '실적 달성' : `${currentTier}구간 달성` }}</em>
+                <em>{{
+                  isSingleTier
+                    ? isAchieved
+                      ? '실적 달성'
+                      : '실적 미달'
+                    : `${currentTier}구간 달성`
+                }}</em>
               </div>
               <div class="mycard-progress-wrap">
                 <div class="mycard-progress">
@@ -733,14 +471,18 @@ function dateLabel(date) {
                   </span>
                 </div>
                 <div class="mycard-tier-labels">
-                  <span v-for="(tier, index) in activeCard.tiers" :key="tier">
-                    {{ index === 0 ? '0' : `${tier / 10000}만` }}
+                  <span v-for="tier in tiers" :key="tier.tierOrder">
+                    {{
+                      Number(tier.minimumAmount) === 0
+                        ? '0'
+                        : `${Math.round(Number(tier.minimumAmount) / 10000)}만`
+                    }}
                   </span>
                 </div>
               </div>
-              <div v-if="activeCard.singleTier" class="mycard-achievement">
-                <strong>전월 실적 달성!</strong>
-                <span>다음 달 혜택이 모두 적용될 예정이에요.</span>
+              <div v-if="isSingleTier" class="mycard-achievement">
+                <strong>{{ achievementTitle }}</strong>
+                <span>{{ achievementDescription }}</span>
               </div>
             </template>
           </section>
@@ -823,18 +565,21 @@ function dateLabel(date) {
             <div class="mycard-month-selector">
               <button
                 type="button"
-                :disabled="monthIndex === months.length - 1"
+                :disabled="monthIndex >= months.length - 1"
                 @click="moveMonth(1)"
               >
                 <ChevronLeft :size="16" />
               </button>
-              <strong>{{ months[monthIndex].replace('.', '년 ') }}월</strong>
+              <strong>{{ monthTitle }}</strong>
               <button type="button" :disabled="monthIndex === 0" @click="moveMonth(-1)">
                 <ChevronRight :size="16" />
               </button>
             </div>
 
-            <template v-if="activeCard.noRequirement">
+            <p v-if="isUsageLoading" class="px-1 py-4 text-center text-[13px] text-sub">
+              불러오는 중이에요
+            </p>
+            <template v-else-if="hasNoRequirement">
               <h3>전월 실적 조건 없음</h3>
               <div class="mycard-achievement">
                 <strong>실적을 채우지 않아도 카드 혜택을 받을 수 있어요!</strong>
@@ -848,7 +593,7 @@ function dateLabel(date) {
                 @click="view = 'transactions-from-performance'"
               >
                 <span>실적 인정 금액</span>
-                <strong>{{ won(activeCard.performance) }} <ChevronRight :size="15" /></strong>
+                <strong>{{ won(performance) }} <ChevronRight :size="15" /></strong>
               </button>
               <div class="mycard-progress-wrap detail">
                 <div class="mycard-progress">
@@ -857,17 +602,12 @@ function dateLabel(date) {
                   ></span>
                 </div>
                 <div class="mycard-tier-labels">
-                  <span v-for="(_, index) in activeCard.tiers" :key="index">{{ index }}구간</span>
+                  <span v-for="tier in tiers" :key="tier.tierOrder">{{ tier.tierName }}</span>
                 </div>
               </div>
               <div class="mycard-achievement">
-                <strong>{{
-                  activeCard.singleTier ? '전월 실적 달성!' : `${currentTier}구간 실적 달성!`
-                }}</strong>
-                <span v-if="activeCard.singleTier">다음 달 혜택이 모두 적용될 예정이에요.</span>
-                <span v-else
-                  >{{ won(remaining) }} 추가 이용 시 다음 {{ currentTier + 1 }}구간 혜택 적용</span
-                >
+                <strong>{{ achievementTitle }}</strong>
+                <span>{{ achievementDescription }}</span>
               </div>
             </template>
             <p class="mycard-notice">
@@ -878,35 +618,33 @@ function dateLabel(date) {
 
           <section class="mycard-panel benefit-tier-panel">
             <h2>
-              {{
-                activeCard.noRequirement || activeCard.singleTier ? '혜택 내용' : '구간별 혜택 내용'
-              }}
+              {{ hasNoRequirement || isSingleTier ? '혜택 내용' : '구간별 혜택 내용' }}
             </h2>
-            <div
-              v-if="!activeCard.noRequirement && !activeCard.singleTier"
-              class="mycard-tier-buttons"
-            >
+            <div v-if="!hasNoRequirement && !isSingleTier" class="mycard-tier-buttons">
               <button
-                v-for="(_, index) in activeCard.tiers"
-                :key="index"
+                v-for="(tier, index) in tiers"
+                :key="tier.tierOrder"
                 type="button"
                 :class="{ active: selectedTier === index }"
                 @click="selectedTier = index"
               >
-                {{ index }}
+                {{ tier.tierOrder }}
               </button>
             </div>
-            <p
-              v-if="!activeCard.noRequirement && !activeCard.singleTier"
-              class="mycard-benefit-range"
-            >
-              ({{ activeCard.benefitRanges[selectedTier] }})
+            <p v-if="!hasNoRequirement && !isSingleTier" class="mycard-benefit-range">
+              ({{ tierRangeLabel(tiers[selectedTier]) }})
             </p>
             <ul>
               <li v-for="benefit in shownBenefits" :key="benefit">
                 <i></i><span>{{ benefit }}</span>
               </li>
             </ul>
+            <p
+              v-if="!isUsageLoading && !shownBenefits.length"
+              class="px-1 py-3 text-center text-[13px] text-sub"
+            >
+              이 구간에 적용되는 혜택이 없어요
+            </p>
           </section>
         </div>
       </div>
@@ -939,14 +677,10 @@ function dateLabel(date) {
             </div>
           </div>
           <div class="mycard-month-selector compact">
-            <button
-              type="button"
-              :disabled="monthIndex === months.length - 1"
-              @click="moveMonth(1)"
-            >
+            <button type="button" :disabled="monthIndex >= months.length - 1" @click="moveMonth(1)">
               <ChevronLeft :size="14" />
             </button>
-            <strong>{{ months[monthIndex] }}</strong>
+            <strong>{{ monthLabel }}</strong>
             <button type="button" :disabled="monthIndex === 0" @click="moveMonth(-1)">
               <ChevronRight :size="14" />
             </button>
@@ -957,34 +691,38 @@ function dateLabel(date) {
           </div>
         </section>
 
+        <p v-if="isTransactionsLoading" class="py-6 text-center text-[13px] text-sub">
+          불러오는 중이에요
+        </p>
+        <p v-else-if="!groupedTransactions.length" class="py-6 text-center text-[13px] text-sub">
+          이 달에는 이용 내역이 없어요
+        </p>
+
         <section v-for="group in groupedTransactions" :key="group.date" class="mycard-date-group">
           <h2>{{ dateLabel(group.date) }}</h2>
           <div>
-            <article
-              v-for="transaction in group.items"
-              :key="`${transaction.time}-${transaction.merchant}`"
-            >
+            <article v-for="transaction in group.items" :key="transaction.id">
               <div
                 class="mycard-category-icon large"
-                :class="{ empty: !categoryImages[transaction.cat] }"
+                :class="{ empty: !categoryIcon(transaction) }"
               >
-                <img
-                  v-if="categoryImages[transaction.cat]"
-                  :src="categoryImages[transaction.cat]"
-                  :class="{ wide: transaction.cat === 'telecom' || transaction.cat === 'all' }"
-                  alt=""
-                />
+                <img v-if="categoryIcon(transaction)" :src="categoryIcon(transaction)" alt="" />
               </div>
               <div class="mycard-transaction-copy">
                 <strong>{{ transaction.merchant }}</strong>
-                <span>{{ transaction.time }} · {{ transaction.detail }}</span>
-                <em v-if="transaction.note">실적 미인정 건</em>
+                <span
+                  >{{ transaction.time
+                  }}<template v-if="transaction.detail"> · {{ transaction.detail }}</template></span
+                >
+                <em v-if="transaction.isExcluded">실적 미인정 건</em>
               </div>
               <b>{{ won(transaction.amount) }}</b>
             </article>
           </div>
         </section>
-        <p class="mycard-history-notice">최근 3개월 내역을 제공합니다.</p>
+        <p v-if="!isTransactionsLoading" class="mycard-history-notice">
+          최근 3개월 내역을 제공합니다.
+        </p>
       </div>
     </template>
   </section>
