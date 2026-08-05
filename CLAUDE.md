@@ -420,7 +420,30 @@ line-height를 지정한 적이 없어 전부 `normal`(≈1.2)로 그려진 코�
 - `not_found_handling: "single-page-application"`이 없으면 `createWebHistory` 라우터의
   경로(`/home` 등)가 새로고침·직접 진입에서 전부 404다.
 - 로컬에서 배포본 그대로 확인: `npm run build && npm run preview:worker`
-- 배포: `npm run deploy`
+
+### 배포는 push 하면 자동으로 된다
+
+Cloudflare **Workers Builds**(Git 연동)가 `wrangler.jsonc`를 읽고 `wrangler deploy`를 돌린다.
+`npm run deploy`는 수동 배포용이고 평소에는 쓰지 않는다. 손으로 돌리면 Git 연동이 올린 것과
+어긋나므로, 대시보드에서 이력을 확인해야 하는 상황이 아니면 건드리지 않는다.
+
+- 프로덕션: <https://fitwallet-frontend.hyanj14.workers.dev>
+- 지금 무엇이 올라가 있는지: `npx wrangler deployments list`
+- 어느 커밋인지: `wrangler`에는 커밋 정보가 없다. GitHub 체크런 본문의 Version ID로 역매핑한다
+
+  ```bash
+  R=heartbeat-kb-town/fitwallet-frontend
+  S=$(gh api "repos/$R/commits/develop" --jq .sha)
+  gh api "repos/$R/commits/$S/check-runs" --jq '.check_runs[].output.summary' | grep "Version ID"
+  ```
+
+> 🔥 **지금은 어느 브랜치를 push 하든 프로덕션이 그 브랜치로 갈린다** (#85).
+> 머지도 리뷰도 필요 없다. 실제로 2026-08-05에 서로 다른 두 사람의 작업 브랜치가
+> PR이 열려 있는 상태에서 프로덕션에 나갔다.
+>
+> **그때까지는 작업 브랜치 push = 라이브 반영이다.** 깨진 상태를 push 하지 않는다.
+> 되돌리려면 정상 커밋을 다시 push 하거나 `npx wrangler rollback {version-id}`를 쓴다.
+> 이 제약이 풀리면 이 문단을 지우고 실제 정책(어느 브랜치가 프로덕션인가)으로 교체한다.
 
 > ⚠️ **Worker ↔ 백엔드 구간은 평문 HTTP다.** 로그인 비밀번호와 토큰이 암호화 없이 지난다.
 > `*.elasticbeanstalk.com`은 ACM 인증서를 발급받을 수 없어(도메인 소유 확인 불가)
