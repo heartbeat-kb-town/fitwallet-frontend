@@ -1,11 +1,29 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Menu } from 'lucide-vue-next'
 import { categories } from '@/data'
+import * as storeApi from '@/api/storeApi'
+import { useAsyncState } from '@/composables/useAsyncState'
 import { useToast } from '@/composables/useToast'
+import { getCurrentCoordinates } from '@/utils/geolocation'
 import { useCardStore } from '@/stores/cardStore'
 import { usePaymentStore } from '@/stores/paymentStore'
+
+/**
+ * 화면 카테고리 id → 백엔드 `category.category_id`.
+ *
+ * 화면은 문자열, 백엔드는 숫자를 쓰고 **순서도 다르다** (푸드가 4, 편의점/마트가 2).
+ * 인덱스로 유추하면 조용히 엉뚱한 업종을 조회하므로 표를 그대로 옮긴다.
+ */
+const BACKEND_CATEGORY_IDS = {
+  cafe: 1,
+  mart: 2,
+  shopping: 3,
+  food: 4,
+  hospital: 5,
+  gas: 6,
+}
 import storeSearchIcon from '@/assets/icons/category-store.svg'
 import benefitGiftIcon from '@/assets/icons/category-benefit.svg'
 import iconHome from '@/assets/icons/home.svg'
@@ -77,77 +95,58 @@ const pin = ref([])
 const pinMessage = ref('')
 const shakePin = ref(false)
 
-const storesByCategory = {
-  cafe: [
-    { name: '블루보틀 강남점', address: '강남구 테헤란로 521', distance: 48 },
-    { name: '스타벅스 강남역사거리점', address: '강남구 강남대로 396', distance: 91 },
-    { name: '파스쿠찌 역삼점', address: '강남구 테헤란로 50', distance: 140 },
-    { name: '투썸플레이스 강남역점', address: '강남구 강남대로 310', distance: 210 },
-    { name: '이디야 선릉역점', address: '강남구 선릉로 420', distance: 330 },
-  ],
-  food: [
-    { name: '파이브가이즈 강남점', address: '강남구 강남대로 438', distance: 62 },
-    { name: '교촌치킨 역삼점', address: '강남구 테헤란로 110', distance: 88 },
-    { name: '한솥도시락 역삼역점', address: '강남구 역삼로 160', distance: 155 },
-    { name: '맥도날드 강남역점', address: '강남구 강남대로 364', distance: 220 },
-    { name: '김밥천국 선릉점', address: '강남구 선릉로 402', distance: 310, hours: '24시간' },
-  ],
-  mart: [
-    { name: 'CU 강남역1호점', address: '강남구 강남대로 396', distance: 52 },
-    { name: 'GS25 역삼점', address: '강남구 테헤란로 50', distance: 75 },
-    { name: 'GS25 역삼2호점', address: '강남구 테헤란로 50', distance: 98 },
-    { name: '이마트24 선릉점', address: '강남구 선릉로 438', distance: 125 },
-    { name: '이마트24 선릉2호점', address: '강남구 선릉로 438', distance: 340, hours: '24시간' },
-  ],
-  shopping: [
-    { name: '올리브영 강남역점', address: '강남구 강남대로 354', distance: 77 },
-    { name: '유니클로 강남점', address: '강남구 강남대로 390', distance: 110 },
-    { name: '자라 강남점', address: '강남구 강남대로 434', distance: 185 },
-    { name: '현대백화점 무역센터점', address: '강남구 테헤란로 517', distance: 320 },
-    { name: '갤러리아 명품관', address: '강남구 압구정로 343', distance: 540 },
-  ],
-  hospital: [
-    { name: '강남역 연세의원', address: '강남구 강남대로 382', distance: 130 },
-    { name: '이오치과 역삼점', address: '강남구 역삼로 168', distance: 195 },
-    { name: 'GC녹십자의원 강남점', address: '강남구 테헤란로 416', distance: 240 },
-    { name: '365의원 선릉점', address: '강남구 선릉로 430', distance: 350, hours: '09:00 - 21:00' },
-    { name: '강남세브란스병원', address: '강남구 언주로 211', distance: 620 },
-  ],
-  gas: [
-    { name: 'GS칼텍스 강남주유소', address: '강남구 강남대로 602', distance: 480 },
-    { name: 'SK에너지 역삼주유소', address: '강남구 역삼로 201', distance: 720 },
-    { name: '현대오일뱅크 선릉점', address: '강남구 선릉로 510', distance: 890, hours: '24시간' },
-    { name: 'S-OIL 테헤란주유소', address: '강남구 테헤란로 600', distance: 1050 },
-  ],
-}
-
-const starbucksStores = [
-  { name: '스타벅스 강남역점', address: '강남구 강남대로 396', distance: 52 },
-  { name: '스타벅스 강남R점', address: '강남구 강남대로 390', distance: 86 },
-  { name: '스타벅스 강남역신분당역사점', address: '강남구 강남대로 396', distance: 120 },
-  { name: '스타벅스 역삼아레나빌딩점', address: '강남구 언주로 425', distance: 190 },
-  { name: '스타벅스 강남대로점', address: '강남구 강남대로 464', distance: 280 },
-]
-
 const category = computed(
   () => categories.find((item) => item.id === request.value.categoryId) ?? categories[0],
 )
 const isSearch = computed(() => Boolean(request.value.query))
-const stores = computed(() => {
-  const query = (request.value.query ?? '').replace(/\s/g, '').toLowerCase()
-  if (query.includes('스타벅스')) return starbucksStores
 
-  const allStores = Object.values(storesByCategory).flat()
-  const matches = query
-    ? allStores.filter((store) => store.name.replace(/\s/g, '').toLowerCase().includes(query))
-    : (storesByCategory[category.value.id] ?? [])
-  return matches.length ? matches : (storesByCategory[category.value.id] ?? [])
-})
+const {
+  data: searchResult,
+  isLoading: isStoresLoading,
+  execute: fetchStores,
+} = useAsyncState(storeApi.getStoreSearch)
 
-// QR 결제에서 뒤로 돌아온 경우, 결제했던 가게의 피그의 PICK 화면을 다시 보여줍니다.
-if (initialStoreName.value) {
-  selectedStore.value = stores.value.find((store) => store.name === initialStoreName.value) ?? null
+// 거리순 상위 5건 고정이다. 백엔드에 페이징이 없다.
+const stores = computed(() => searchResult.value?.stores ?? [])
+
+/**
+ * 가맹점을 조회한다.
+ *
+ * 검색어가 있으면 키워드 검색, 없으면 카테고리 주변 조회다.
+ * 둘 다 비면 백엔드가 400 을 주므로 그 조합으로는 아예 부르지 않는다.
+ *
+ * **키워드 검색은 백엔드가 검색 기록에 남긴다.** 검색 화면의 최근 검색어가 여기서 쌓인다.
+ */
+async function loadStores() {
+  const keyword = request.value.query?.trim()
+  const categoryId = BACKEND_CATEGORY_IDS[category.value.id]
+  if (!keyword && !categoryId) return
+
+  // 좌표는 필수다. 못 구하면 유틸이 시연용 기본 좌표를 준다 (실패하지 않는다).
+  const { latitude, longitude } = await getCurrentCoordinates()
+
+  try {
+    await fetchStores(
+      keyword ? { keyword, latitude, longitude } : { categoryId, latitude, longitude },
+    )
+  } catch (error) {
+    if (error.code === 'LOCATION_AGREEMENT_REQUIRED') {
+      showToast('위치 정보 이용에 동의해 주세요')
+      return
+    }
+    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
+  }
 }
+
+// 검색어나 카테고리가 바뀌면 다시 조회한다. 주소로 바로 들어와도 여기서 한 번 돈다.
+watch(request, loadStores, { immediate: true })
+
+// QR 결제에서 뒤로 돌아온 경우, 결제했던 가게의 피그의 PICK 화면을 다시 보여준다.
+// 목록이 API 로 오므로 도착한 뒤에 맞춘다.
+watch(stores, (list) => {
+  if (!initialStoreName.value || selectedStore.value) return
+  selectedStore.value = list.find((store) => store.storeName === initialStoreName.value) ?? null
+})
 
 const cardPicks = [
   {
@@ -255,7 +254,7 @@ async function confirmPin() {
   try {
     await paymentStore.verifyPin({ userCardId, paymentPin: pin.value.join('') })
     showPin.value = false
-    payWith({ userCardId, store: selectedStore.value.name })
+    payWith({ userCardId, store: selectedStore.value.storeName })
   } catch (error) {
     if (error.code === 'PIN_MISMATCH') {
       // 세션이 끊긴 게 아니다. 이 화면에서 다시 받는다 (#79).
@@ -307,10 +306,16 @@ async function confirmPin() {
       </header>
 
       <div class="merchant-divider"></div>
+      <p v-if="isStoresLoading" class="py-8 text-center text-[13px] text-sub">
+        주변 가맹점을 찾고 있어요
+      </p>
+      <p v-else-if="!stores.length" class="py-8 text-center text-[13px] text-sub">
+        근처에 조건에 맞는 가맹점이 없어요
+      </p>
       <div class="merchant-list">
         <button
           v-for="store in stores"
-          :key="store.name"
+          :key="store.storeId"
           class="merchant-card"
           type="button"
           @click="selectedStore = store"
@@ -319,9 +324,8 @@ async function confirmPin() {
             <img :src="isSearch ? storeSearchIcon : category.icon" alt="" />
           </span>
           <span class="merchant-store-info">
-            <strong>{{ store.name }}</strong>
+            <strong>{{ store.storeName }}</strong>
             <small>
-              <template v-if="store.hours">{{ store.hours }} · </template>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z" />
                 <circle cx="12" cy="10" r="3" />
@@ -329,7 +333,7 @@ async function confirmPin() {
               {{ store.address }}
             </small>
           </span>
-          <span class="merchant-distance">{{ formatDistance(store.distance) }}</span>
+          <span class="merchant-distance">{{ formatDistance(store.distanceMeters) }}</span>
         </button>
       </div>
     </template>
@@ -350,7 +354,7 @@ async function confirmPin() {
           <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z" />
           <circle cx="12" cy="10" r="3" />
         </svg>
-        <strong>{{ selectedStore.name }}</strong>
+        <strong>{{ selectedStore.storeName }}</strong>
       </div>
 
       <div class="pick-list">

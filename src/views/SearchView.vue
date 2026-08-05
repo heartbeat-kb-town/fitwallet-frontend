@@ -1,24 +1,54 @@
 <script setup>
-import { nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import * as storeApi from '@/api/storeApi'
+import { useAsyncState } from '@/composables/useAsyncState'
+import { useToast } from '@/composables/useToast'
 
 const router = useRouter()
+const { showToast } = useToast()
 
 const searchInput = ref(null)
 const query = ref('')
-const recents = ref(['스타벅스', 'CU', '올리브영'])
-const popularSearches = ['파이브가이즈', '블루보틀', '다이소', 'GS25', '파리바게뜨']
+
+/**
+ * 최근·인기 검색어는 서버에 있다.
+ *
+ * 최근 검색어를 화면이 만들지 않는다 — 키워드로 가맹점을 조회하면 백엔드가 기록한다.
+ * 화면이 따로 목록을 들고 있으면 서버와 어긋난다.
+ */
+const { data: keywords, execute: fetchKeywords } = useAsyncState(storeApi.getStoreKeywords)
+
+const recents = computed(() => keywords.value?.recent ?? [])
+const popularSearches = computed(() => keywords.value?.popular?.keywords ?? [])
 
 onMounted(() => {
   window.setTimeout(() => searchInput.value?.focus(), 120)
+  // 실패는 조용히 둔다. 검색어 목록이 비어도 검색 자체는 할 수 있다.
+  fetchKeywords().catch(() => {})
 })
 
-function removeRecent(word) {
-  recents.value = recents.value.filter((item) => item !== word)
+async function removeRecent(recent) {
+  try {
+    await storeApi.deleteRecentKeyword(recent.searchHistoryId)
+  } catch (error) {
+    // 이미 지워진 기록이면 목록만 다시 받으면 된다. 사용자가 할 일은 없다.
+    if (error.code !== 'SEARCH_HISTORY_NOT_FOUND') {
+      showToast('일시적인 오류가 발생했어요')
+      return
+    }
+  }
+  await fetchKeywords().catch(() => {})
 }
 
-function clearAll() {
-  recents.value = []
+async function clearAll() {
+  try {
+    await storeApi.deleteRecentKeywords()
+  } catch {
+    showToast('일시적인 오류가 발생했어요')
+    return
+  }
+  await fetchKeywords().catch(() => {})
 }
 
 async function selectWord(word) {
@@ -42,9 +72,7 @@ function submitSearch() {
     searchInput.value?.focus()
     return
   }
-  if (!recents.value.includes(value)) {
-    recents.value = [value, ...recents.value].slice(0, 5)
-  }
+  // 최근 검색어에 넣지 않는다. 가맹점 화면이 이 키워드로 조회하면 백엔드가 기록한다.
   router.push({
     name: 'merchants',
     query: { query: value, title: value, from: 'search' },
@@ -97,15 +125,15 @@ function submitSearch() {
         </div>
 
         <div class="recent-list">
-          <div v-for="word in recents" :key="word" class="recent-chip">
-            <button class="recent-word" type="button" @click="selectWord(word)">
-              {{ word }}
+          <div v-for="recent in recents" :key="recent.searchHistoryId" class="recent-chip">
+            <button class="recent-word" type="button" @click="selectWord(recent.keyword)">
+              {{ recent.keyword }}
             </button>
             <button
               class="remove-recent"
               type="button"
-              :aria-label="`${word} 삭제`"
-              @click="removeRecent(word)"
+              :aria-label="`${recent.keyword} 삭제`"
+              @click="removeRecent(recent)"
             >
               <svg viewBox="0 0 12 12" aria-hidden="true">
                 <path d="m3 3 6 6m0-6-6 6" />
@@ -115,17 +143,17 @@ function submitSearch() {
         </div>
       </section>
 
-      <section class="search-section">
+      <section v-if="popularSearches.length" class="search-section">
         <h2>인기 검색어</h2>
         <div class="popular-list">
           <button
-            v-for="(word, index) in popularSearches"
-            :key="word"
+            v-for="popular in popularSearches"
+            :key="popular.keyword"
             type="button"
-            @click="selectWord(word)"
+            @click="selectWord(popular.keyword)"
           >
-            <strong>{{ index + 1 }}</strong>
-            <span>{{ word }}</span>
+            <strong>{{ popular.rank }}</strong>
+            <span>{{ popular.keyword }}</span>
           </button>
         </div>
       </section>
