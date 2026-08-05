@@ -11,14 +11,20 @@ import { ref } from 'vue'
  *   [{ field: 'loginId', reason: '아이디는 필수입니다.' }, ...]
  * 검증 실패는 토스트가 아니라 해당 입력창 아래 인라인 메시지로 보여준다.
  * 어느 입력창이 문제인지 알려주지 못하면 사용자가 고칠 수 없다.
+ *
+ * data 는 실패 응답에도 봉투에 실려 오는 알맹이다. 대부분 null 이지만
+ * 화면이 꼭 알아야 하는 값이 여기 담겨 오는 경우가 있다.
+ *   PIN_MISMATCH → { remainingAttempts: 4 }  (5회 넘게 틀리면 잠긴다)
+ * 버리면 "몇 번 남았는지" 를 사용자에게 알려줄 방법이 없다.
  */
 export class ApiError extends Error {
-  constructor(code, message, status, errors = []) {
+  constructor(code, message, status, errors = [], data = null) {
     super(message)
     this.name = 'ApiError'
     this.code = code
     this.status = status
     this.errors = errors
+    this.data = data
   }
 
   /** 검증 실패 시 특정 입력창에 붙일 메시지를 꺼낸다. */
@@ -27,10 +33,16 @@ export class ApiError extends Error {
   }
 }
 
-// 인증이 필요 없는 엔드포인트. 여기서 나온 401 은 세션 만료가 아니라
-// "아이디/비밀번호가 틀렸다"는 비즈니스 에러다 (code: INVALID_CREDENTIALS).
-// 토큰을 비우거나 로그인으로 보내면 안 되고, 화면이 그대로 사용자에게 보여줘야 한다.
-const PUBLIC_PATHS = ['/user/login', '/user/signup']
+// 401 이라고 다 세션 만료가 아니다. 백엔드가 주는 401 은 셋이고 그중 하나만 세션 끊김이다.
+//
+//   UNAUTHORIZED        (common)  진짜 세션 끊김        → 인터셉터가 토큰을 비운다
+//   INVALID_CREDENTIALS (user)    아이디·비밀번호 불일치 → 화면이 사용자에게 보여준다
+//   PIN_MISMATCH        (payment) 결제 비밀번호 불일치   → 화면이 사용자에게 보여준다
+//
+// 경로 목록이 아니라 **코드**로 가른다. 경로로 가르면 비즈니스 401 을 주는 엔드포인트가
+// 늘 때마다 목록에 넣는 것을 잊고, 그 화면에서 사용자가 조용히 로그아웃된다.
+// 실제로 결제 PIN 이 그렇게 새어 나갔다 (#79).
+const BUSINESS_401_CODES = ['INVALID_CREDENTIALS', 'PIN_MISMATCH']
 
 // access token 은 메모리에만 둔다. localStorage / sessionStorage 에 절대 넣지 않는다.
 // refresh 를 HttpOnly 쿠키로 감싼 설계라, access 를 스토리지에 두면 XSS 방어가 무의미해진다.
@@ -73,16 +85,19 @@ client.interceptors.response.use(
   (error) => {
     const status = error.response?.status
     const envelope = error.response?.data
-    const isPublic = PUBLIC_PATHS.some((path) => error.config?.url?.startsWith(path))
+    const isBusiness401 = BUSINESS_401_CODES.includes(envelope?.code)
 
     // 세션이 끊긴 401 은 인터셉터가 전담한다. 화면에서 따로 처리하지 않는다.
-    // 로그인·회원가입에서 나온 401 은 여기 해당하지 않는다 (위 PUBLIC_PATHS 참고).
+    // 비즈니스 401 은 건드리지 않는다 (위 BUSINESS_401_CODES 참고).
+    //
+    // 코드를 모르는 401 — 응답 봉투가 아예 없는 경우 — 은 세션 만료로 본다.
+    // 판단이 안 될 때는 로그인으로 보내는 쪽이 안전하다.
     //
     // TODO: 백엔드에 /reissue 가 생기면 401 → 재발급 → 원요청 재시도로 교체한다.
     //       지금은 재발급 시도 없이 토큰만 비운다.
     // TODO: 로그인 화면으로 보내는 것은 views 이관 후에 붙인다.
     //       지금은 App.vue 의 수동 스위처가 화면을 쥐고 있어 라우터로 보내도 화면이 바뀌지 않는다.
-    if (status === 401 && !isPublic) {
+    if (status === 401 && !isBusiness401) {
       clearAccessToken()
     }
 
@@ -93,6 +108,8 @@ client.interceptors.response.use(
         envelope?.message ?? error.message,
         status,
         envelope?.errors ?? [],
+        // 실패 응답에도 알맹이가 실려 오는 경우가 있다 (PIN_MISMATCH 의 remainingAttempts).
+        envelope?.data ?? null,
       ),
     )
   },
