@@ -9,7 +9,6 @@ import iconReport from '@/assets/icons/report.svg'
 import cardSheet from '@/assets/cards/payment-card-sheet.png'
 import waitingPig from '@/assets/icons/pig-waiting.svg'
 import completePig from '@/assets/icons/pig-thorwcard.svg'
-import { DEFAULT_CARDS } from '@/cardData'
 
 import { useCardStore } from '@/stores/cardStore'
 import { usePaymentStore } from '@/stores/paymentStore'
@@ -47,9 +46,20 @@ function backToMerchant() {
   router.push({ path: target.path, query: { ...target.query, store: merchantName } })
 }
 
-const cards = computed(() => (cardStore.cards?.length ? cardStore.cards : DEFAULT_CARDS))
-const initialIndex = cards.value.findIndex((card) => card.id === paymentStore.cardId)
-const activeIndex = ref(initialIndex >= 0 ? initialIndex : 0)
+const cards = computed(() => cardStore.cards)
+const activeIndex = ref(0)
+
+// 가맹점에서 카드를 고르고 넘어왔으면 그 카드를 펼쳐 놓는다.
+// 목록은 API 로 오므로 setup 시점에는 아직 비어 있다. 도착한 뒤에 한 번만 맞춘다.
+watch(
+  cards,
+  (list) => {
+    if (!list.length || !paymentStore.cardId) return
+    const index = list.findIndex((card) => card.id === paymentStore.cardId)
+    if (index >= 0) activeIndex.value = index
+  },
+  { immediate: true },
+)
 const pointerStartY = ref(null)
 const pointerMoved = ref(false)
 const locked = ref(false)
@@ -74,7 +84,7 @@ function cardSlot(index) {
 }
 
 function advanceCard() {
-  if (locked.value) return
+  if (locked.value || !cards.value.length) return
   locked.value = true
   activeIndex.value = (activeIndex.value + 1) % cards.value.length
   window.setTimeout(() => {
@@ -197,6 +207,8 @@ function qrBack() {
 }
 
 onMounted(() => {
+  cardStore.ensureCards()
+
   // 가맹점에서 카드를 고르고 비밀번호까지 입력한 경우, 바로 QR 결제 단계부터 시작합니다.
   if (startPhase === 'qr') {
     qrTab.value = 'scan'
@@ -246,7 +258,7 @@ onBeforeUnmount(clearFlowTimers)
         </div>
 
         <div class="payment-card-meta" aria-live="polite">
-          <span>{{ activeCard.issuer }} {{ activeCard.name }}</span>
+          <span>{{ activeCard?.issuer }} {{ activeCard?.name }}</span>
           <div class="payment-card-dots" aria-label="카드 선택">
             <button
               v-for="(card, index) in cards"
@@ -455,7 +467,7 @@ onBeforeUnmount(clearFlowTimers)
           </div>
           <div>
             <dt>결제 수단</dt>
-            <dd>{{ activeCard.issuer }} {{ activeCard.name }} 카드</dd>
+            <dd>{{ activeCard?.issuer }} {{ activeCard?.name }} 카드</dd>
           </div>
           <div>
             <dt>결제 일시</dt>

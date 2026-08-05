@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, ChevronRight, Menu } from 'lucide-vue-next'
 import iconHome from '@/assets/icons/home.svg'
@@ -18,11 +18,15 @@ import iconAll from '@/assets/icons/category-all.svg'
 import cardSheet from '@/assets/cards/payment-card-sheet.png'
 import pigFace from '@/assets/icons/pig-face.svg'
 
+import { useCardStore } from '@/stores/cardStore'
 import { usePaymentStore } from '@/stores/paymentStore'
 
 const route = useRoute()
 const router = useRouter()
+const cardStore = useCardStore()
 const paymentStore = usePaymentStore()
+
+onMounted(() => cardStore.ensureCards())
 
 function goHome() {
   router.push({ name: 'home' })
@@ -44,16 +48,19 @@ function openReport() {
 }
 
 const months = ['2024.01', '2023.12', '2023.11']
-const cards = [
+
+/**
+ * 이용 실적과 구간별 혜택.
+ *
+ * TODO(mock): 백엔드에 `GET /api/card/{cardId}/usage` 가 있지만 아직 붙이지 않았다.
+ *             이 파일이 962줄이라 보유 카드 목록 연동(#76)과 한 PR 에 묶으면 리뷰가 안 된다.
+ *             후속 이슈에서 실제 호출로 교체한다.
+ *
+ * 카드 id 가 아니라 **목록에서의 자리**로 붙는다. 목록은 이제 실제 API 에서 오므로
+ * 여기 값은 화면에 뜬 카드의 진짜 실적이 아니다. 자리 수가 모자라면 처음부터 다시 돈다.
+ */
+const CARD_USAGE_MOCK = [
   {
-    id: 'deep-dream',
-    issuer: '신한카드',
-    name: 'Deep Dream',
-    last4: '3428',
-    cropY: 208,
-    type: 'credit',
-    amountLabel: '결제 예정 금액',
-    amount: 320000,
     performance: 180000,
     tiers: [0, 300000, 600000, 900000],
     noRequirement: true,
@@ -61,15 +68,6 @@ const cards = [
     benefits: [['전 가맹점 0.5% 캐시백', '대중교통 5% 할인', '스타벅스 10% 할인']],
   },
   {
-    id: 'toktok-o',
-    issuer: 'KB국민카드',
-    name: '톡톡O',
-    last4: '6231',
-    cropY: 609,
-    type: 'check',
-    amountLabel: '잔액',
-    amount: 1250000,
-    account: '국민 123-45-6789',
     performance: 520000,
     tiers: [0, 500000, 1000000, 1500000],
     benefitRanges: [
@@ -86,14 +84,6 @@ const cards = [
     ],
   },
   {
-    id: 'zero',
-    issuer: '현대카드',
-    name: 'ZERO Edition2',
-    last4: '5509',
-    cropY: 1022,
-    type: 'credit',
-    amountLabel: '결제 예정 금액',
-    amount: 1240000,
     performance: 500000,
     tiers: [0, 1000000, 2000000, 3000000],
     benefitRanges: [
@@ -110,14 +100,6 @@ const cards = [
     ],
   },
   {
-    id: 'da',
-    issuer: '신한카드',
-    name: 'DA@카드의정석',
-    last4: '1847',
-    cropY: 1443,
-    type: 'credit',
-    amountLabel: '결제 예정 금액',
-    amount: 87500,
     performance: 750000,
     tiers: [0, 500000],
     singleTier: true,
@@ -126,8 +108,33 @@ const cards = [
   },
 ]
 
-const transactionSets = {
-  'deep-dream': {
+/**
+ * 목록을 아직 못 받았을 때 쓰는 빈 카드.
+ *
+ * 이 화면은 카드 한 장을 통째로 펼쳐 보여주는 구조라 `activeCard` 가 없으면
+ * 템플릿 곳곳에서 터진다. 값을 지어내지 않고 빈 문자열과 0 으로 둔다.
+ */
+const EMPTY_CARD = {
+  id: '',
+  issuer: '',
+  name: '',
+  last4: '',
+  type: 'credit',
+  amountLabel: '결제 예정 금액',
+  amount: 0,
+  account: '',
+  cropY: 208,
+}
+
+/**
+ * 카드별 결제 내역.
+ *
+ * TODO(mock): `GET /api/card/{cardId}/transactions` 로 교체한다.
+ *             `CARD_USAGE_MOCK` 과 같은 후속 이슈에서 함께 붙인다.
+ *             여기도 카드 id 가 아니라 목록에서의 자리로 붙는다.
+ */
+const TRANSACTION_SETS_MOCK = [
+  {
     2024.01: [
       {
         cat: 'transport',
@@ -200,7 +207,7 @@ const transactionSets = {
       },
     ],
   },
-  'toktok-o': {
+  {
     2024.01: [
       {
         cat: 'cafe',
@@ -297,7 +304,7 @@ const transactionSets = {
       },
     ],
   },
-  zero: {
+  {
     2024.01: [
       {
         cat: 'cafe',
@@ -386,7 +393,7 @@ const transactionSets = {
       },
     ],
   },
-  da: {
+  {
     2024.01: [
       {
         cat: 'medical',
@@ -459,7 +466,7 @@ const transactionSets = {
       },
     ],
   },
-}
+]
 
 const categoryImages = {
   cafe: iconCafe,
@@ -479,12 +486,34 @@ const monthIndex = ref(0)
 const selectedTier = ref(0)
 const touchStartX = ref(0)
 
-const activeCard = computed(() => cards[activeIndex.value])
+const cards = computed(() => cardStore.cards)
+
+// 목록이 줄어들면(카드 해지 등) 펼쳐둔 자리가 목록 밖으로 나갈 수 있다.
+watch(cards, (list) => {
+  if (activeIndex.value >= list.length) activeIndex.value = 0
+})
+
+// 목데이터를 자리로 붙이는 자리. 카드가 4장을 넘으면 처음부터 다시 돈다.
+const mockIndex = computed(() => activeIndex.value % CARD_USAGE_MOCK.length)
+
+/**
+ * 펼쳐 놓은 카드 한 장.
+ *
+ * 실제 API 가 주는 값(`cardStore`)이 목데이터를 덮어쓰도록 **맨 뒤에 편다.**
+ * 실적·혜택은 아직 목데이터라 겹치는 키가 없지만, 후속 이슈에서 usage 를 붙일 때
+ * 순서가 뒤집혀 있으면 실제 값이 목데이터에 가려진다.
+ */
+const activeCard = computed(() => ({
+  ...EMPTY_CARD,
+  ...CARD_USAGE_MOCK[mockIndex.value],
+  ...(cards.value[activeIndex.value] ?? {}),
+}))
+
 const transactions = computed(
-  () => transactionSets[activeCard.value.id]?.[months[monthIndex.value]] ?? [],
+  () => TRANSACTION_SETS_MOCK[mockIndex.value]?.[months[monthIndex.value]] ?? [],
 )
 const recentTransactions = computed(
-  () => transactionSets[activeCard.value.id]?.[months[0]]?.slice(0, 3) ?? [],
+  () => TRANSACTION_SETS_MOCK[mockIndex.value]?.[months[0]]?.slice(0, 3) ?? [],
 )
 const groupedTransactions = computed(() => {
   const groups = []
@@ -529,7 +558,7 @@ function won(value) {
 }
 
 function selectCard(index) {
-  if (index < 0 || index >= cards.length) return
+  if (index < 0 || index >= cards.value.length) return
   activeIndex.value = index
   selectedTier.value = 0
 }
