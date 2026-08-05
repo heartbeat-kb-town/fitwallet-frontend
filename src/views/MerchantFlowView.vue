@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Menu } from 'lucide-vue-next'
 import { categories } from '@/data'
+import { useToast } from '@/composables/useToast'
 import { useCardStore } from '@/stores/cardStore'
 import { usePaymentStore } from '@/stores/paymentStore'
 import storeSearchIcon from '@/assets/icons/category-store.svg'
@@ -16,6 +17,7 @@ const route = useRoute()
 const router = useRouter()
 const cardStore = useCardStore()
 const paymentStore = usePaymentStore()
+const { showToast } = useToast()
 
 onMounted(() => cardStore.ensureCards())
 
@@ -57,12 +59,10 @@ function navigateTo(target) {
 
 // 셸의 startRecommendedPayment() 가 하던 일. #66 에서 paymentStore 로 옮겼다.
 //
-// cardIndex 는 피그의 PICK 추천 목록에서의 자리다. 추천 API(`/benefit/expected`)를 아직
-// 붙이지 않아 보유 카드 목록의 같은 자리를 가리키는 것으로 대신한다.
-// TODO(#76 후속): 추천 API 를 붙이면 인덱스가 아니라 카드 id 를 그대로 받는다.
-function payWith({ cardIndex, store }) {
+// PIN 검증까지 끝난 뒤에 부른다. 결제 화면이 `paymentStore.pinAuthId` 로 QR 을 만든다.
+function payWith({ userCardId, store }) {
   paymentStore.startFromMerchant({
-    cardId: cardStore.cards[cardIndex]?.id ?? '',
+    cardId: userCardId,
     merchantName: store,
     returnTo: route.fullPath,
   })
@@ -73,6 +73,8 @@ const selectedStore = ref(null)
 const showPin = ref(false)
 const pendingPick = ref(null)
 const pin = ref([])
+// PIN 시트 안에 띄우는 인라인 메시지. 시트가 화면을 덮고 있어 토스트는 가려진다.
+const pinMessage = ref('')
 const shakePin = ref(false)
 
 const storesByCategory = {
@@ -206,6 +208,7 @@ function formatDistance(distance) {
 function chooseCard(pick) {
   pendingPick.value = pick
   pin.value = []
+  pinMessage.value = ''
   showPin.value = true
 }
 
@@ -213,6 +216,7 @@ function closePin() {
   showPin.value = false
   pendingPick.value = null
   pin.value = []
+  pinMessage.value = ''
 }
 
 function addDigit(digit) {
@@ -223,19 +227,48 @@ function deleteDigit() {
   pin.value.pop()
 }
 
-function confirmPin() {
+function shakePinDots() {
+  shakePin.value = false
+  requestAnimationFrame(() => {
+    shakePin.value = true
+    window.setTimeout(() => {
+      shakePin.value = false
+    }, 460)
+  })
+}
+
+/**
+ * 결제 비밀번호를 검증하고 결제 화면으로 넘긴다.
+ *
+ * QR 은 여기서 만들지 않는다. 결제 화면이 `pinAuthId` 로 만든다 —
+ * 이 화면에서 만들면 사용자가 넘어가는 사이에 180초 만료가 흐르기 시작한다.
+ */
+async function confirmPin() {
   if (pin.value.length !== 6) {
-    shakePin.value = false
-    requestAnimationFrame(() => {
-      shakePin.value = true
-      window.setTimeout(() => {
-        shakePin.value = false
-      }, 460)
-    })
+    shakePinDots()
     return
   }
-  payWith({ cardIndex: pendingPick.value.cardIndex, store: selectedStore.value.name })
-  showPin.value = false
+  const userCardId = cardStore.cards[pendingPick.value.cardIndex]?.id
+  if (!userCardId || paymentStore.isVerifyingPin) return
+
+  pinMessage.value = ''
+  try {
+    await paymentStore.verifyPin({ userCardId, paymentPin: pin.value.join('') })
+    showPin.value = false
+    payWith({ userCardId, store: selectedStore.value.name })
+  } catch (error) {
+    if (error.code === 'PIN_MISMATCH') {
+      // 세션이 끊긴 게 아니다. 이 화면에서 다시 받는다 (#79).
+      const remaining = error.data?.remainingAttempts
+      pinMessage.value =
+        remaining > 0 ? `${error.message} (${remaining}번 남음)` : '비밀번호를 5번 틀렸어요.'
+      pin.value = []
+      shakePinDots()
+      return
+    }
+    showToast('일시적인 오류가 발생했어요')
+    pin.value = []
+  }
 }
 </script>
 
@@ -401,6 +434,12 @@ function confirmPin() {
         <div class="payment-pin-dots" :class="{ shake: shakePin }" aria-label="비밀번호 입력 상태">
           <span v-for="index in 6" :key="index" :class="{ filled: index <= pin.length }"></span>
         </div>
+
+        <!-- 검증 실패는 토스트로 띄우지 않는다. 시트가 화면을 덮고 있어 가려진다. -->
+        <p v-if="pinMessage" class="px-6 text-center text-[13px] text-danger" role="alert">
+          {{ pinMessage }}
+        </p>
+
         <div class="payment-pin-pad">
           <button v-for="digit in 9" :key="digit" type="button" @click="addDigit(digit)">
             {{ digit }}
@@ -422,7 +461,14 @@ function confirmPin() {
             </svg>
           </button>
           <button type="button" @click="addDigit(0)">0</button>
-          <button class="payment-pin-confirm" type="button" @click="confirmPin">완료</button>
+          <button
+            class="payment-pin-confirm"
+            type="button"
+            :disabled="paymentStore.isVerifyingPin"
+            @click="confirmPin"
+          >
+            {{ paymentStore.isVerifyingPin ? '확인 중' : '완료' }}
+          </button>
         </div>
       </section>
     </div>
