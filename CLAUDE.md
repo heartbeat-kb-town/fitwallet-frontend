@@ -28,17 +28,17 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
 현재 `src`는 동작하는 UI 프로토타입이고 앱 골격이 아니다.
 규칙만 믿고 코드를 짜면 "규칙대로 짰는데 안 돌아가는" 상황이 생긴다.
 
-| 규칙                       | 상태                                                                             |
-| -------------------------- | -------------------------------------------------------------------------------- |
-| 라우터                     | **부트스트랩됨** — 라우트 추가는 `router/routes.js`                              |
-| Pinia                      | **부트스트랩됨** — store 를 만들면 바로 동작한다                                 |
-| `src/api/client.js`        | **추가됨** — `useAsyncState`도 함께                                              |
-| 도메인 API                 | `userApi` · `cardApi` · `paymentApi` · `storeApi` — `benefit` · `report` 는 아직 |
-| Tailwind `@theme` 토큰     | **정의됨** — 유틸리티 사용 가능 (Preflight 는 제외)                              |
-| `components/common/`       | **추가됨** — `Base*` 5종 + `useToast()`                                          |
-| `src/views/` 이관          | **완료** — 화면 14개가 라우트와 1:1                                              |
-| `@tanstack/vue-query` 제거 | **완료** — 의존성에서 제거됨                                                     |
-| 폴더 구조·네이밍·Git 규칙  | **즉시 적용** — 코드 없이도 바로 지킬 수 있다                                    |
+| 규칙                       | 상태                                                                 |
+| -------------------------- | -------------------------------------------------------------------- |
+| 라우터                     | **부트스트랩됨** — 라우트 추가는 `router/routes.js`                  |
+| Pinia                      | **부트스트랩됨** — store 를 만들면 바로 동작한다                     |
+| `src/api/client.js`        | **추가됨** — `useAsyncState`도 함께                                  |
+| 도메인 API                 | `user` · `card` · `payment` · `store` · `benefit` — `report` 만 아직 |
+| Tailwind `@theme` 토큰     | **정의됨** — 유틸리티 사용 가능 (Preflight 는 제외)                  |
+| `components/common/`       | **추가됨** — `Base*` 5종 + `useToast()`                              |
+| `src/views/` 이관          | **완료** — 화면 14개가 라우트와 1:1                                  |
+| `@tanstack/vue-query` 제거 | **완료** — 의존성에서 제거됨                                         |
+| 폴더 구조·네이밍·Git 규칙  | **즉시 적용** — 코드 없이도 바로 지킬 수 있다                        |
 
 **지금 코드가 어떻게 돼 있나**
 
@@ -56,9 +56,15 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
   `/store/search`로 키워드 검색을 하면 백엔드가 기록하고 `/store/keywords`가 읽는다.
 - 가맹점 조회는 위도·경도가 필수다. `src/utils/geolocation.js`가 확보하고,
   못 구하면 시연용 좌표로 떨어진다. 시드 가맹점이 광진구 일대에만 있어서다.
+- 피그의 PICK 카드 추천도 API에서 온다(#92). 가맹점마다 결과가 달라진다.
+  **정렬을 화면에서 하지 않는다** — 백엔드가 `AVAILABLE` → `CONDITION_NOT_MET` →
+  `NO_BENEFIT` 순으로 내려준다.
+- 카드사 이미지는 방향이 섞여 있다. KB·신한은 가로(약 1.58), **현대는 세로(0.63)**다.
+  URL로는 알 수 없어(신한 `..._v_f_s.png`가 실제로는 가로) 로드 후 실제 크기로 판별하고,
+  세로 이미지는 반시계로 눕혀 채운다. `MerchantFlowView`의 `pickImageStyle` 참고.
 - 남은 목데이터는 `src/data.js`뿐이다. 홈 화면이 직접 import한다
   (`categories`는 가맹점 화면도 아이콘 때문에 쓴다).
-  `benefit`·`report` 도메인을 연동하면 대부분 사라진다.
+  `report` 도메인을 연동하면 리포트 화면 몫이 빠진다.
 
 **따라서**
 
