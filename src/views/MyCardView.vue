@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, ChevronRight, Menu } from 'lucide-vue-next'
 import iconHome from '@/assets/icons/home.svg'
@@ -20,6 +20,7 @@ import pigFace from '@/assets/icons/pig-face.svg'
 import * as cardApi from '@/api/cardApi'
 import { useAsyncState } from '@/composables/useAsyncState'
 import { useCardImage } from '@/composables/useCardImage'
+import { useToast } from '@/composables/useToast'
 import { useCardStore } from '@/stores/cardStore'
 import { usePaymentStore } from '@/stores/paymentStore'
 
@@ -29,6 +30,7 @@ const cardStore = useCardStore()
 const paymentStore = usePaymentStore()
 
 const { markCardImageOrientation, cardImageStyle: fitCardImage } = useCardImage()
+const { showToast } = useToast()
 
 // 카드 그림 칸은 두 크기다. 세로 이미지를 눕힐 때 각 칸의 비율이 필요하다.
 const CARD_PHOTO_RATIO = 322 / 203 //  .mycard-card-photo
@@ -118,6 +120,44 @@ const {
   execute: fetchTransactions,
 } = useAsyncState(cardApi.getCardTransactions)
 
+/**
+ * 이어붙인 결제 내역 (#87).
+ *
+ * 백엔드가 커서 방식이라 한 번에 한 묶음만 온다. `transactionDetail` 은 **마지막 묶음**만
+ * 들고 있으므로 화면이 따로 쌓는다. 여기 담기는 것은 백엔드 원본(`content` 한 건)이고
+ * 화면용 변환은 `transactions` computed 가 한다.
+ */
+const loadedTransactions = ref([])
+const nextCursor = ref(null)
+const hasNextTransactions = ref(false)
+
+/**
+ * 다음 묶음 조회. 첫 조회와 **다른 `useAsyncState`** 를 쓴다.
+ *
+ * 같은 것을 재사용하면 이어붙이는 동안 `isTransactionsLoading` 이 켜져서
+ * 목록이 통째로 "불러오는 중이에요" 로 바뀐다. 이미 본 내역이 사라지면 안 된다.
+ */
+const { isLoading: isLoadingMore, execute: fetchMoreTransactions } = useAsyncState(
+  cardApi.getCardTransactions,
+)
+
+/**
+ * 묶음 하나를 반영한다.
+ *
+ * @param detail 응답 알맹이. 조회에 실패했으면 null 이 온다.
+ * @param append true 면 뒤에 잇고, false 면 갈아끼운다.
+ *   **월이나 카드를 바꾸면 반드시 false 다.** 안 그러면 지난달 내역이 섞인다.
+ */
+function applyTransactionPage(detail, { append }) {
+  const page = detail?.transactions
+  const content = page?.content ?? []
+
+  loadedTransactions.value = append ? [...loadedTransactions.value, ...content] : content
+  hasNextTransactions.value = Boolean(page?.hasNext)
+  // 마지막 묶음이면 백엔드가 null 을 준다.
+  nextCursor.value = page?.nextCursor ?? null
+}
+
 const cards = computed(() => cardStore.cards)
 
 // 목록이 줄어들면(카드 해지 등) 펼쳐둔 자리가 목록 밖으로 나갈 수 있다.
@@ -147,13 +187,40 @@ async function loadCardDetail() {
   const yearMonth = months.value[monthIndex.value]
   const params = yearMonth ? { yearMonth } : undefined
 
-  await Promise.all([
-    fetchUsage(cardId, params).catch(() => {}),
-    fetchTransactions(cardId, params).catch(() => {}),
+  const [, detail] = await Promise.all([
+    fetchUsage(cardId, params).catch(() => null),
+    fetchTransactions(cardId, params).catch(() => null),
   ])
+
+  // 첫 묶음이므로 갈아끼운다. 실패해서 detail 이 null 이어도 비우는 게 맞다 —
+  // 카드나 월이 바뀐 상황이라 이전 목록을 그대로 두면 다른 달 내역을 보여주게 된다.
+  applyTransactionPage(detail, { append: false })
 
   const available = usage.value?.availableYearMonths ?? transactionDetail.value?.availableYearMonths
   if (available?.length) months.value = available
+}
+
+/**
+ * 다음 묶음을 이어붙인다.
+ *
+ * 커서는 **요청의 카드·연월과 일치해야 한다.** 어긋나면 백엔드가
+ * `400 INVALID_TRANSACTION_CURSOR` 를 준다. 그래서 지금 화면이 보고 있는 값으로 다시 만든다.
+ */
+async function loadMoreTransactions() {
+  if (!hasNextTransactions.value || !nextCursor.value) return
+  // 첫 조회가 도는 중이면 그 결과가 목록을 갈아끼울 참이라 지금 잇는 것은 의미가 없다.
+  if (isLoadingMore.value || isTransactionsLoading.value) return
+
+  const cardId = activeCard.value.id
+  const yearMonth = months.value[monthIndex.value]
+  if (!cardId) return
+
+  try {
+    const detail = await fetchMoreTransactions(cardId, { yearMonth, cursor: nextCursor.value })
+    applyTransactionPage(detail, { append: true })
+  } catch (error) {
+    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
+  }
 }
 
 // 카드를 바꾸면 그 카드의 실적·내역을 다시 받는다. 월 선택과 구간 선택도 처음으로 돌린다.
@@ -247,9 +314,8 @@ function toTransaction(item) {
   }
 }
 
-const transactions = computed(() =>
-  (transactionDetail.value?.transactions?.content ?? []).map(toTransaction),
-)
+// 마지막 묶음이 아니라 지금까지 이어붙인 전부다 (#87).
+const transactions = computed(() => loadedTransactions.value.map(toTransaction))
 const recentTransactions = computed(() => transactions.value.slice(0, 3))
 
 const groupedTransactions = computed(() => {
@@ -261,6 +327,38 @@ const groupedTransactions = computed(() => {
   })
   return groups
 })
+
+/* ─── 무한 스크롤 (#87) ──────────────────────────────────────────────────── */
+
+const transactionScroll = ref(null)
+const loadMoreAnchor = ref(null)
+let loadMoreObserver = null
+
+/**
+ * 목록 끝이 보이면 다음 묶음을 부른다.
+ *
+ * **`root` 를 반드시 넘긴다.** 이 화면은 창이 아니라 `.mycard-transaction-scroll` 안에서
+ * 스크롤된다. root 를 비우면 뷰포트를 기준으로 삼아, 컨테이너 안에서 아무리 내려도
+ * 감지되지 않는다.
+ *
+ * 앵커는 `hasNext` 일 때만 그려지므로, 마지막 묶음까지 받으면 사라지고 관찰도 끊긴다.
+ */
+watch([transactionScroll, loadMoreAnchor], ([root, anchor]) => {
+  loadMoreObserver?.disconnect()
+  loadMoreObserver = null
+  if (!root || !anchor) return
+
+  loadMoreObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) loadMoreTransactions()
+    },
+    // 끝에 닿기 전에 미리 부른다. 다 내린 뒤 기다리면 끊겨 보인다.
+    { root, rootMargin: '160px' },
+  )
+  loadMoreObserver.observe(anchor)
+})
+
+onBeforeUnmount(() => loadMoreObserver?.disconnect())
 
 /**
  * 화면 상단 금액. 목록을 더해서 만들지 않는다.
@@ -675,7 +773,7 @@ function dateLabel(date) {
           <Menu :size="22" />
         </button>
       </header>
-      <div class="mycard-transaction-scroll">
+      <div ref="transactionScroll" class="mycard-transaction-scroll">
         <section class="mycard-transaction-summary">
           <div class="mycard-compact-card">
             <img
@@ -741,7 +839,20 @@ function dateLabel(date) {
             </article>
           </div>
         </section>
-        <p v-if="!isTransactionsLoading" class="mycard-history-notice">
+        <!-- 목록 끝. 보이면 다음 묶음을 부른다.
+             IntersectionObserver 가 안 먹는 상황에도 손으로 더 볼 수 있게 버튼으로 둔다. -->
+        <button
+          v-if="hasNextTransactions"
+          ref="loadMoreAnchor"
+          type="button"
+          class="w-full py-4 text-center text-[13px] text-sub"
+          :disabled="isLoadingMore"
+          @click="loadMoreTransactions"
+        >
+          {{ isLoadingMore ? '더 불러오는 중이에요' : '더 보기' }}
+        </button>
+
+        <p v-if="!isTransactionsLoading && !hasNextTransactions" class="mycard-history-notice">
           최근 3개월 내역을 제공합니다.
         </p>
       </div>
