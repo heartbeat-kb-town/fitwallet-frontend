@@ -28,27 +28,32 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
 현재 `src`는 동작하는 UI 프로토타입이고 앱 골격이 아니다.
 규칙만 믿고 코드를 짜면 "규칙대로 짰는데 안 돌아가는" 상황이 생긴다.
 
-| 규칙                       | 상태                                                                             |
-| -------------------------- | -------------------------------------------------------------------------------- |
-| 라우터                     | **부트스트랩됨** — 라우트 추가는 `router/routes.js`                              |
-| Pinia                      | **부트스트랩됨** — store 를 만들면 바로 동작한다                                 |
-| `src/api/client.js`        | **추가됨** — `useAsyncState`도 함께                                              |
-| 도메인 API                 | `userApi` · `cardApi` · `paymentApi` · `storeApi` — `benefit` · `report` 는 아직 |
-| Tailwind `@theme` 토큰     | **정의됨** — 유틸리티 사용 가능 (Preflight 는 제외)                              |
-| `components/common/`       | **추가됨** — `Base*` 5종 + `useToast()`                                          |
-| `src/views/` 이관          | **완료** — 화면 14개가 라우트와 1:1                                              |
-| `@tanstack/vue-query` 제거 | **완료** — 의존성에서 제거됨                                                     |
-| 폴더 구조·네이밍·Git 규칙  | **즉시 적용** — 코드 없이도 바로 지킬 수 있다                                    |
+| 규칙                       | 상태                                                                               |
+| -------------------------- | ---------------------------------------------------------------------------------- |
+| 라우터                     | **부트스트랩됨** — 라우트 추가는 `router/routes.js`                                |
+| Pinia                      | **부트스트랩됨** — store 를 만들면 바로 동작한다                                   |
+| `src/api/client.js`        | **추가됨** — `useAsyncState`도 함께                                                |
+| 도메인 API                 | **6개 전부 연동됨** — `user` · `card` · `payment` · `store` · `benefit` · `report` |
+| Tailwind `@theme` 토큰     | **정의됨** — 유틸리티 사용 가능 (Preflight 는 제외)                                |
+| `components/common/`       | **추가됨** — `Base*` 5종 + `useToast()`                                            |
+| `src/views/` 이관          | **완료** — 화면 14개가 라우트와 1:1                                                |
+| `@tanstack/vue-query` 제거 | **완료** — 의존성에서 제거됨                                                       |
+| 폴더 구조·네이밍·Git 규칙  | **즉시 적용** — 코드 없이도 바로 지킬 수 있다                                      |
 
 **지금 코드가 어떻게 돼 있나**
 
 - `src/App.vue`는 `<RouterView />` + `<BaseToast />`만 남았다. **더 이상 고치지 않는다.**
   화면은 전부 `src/views/`에 있고 라우트와 1:1이다. 새 화면은 `views/`에 만들고
   `routes.js`의 catch-all 바로 위에 한 줄 추가한다.
-- 스타일은 전역 `src/style.css` 4740줄 한 파일이고 `<style scoped>`가 하나도 없다.
+- 스타일은 전역 `src/style.css` 4772줄 한 파일이고 `<style scoped>`가 하나도 없다.
 - 보유 카드는 `cardStore` 하나에서만 나온다. 화면이 자체 카드 배열을 두지 않는다(#76).
-  `src/cardData.js`는 목데이터가 아니라, 목록 응답에 없는 카드사명·카드 이미지를
-  메꾸는 **표시 메타**다. 백엔드가 필드를 실어주면 사라진다(backend#111).
+  **단 홈 화면은 아직 예외다** — `src/data.js`의 목 카드를 쓴다(아래 목데이터 항목 참고).
+- **카드 그림은 실제 카드 이미지다**(#97). 예전에는 `payment-card-sheet.png` 한 장을
+  잘라 4종을 돌려 썼는데 실제 카드 상품과 아무 관계가 없었다.
+  `cardStore.ensureCardImages()`가 카드별 요약(`/card/{id}/summary`)에서 `cardImageUrl`을
+  받아 채운다. **목록 응답(`/user-cards`)에는 이 필드가 없어서 카드 수만큼 더 부른다.**
+  백엔드가 `cardListColumns`에 `cp.card_image_url`을 실어주면 이 단계는 사라진다(backend#111).
+  `src/cardData.js`에는 이제 카드사명 추출(`splitCardName`)만 남아 있다.
 - `MyCardView`의 이용 실적·결제 내역도 API에서 온다(#77).
   단 결제 내역은 **첫 묶음만** 보여준다. 백엔드가 커서 방식이라 `hasNext`·`nextCursor`가
   오는데 무한 스크롤을 아직 안 붙였다.
@@ -56,9 +61,31 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
   `/store/search`로 키워드 검색을 하면 백엔드가 기록하고 `/store/keywords`가 읽는다.
 - 가맹점 조회는 위도·경도가 필수다. `src/utils/geolocation.js`가 확보하고,
   못 구하면 시연용 좌표로 떨어진다. 시드 가맹점이 광진구 일대에만 있어서다.
-- 남은 목데이터는 `src/data.js`뿐이다. 홈 화면이 직접 import한다
-  (`categories`는 가맹점 화면도 아이콘 때문에 쓴다).
-  `benefit`·`report` 도메인을 연동하면 대부분 사라진다.
+- 피그의 PICK 카드 추천도 API에서 온다(#92). 가맹점마다 결과가 달라진다.
+  **정렬을 화면에서 하지 않는다** — 백엔드가 `AVAILABLE` → `CONDITION_NOT_MET` →
+  `NO_BENEFIT` 순으로 내려준다.
+- 카드사 이미지는 방향이 섞여 있다. KB·신한은 가로(약 1.58), **현대는 세로(0.63)**다.
+  URL로는 알 수 없다 — 신한 `..._v_f_s.png`가 실제로는 가로고, 현대 `card_ZWK_h.png`는
+  `_h`가 붙었는데 세로다. 로드 후 실제 크기로 판별하고, 세로는 반시계로 눕혀 채운다.
+  이 처리는 **`composables/useCardImage.js` 하나에 있다.** 화면마다 짜지 않는다.
+  - **방향은 카드 id가 아니라 이미지 URL로 기억한다.** 화면마다 카드를 가리키는 키가
+    다르다(가맹점은 `userCardId`, 리포트 카드 추천은 `cardProductId`). id로 잡으면
+    서로 다른 카드가 같은 칸을 차지한다.
+  - `cardImageStyle(url, boxRatio)`의 `boxRatio`는 **칸**의 비율이지 카드의 비율이 아니다.
+    눕힌 뒤 칸을 채우려면 가로·세로를 칸 기준으로 맞바꿔야 해서다.
+    결제 화면의 칸은 344×198(1.74)이라 다른 칸(약 1.58)과 값이 다르다.
+- 리포트 **메인 화면**은 API에서 온다(#95). 받은·놓친 혜택 총액, 도넛, 카테고리 랭킹,
+  카드 추천이 `/report/benefit/summary` 하나로 그려진다. 월을 바꾸면 다시 조회한다.
+  **정렬을 화면에서 하지 않는다** — 카테고리는 매퍼가 혜택 내림차순 상위 5개로,
+  카드 추천은 서비스가 예상 혜택 내림차순 상위 2건으로 잘라서 준다.
+- **목데이터가 남은 곳은 둘이다.**
+  - `src/data.js` — 홈 화면이 직접 import한다
+    (`categories`는 가맹점 화면도 아이콘 때문에 쓴다).
+    카드 목록·혜택 현황·이벤트가 여기 있고, 홈에 뜨는 카드는 **실제 보유 카드가 아니다.**
+  - `ReportView.vue` 안 — **받은 혜택 상세(카드별)** 와 **놓친 혜택 상세**다.
+    둘 다 백엔드가 없다. 카드별 상세는 응답 DTO(`CardBenefitDetailResponse`)만 있고
+    컨트롤러·서비스·매퍼가 없으며(backend#116), 놓친 혜택은 요약 API가 총액 하나만 준다.
+    **총액만 실연동하지 않는다** — 그 화면 안에서 `총액 ≠ 항목 합`이 되어 더 나빠진다.
 
 **따라서**
 
@@ -80,7 +107,7 @@ src/
 │  ├─ index.js
 │  └─ routes.js             라우트 추가는 배열 끝에 한 줄
 ├─ stores/                  authStore.js, cardStore.js …
-├─ composables/             useAsyncState.js, useToast.js …
+├─ composables/             useAsyncState.js, useToast.js, useCardImage.js …
 ├─ views/                   라우트와 1:1 대응하는 화면
 ├─ components/
 │  ├─ common/               BaseButton, BaseToast … 프로젝트 전역 재사용
@@ -229,13 +256,21 @@ grep -rn "Mapping(" ../fitwallet-backend/src/main/java/com/fitwallet/domain/*/co
 
 `setAccessToken()` / `clearAccessToken()`을 `client.js`에서 export하고 로그인·로그아웃 시 갈아끼운다.
 
-### 현재 제약 — 재발급·로그아웃 엔드포인트 미구현
+### 현재 제약 — 새로고침하면 로그아웃된다 (재발급 미연동)
 
 메모리 보관이라 **새로고침하면 access token이 날아간다.**
-원래는 앱 부팅 시 재발급 API로 복구하지만, 백엔드에 `/reissue`와 `/logout`이 아직 없다.
+원래는 앱 부팅 시 재발급 API로 복구해야 하는데 **아직 연동하지 않았다.**
 
-- 그전까지 401 처리는 **재발급 시도 없이** access token을 비우고 로그인 화면으로 보낸다.
-- 엔드포인트가 생기면 `401 → 재발급 → 원요청 재시도`로 교체한다 (경로는 백엔드 확정 후 반영).
+> ⚠️ **백엔드에는 `/api/user/reissue`가 이미 있다** (`UserController.java`, `POST`).
+> 응답은 `TokenReissueResponse`이고 refreshToken 쿠키를 읽어 새 access token을 준다.
+> 문서가 "없다"고 적혀 있던 시절의 판단을 그대로 믿지 말 것 — **프론트가 안 붙였을 뿐이다.**
+> `/logout`은 아직 없다(백엔드 전체에 `logout` 문자열이 없다).
+
+- 지금 401 처리는 **재발급 시도 없이** access token을 비우고 로그인 화면으로 보낸다.
+- 붙일 때는 `401 → 재발급 → 원요청 재시도`로 교체하고, 앱 부팅 시에도 한 번 시도한다.
+  재발급까지 실패하면 그때 로그인으로 보낸다.
+- 로컬에서 화면을 확인할 때 이게 계속 발목을 잡는다. **로그인 후에는 주소로 이동하지 말고
+  화면 안 버튼으로만 이동해야 한다.**
 
 라우터 가드는 `meta.requiresAuth`가 있는 라우트에서 토큰이 없으면 `login`으로 리다이렉트한다.
 
@@ -326,7 +361,7 @@ export const useCardStore = defineStore('card', () => {
 
 - 디자인 토큰은 `@theme`로 정의하고 `bg-primary`, `text-ink`, `border-line`처럼 쓴다.
 - **색상 하드코딩(`#FFCC00`) 금지.** 반드시 토큰을 쓴다. 토큰에 없는 색이 필요하면 토큰을 먼저 추가한다.
-- 기존 `src/style.css` 4740줄은 **동결**이다. 기존 화면의 버그 수정만 허용하고, **새 클래스 추가는 금지**한다.
+- 기존 `src/style.css` 4772줄은 **동결**이다. 기존 화면의 버그 수정만 허용하고, **새 클래스 추가는 금지**한다.
 - 클래스가 길어져 읽기 어려우면 `@apply` 대신 **컴포넌트로 분리**한다.
 
 ```css
@@ -343,11 +378,19 @@ export const useCardStore = defineStore('card', () => {
   --color-line: #e9e4dc;
   --color-icon-bg: #fff8e5;
   --color-muted: #d4c4ab;
+
+  /* muted 보다 옅은 두 단계. 리포트 도넛이 카테고리 5개를 칠하는 데 쓴다 */
+  --color-muted-soft: #ede8e0;
+  --color-muted-softer: #f5f2ee;
+
+  /* 검증 실패 인라인 메시지와 토스트 */
+  --color-danger: #d62828;
+  --color-danger-bg: #fdecea;
 }
 ```
 
 **Preflight(Tailwind 전역 리셋)는 일부러 빼놨다.** `@import 'tailwindcss'` 한 줄로 가져오면
-Preflight가 딸려 오는데, 그게 `html`에 `line-height: 1.5`를 건다. 기존 `style.css` 4740줄은
+Preflight가 딸려 오는데, 그게 `html`에 `line-height: 1.5`를 건다. 기존 `style.css` 4772줄은
 line-height를 지정한 적이 없어 전부 `normal`(≈1.2)로 그려진 코드라, 리셋이 들어가면 텍스트
 블록마다 높이가 늘어 화면 아래로 갈수록 밀린다 (홈 카테고리 타일 109px → 112.8px로 확인).
 그래서 theme·utilities만 가져온다. 기존 화면을 전부 Tailwind로 이관한 뒤에 Preflight를 켜는
@@ -429,9 +472,19 @@ line-height를 지정한 적이 없어 전부 `normal`(≈1.2)로 그려진 코�
   경로(`/home` 등)가 새로고침·직접 진입에서 전부 404다.
 - 로컬에서 배포본 그대로 확인: `npm run build && npm run preview:worker`
 
-### 배포는 push 하면 자동으로 된다
+### 배포 경로 — 프로덕션은 `main` 뿐이다
 
-Cloudflare **Workers Builds**(Git 연동)가 `wrangler.jsonc`를 읽고 `wrangler deploy`를 돌린다.
+Cloudflare **Workers Builds**(Git 연동)가 `wrangler.jsonc`를 읽고 push 마다 빌드한다.
+**어느 브랜치냐에 따라 결과가 다르다.**
+
+| push 대상         | 실행되는 명령                  | 결과                              |
+| ----------------- | ------------------------------ | --------------------------------- |
+| `main` (프로덕션) | `npx wrangler deploy`          | **프로덕션 갱신**                 |
+| 그 외 모든 브랜치 | `npx wrangler versions upload` | 프리뷰 버전만 생성. 프로덕션 불변 |
+
+그래서 **프로덕션을 갱신하려면 `develop` → `main` 릴리스 PR을 머지해야 한다.**
+작업 브랜치를 push 해도 라이브는 그대로다 (2026-08-05 이전에는 아니었다 — #85).
+
 `npm run deploy`는 수동 배포용이고 평소에는 쓰지 않는다. 손으로 돌리면 Git 연동이 올린 것과
 어긋나므로, 대시보드에서 이력을 확인해야 하는 상황이 아니면 건드리지 않는다.
 
@@ -445,13 +498,15 @@ Cloudflare **Workers Builds**(Git 연동)가 `wrangler.jsonc`를 읽고 `wrangle
   gh api "repos/$R/commits/$S/check-runs" --jq '.check_runs[].output.summary' | grep "Version ID"
   ```
 
-> 🔥 **지금은 어느 브랜치를 push 하든 프로덕션이 그 브랜치로 갈린다** (#85).
-> 머지도 리뷰도 필요 없다. 실제로 2026-08-05에 서로 다른 두 사람의 작업 브랜치가
-> PR이 열려 있는 상태에서 프로덕션에 나갔다.
+- 잘못 배포됐으면 `npx wrangler rollback {version-id}`로 되돌린다.
+
+> ⚠️ **비프로덕션 Deploy command에는 `npx`가 필요하다.** `wrangler versions upload`로만
+> 적으면 빌드 환경 PATH에 `wrangler`가 없어 빌드가 실패한다. 설정을 바꿀 일이 있으면 주의한다.
 >
-> **그때까지는 작업 브랜치 push = 라이브 반영이다.** 깨진 상태를 push 하지 않는다.
-> 되돌리려면 정상 커밋을 다시 push 하거나 `npx wrangler rollback {version-id}`를 쓴다.
-> 이 제약이 풀리면 이 문단을 지우고 실제 정책(어느 브랜치가 프로덕션인가)으로 교체한다.
+> 그리고 `main`을 오래 방치하지 않는다. **프로덕션에 나가는 것은 `main`이므로,
+> `main`이 뒤처져 있으면 다음 릴리스가 그만큼 큰 덩어리로 나간다.**
+> 실제로 `main`이 73커밋 뒤처진 채 방치돼 있었고, 그동안 프로덕션이 최신이었던 것은
+> #85 버그(모든 브랜치가 프로덕션을 덮어씀) 때문이었다.
 
 > ⚠️ **Worker ↔ 백엔드 구간은 평문 HTTP다.** 로그인 비밀번호와 토큰이 암호화 없이 지난다.
 > `*.elasticbeanstalk.com`은 ACM 인증서를 발급받을 수 없어(도메인 소유 확인 불가)

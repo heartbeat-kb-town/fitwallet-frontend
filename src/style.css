@@ -20,6 +20,12 @@
   --color-icon-bg: #fff8e5;
   --color-muted: #d4c4ab;
 
+  /* muted 보다 더 옅은 두 단계. 리포트 도넛 차트가 카테고리 5개를 칠하는 데 쓴다.
+     primary → primary-dark → muted 까지는 기존 토큰으로 되는데 4·5번째 색이 없었다.
+     값은 하드코딩돼 있던 기존 차트 팔레트에서 그대로 가져왔다. */
+  --color-muted-soft: #ede8e0;
+  --color-muted-softer: #f5f2ee;
+
   /* 에러 표시용. 기존 화면(.pick-ineligible 등)이 쓰던 값을 그대로 토큰화했다.
      검증 실패 인라인 메시지와 토스트가 이 색을 쓴다. */
   --color-danger: #d62828;

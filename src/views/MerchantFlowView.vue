@@ -1,13 +1,15 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Menu } from 'lucide-vue-next'
 import { categories } from '@/data'
+import * as benefitApi from '@/api/benefitApi'
+import { CARD_BENEFIT_STATUS } from '@/api/benefitApi'
 import * as storeApi from '@/api/storeApi'
 import { useAsyncState } from '@/composables/useAsyncState'
+import { CARD_RATIO, useCardImage } from '@/composables/useCardImage'
 import { useToast } from '@/composables/useToast'
 import { getCurrentCoordinates } from '@/utils/geolocation'
-import { useCardStore } from '@/stores/cardStore'
 import { usePaymentStore } from '@/stores/paymentStore'
 
 /**
@@ -33,11 +35,12 @@ import iconReport from '@/assets/icons/report.svg'
 
 const route = useRoute()
 const router = useRouter()
-const cardStore = useCardStore()
 const paymentStore = usePaymentStore()
 const { showToast } = useToast()
+const { markCardImageOrientation, cardImageStyle } = useCardImage()
 
-onMounted(() => cardStore.ensureCards())
+// 보유 카드 목록(`cardStore`)을 여기서 쓰지 않는다. 예상 혜택 응답이 카드 id·이름·이미지를
+// 함께 주므로 이 화면이 알아야 할 카드 정보는 그 응답에 다 있다.
 
 const str = (value, fallback = '') => (typeof value === 'string' ? value : fallback)
 
@@ -148,57 +151,100 @@ watch(stores, (list) => {
   selectedStore.value = list.find((store) => store.storeName === initialStoreName.value) ?? null
 })
 
-const cardPicks = [
-  {
-    cardIndex: 0,
-    issuer: '신한카드',
-    name: 'Deep Dream',
-    status: 'recommended',
-    statusLabel: '추천',
-    benefit: '혜택 이름',
-    expected: '5000원 할인',
-    gradient: 'linear-gradient(135deg,#6ba8d4 0%,#4a86b8 60%,#2e6491 100%)',
-    text: '#fff',
-    sub: 'rgba(255,255,255,.72)',
-  },
-  {
-    cardIndex: 1,
-    issuer: '국민카드',
-    name: '똑똑O',
-    status: 'recommended',
-    statusLabel: '추천',
-    benefit: 'KB 국민 청춘 혜택',
-    expected: '10% 할인',
-    gradient: 'linear-gradient(135deg,#3d3428 0%,#5c4e3a 50%,#3d3428 100%)',
-    text: '#fff',
-    sub: 'rgba(255,255,255,.65)',
-  },
-  {
-    cardIndex: 2,
-    issuer: '현대카드',
-    name: 'ZERO',
-    status: 'none',
-    statusLabel: '혜택 없음',
-    reason: '이 결제에는 적용되는 혜택이 없어요.',
-    expected: '0원',
-    gradient: 'linear-gradient(135deg,#e8e4de 0%,#d8d2c8 100%)',
-    text: '#3a3530',
-    sub: '#8a8480',
-  },
-  {
-    cardIndex: 3,
-    issuer: '우리카드',
-    name: 'DA@카드의정석',
-    status: 'disabled',
-    statusLabel: '조건 불가',
-    reason: '전월 실적 미충족',
-    detail: '전월실적 조건이 부족해서 혜택을 받을 수 없어요.',
-    expected: '0원',
-    gradient: 'linear-gradient(135deg,#2c2820 0%,#453d30 50%,#2c2820 100%)',
-    text: '#e8c96a',
-    sub: 'rgba(232,201,106,.72)',
-  },
-]
+const {
+  data: expectedBenefits,
+  isLoading: isPicksLoading,
+  execute: fetchExpectedBenefits,
+} = useAsyncState(benefitApi.getExpectedBenefits)
+
+/**
+ * 상태 배지를 오른쪽 위로 옮기는 스타일.
+ *
+ * `.pick-status` 는 `style.css` 에서 **왼쪽 위**에 붙는데, 카드 이미지의 카드명이
+ * 딱 그 자리라 가려진다 (KB 이미지 기준 좌상단에 "KB 국민카드 / 청춘대로 | 톡톡").
+ *
+ * 동결된 `style.css` 를 건드리지 않고 이 화면에서만 옮긴다.
+ * Tailwind 유틸리티로는 안 된다 — `style.css` 규칙이 레이어 밖이라
+ * `@layer utilities` 를 이긴다. 인라인만 확실히 덮는다.
+ */
+const PICK_STATUS_STYLE = { left: 'auto', right: '0', borderRadius: '0 0 0 11px' }
+
+/**
+ * 카드 그림 칸의 비율. 실제 카드 비율(약 1.58)에 맞춘다.
+ *
+ * `style.css` 의 `.pick-card-visual` 은 `aspect-ratio: 1.79/1` 인데 카드사 이미지는
+ * KB 1.58 · 신한 1.59 다. 칸이 더 넓어서 `cover` 로 채우면 **위아래가 잘린다.**
+ * 어느 쪽을 기준으로 잡아도 뭔가는 잘려나갔다.
+ *   - 위 기준: 신한 카드 왼쪽 세로 로고("ShinhanCard")의 아래쪽 글자가 잘린다
+ *   - 가운데:  KB 카드 좌상단 카드명이 깎인다
+ *
+ * 칸을 카드 비율로 맞추면 가로 카드는 **잘림도 여백도 없이** 딱 맞는다.
+ * 동결된 `style.css` 를 건드리지 않으려고 인라인으로 덮는다.
+ */
+const PICK_VISUAL_STYLE = { aspectRatio: `${CARD_RATIO} / 1` }
+
+/**
+ * 카드 그림을 칸에 어떻게 앉힐지.
+ *
+ * 세로 카드(현대카드는 CDN 이미지가 전부 604×956 이다)는 **눕힌다.**
+ * 가로 칸에 세로 이미지를 그냥 채우면 위쪽 35% 만 남아 어느 카드인지 알 수 없고,
+ * 여백을 두면 화면이 비어 보인다. 실물 세로 카드를 가로로 든 모습과 같으니
+ * 돌려서 채우는 게 맞다 — 신한 카드도 로고가 세로로 쓰여 있어 같은 관례다.
+ *
+ * 판별과 계산은 `useCardImage` 가 한다 (#97). 위에서 칸을 카드 비율로 맞춰놨으므로
+ * 기본값(`CARD_RATIO`)을 그대로 쓴다.
+ */
+function pickImageStyle(pick) {
+  return cardImageStyle(pick.cardImageUrl)
+}
+
+// 화면이 쓰던 세 갈래가 백엔드 판정과 그대로 대응된다.
+const PICK_VIEW = {
+  [CARD_BENEFIT_STATUS.AVAILABLE]: { className: 'recommended', label: '추천' },
+  [CARD_BENEFIT_STATUS.CONDITION_NOT_MET]: { className: 'disabled', label: '조건 불가' },
+  [CARD_BENEFIT_STATUS.NO_BENEFIT]: { className: 'none', label: '혜택 없음' },
+}
+
+/**
+ * 피그의 PICK 목록.
+ *
+ * **다시 정렬하지 않는다.** 백엔드가 AVAILABLE → CONDITION_NOT_MET → NO_BENEFIT
+ * 순으로 이미 정렬해 준다. 화면이 또 정렬하면 그 기준이 두 곳에 생긴다.
+ */
+const cardPicks = computed(() =>
+  (expectedBenefits.value?.cards ?? []).map((card) => {
+    const view = PICK_VIEW[card.status] ?? PICK_VIEW[CARD_BENEFIT_STATUS.NO_BENEFIT]
+    const isAvailable = card.status === CARD_BENEFIT_STATUS.AVAILABLE
+
+    return {
+      // 결제로 넘길 때 이 id 를 그대로 쓴다. 추천 목록의 자리와 보유 카드의 자리는 다르다.
+      userCardId: card.userCardId,
+      issuer: card.cardCompanyName,
+      name: card.cardName,
+      cardImageUrl: card.cardImageUrl,
+      status: view.className,
+      statusLabel: view.label,
+      benefit: card.benefit?.benefitName,
+      // 안내 문구는 서버가 사유마다 다르게 만들어 준다. 화면이 지어내지 않는다.
+      reason: card.reason?.message,
+      // 받을 수 있을 때만 금액을 보여준다. 한도가 소진된 혜택은 benefit 이 와도 0원이다.
+      expected: isAvailable ? (card.benefit?.displayText ?? '0원') : '0원',
+    }
+  }),
+)
+
+/** 보유 카드가 아예 없는 경우. 카드가 없어도 200 이라 이 값으로 갈라야 한다. */
+const hasNoCard = computed(() => expectedBenefits.value?.hasCard === false)
+
+// 가맹점을 고르면 그 가맹점 기준으로 보유 카드를 판정받는다. 가맹점을 바꾸면 다시 받는다.
+watch(selectedStore, async (store) => {
+  if (!store) return
+  try {
+    await fetchExpectedBenefits(store.storeId)
+  } catch (error) {
+    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
+  }
+})
 
 function formatDistance(distance) {
   return distance >= 1000 ? `${(distance / 1000).toFixed(1)}km` : `${distance}m`
@@ -247,7 +293,9 @@ async function confirmPin() {
     shakePinDots()
     return
   }
-  const userCardId = cardStore.cards[pendingPick.value.cardIndex]?.id
+  // 추천 응답이 카드 id 를 그대로 준다. 예전에는 추천 목록의 자리를 보유 카드 목록의
+  // 자리로 가정해 넘겼는데(#76 의 TODO), 두 목록은 정렬 기준이 달라 어긋날 수 있었다.
+  const userCardId = pendingPick.value?.userCardId
   if (!userCardId || paymentStore.isVerifyingPin) return
 
   pinMessage.value = ''
@@ -358,19 +406,36 @@ async function confirmPin() {
       </div>
 
       <div class="pick-list">
-        <article v-for="pick in cardPicks" :key="pick.name" class="pick-card-wrap">
+        <p v-if="isPicksLoading" class="py-8 text-center text-[13px] text-sub">
+          피그가 카드를 고르는 중이에요
+        </p>
+        <p v-else-if="hasNoCard" class="py-8 text-center text-[13px] text-sub">
+          보유한 카드가 없어요. 카드를 먼저 등록해 주세요
+        </p>
+
+        <article v-for="pick in cardPicks" :key="pick.userCardId" class="pick-card-wrap">
           <button
-            class="pick-card-visual"
+            class="pick-card-visual bg-ink text-white"
             type="button"
-            :style="{ background: pick.gradient, color: pick.text }"
+            :style="PICK_VISUAL_STYLE"
             @click="chooseCard(pick)"
           >
-            <span class="pick-status" :class="pick.status">{{ pick.statusLabel }}</span>
-            <span class="pick-card-copy">
-              <small :style="{ color: pick.sub }">{{ pick.issuer }}</small>
+            <!-- 배지보다 먼저 놓아야 배지가 그림 위에 올라온다. -->
+            <img
+              v-if="pick.cardImageUrl"
+              :src="pick.cardImageUrl"
+              alt=""
+              :style="pickImageStyle(pick)"
+              @load="markCardImageOrientation"
+            />
+            <span class="pick-status" :class="pick.status" :style="PICK_STATUS_STYLE">
+              {{ pick.statusLabel }}
+            </span>
+            <!-- 카드 이미지가 있으면 카드 앞면에 이름이 이미 찍혀 있다. 글자를 겹쳐 쓰지 않는다. -->
+            <span v-if="!pick.cardImageUrl" class="pick-card-copy">
+              <small>{{ pick.issuer }}</small>
               <strong>{{ pick.name }}</strong>
             </span>
-            <span class="pick-chip" :style="{ borderColor: pick.sub }"></span>
           </button>
 
           <div class="pick-card-info">
@@ -381,10 +446,7 @@ async function confirmPin() {
             <p v-else-if="pick.status === 'none'" class="pick-no-benefit">
               <span>혜택없음</span>{{ pick.reason }}
             </p>
-            <template v-else>
-              <p class="pick-ineligible"><span>주의</span>{{ pick.reason }}</p>
-              <p class="pick-warning">{{ pick.detail }}</p>
-            </template>
+            <p v-else class="pick-ineligible"><span>주의</span>{{ pick.reason }}</p>
 
             <div class="pick-expected">
               <span>예상 혜택</span>

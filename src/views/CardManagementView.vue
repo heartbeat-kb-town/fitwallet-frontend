@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Check, ChevronDown, ChevronUp, GripVertical } from 'lucide-vue-next'
-import cardSheet from '@/assets/cards/payment-card-sheet.png'
+import { useCardImage } from '@/composables/useCardImage'
 import { useCardStore } from '@/stores/cardStore'
 
 const route = useRoute()
@@ -12,7 +12,12 @@ const cardStore = useCardStore()
 const cards = computed(() => cardStore.cards)
 const draggingId = ref('')
 
-onMounted(() => cardStore.ensureCards())
+const { markCardImageOrientation, cardImageStyle } = useCardImage()
+
+// `.managed-card-thumb` 는 76×48 이다. 세로 이미지를 눕힐 때 이 비율이 필요하다.
+const THUMB_RATIO = 76 / 48
+
+onMounted(() => cardStore.ensureCardsWithImages())
 
 // 마이페이지가 넘겨준 `returnTo`(원래 온 주소)를 그대로 되돌려준다.
 // 마이페이지 → 뒤로 → 원래 화면 순서가 유지돼야 기존 동작과 같다. (#52, #61)
@@ -89,10 +94,12 @@ function moveCard(index, direction) {
 
           <div class="managed-card-thumb">
             <img
-              :src="cardSheet"
+              v-if="card.cardImageUrl"
+              :src="card.cardImageUrl"
               alt=""
               draggable="false"
-              :style="{ top: `${-card.cropY * 0.173}px` }"
+              :style="cardImageStyle(card.cardImageUrl, THUMB_RATIO)"
+              @load="markCardImageOrientation"
             />
           </div>
 
