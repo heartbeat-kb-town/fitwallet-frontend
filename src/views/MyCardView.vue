@@ -15,11 +15,11 @@ import iconRefuel from '@/assets/icons/category-refuel.svg'
 import iconTransport from '@/assets/icons/potentialbenefit-transportation.svg'
 import iconTelecom from '@/assets/icons/category-telecom.svg'
 import iconAll from '@/assets/icons/category-all.svg'
-import cardSheet from '@/assets/cards/payment-card-sheet.png'
 import pigFace from '@/assets/icons/pig-face.svg'
 
 import * as cardApi from '@/api/cardApi'
 import { useAsyncState } from '@/composables/useAsyncState'
+import { useCardImage } from '@/composables/useCardImage'
 import { useCardStore } from '@/stores/cardStore'
 import { usePaymentStore } from '@/stores/paymentStore'
 
@@ -28,7 +28,13 @@ const router = useRouter()
 const cardStore = useCardStore()
 const paymentStore = usePaymentStore()
 
-onMounted(() => cardStore.ensureCards())
+const { markCardImageOrientation, cardImageStyle: fitCardImage } = useCardImage()
+
+// 카드 그림 칸은 두 크기다. 세로 이미지를 눕힐 때 각 칸의 비율이 필요하다.
+const CARD_PHOTO_RATIO = 322 / 203 //  .mycard-card-photo
+const COMPACT_PHOTO_RATIO = 80 / 50 //  .mycard-compact-card
+
+onMounted(() => cardStore.ensureCardsWithImages())
 
 function goHome() {
   router.push({ name: 'home' })
@@ -64,7 +70,7 @@ const EMPTY_CARD = {
   amountLabel: '결제 예정 금액',
   amount: 0,
   account: '',
-  cropY: 208,
+  cardImageUrl: null,
 }
 
 /**
@@ -315,13 +321,9 @@ function moveMonth(direction) {
   monthIndex.value = Math.max(0, Math.min(months.value.length - 1, monthIndex.value + direction))
 }
 
+/** 카드 그림 스타일. 칸 크기가 둘이라 어느 칸인지에 따라 비율을 바꿔 넘긴다. */
 function cardImageStyle(card, compact = false) {
-  const scale = compact ? 0.23 : 0.92
-  return {
-    top: `${-card.cropY * scale}px`,
-    width: compact ? '101px' : '404px',
-    left: compact ? '-10px' : '-38px',
-  }
+  return fitCardImage(card.cardImageUrl, compact ? COMPACT_PHOTO_RATIO : CARD_PHOTO_RATIO)
 }
 
 function dateLabel(date) {
@@ -361,7 +363,14 @@ function dateLabel(date) {
               >
                 <div v-for="card in cards" :key="card.id" class="mycard-card-slide">
                   <div class="mycard-card-photo">
-                    <img :src="cardSheet" alt="" draggable="false" :style="cardImageStyle(card)" />
+                    <img
+                      v-if="card.cardImageUrl"
+                      :src="card.cardImageUrl"
+                      alt=""
+                      draggable="false"
+                      :style="cardImageStyle(card)"
+                      @load="markCardImageOrientation"
+                    />
                   </div>
                 </div>
               </div>
@@ -533,7 +542,13 @@ function dateLabel(date) {
               >
                 <div v-for="card in cards" :key="card.id" class="mycard-card-slide">
                   <div class="mycard-card-photo">
-                    <img :src="cardSheet" alt="" :style="cardImageStyle(card)" />
+                    <img
+                      v-if="card.cardImageUrl"
+                      :src="card.cardImageUrl"
+                      alt=""
+                      :style="cardImageStyle(card)"
+                      @load="markCardImageOrientation"
+                    />
                   </div>
                 </div>
               </div>
@@ -663,7 +678,13 @@ function dateLabel(date) {
       <div class="mycard-transaction-scroll">
         <section class="mycard-transaction-summary">
           <div class="mycard-compact-card">
-            <img :src="cardSheet" alt="" :style="cardImageStyle(activeCard, true)" />
+            <img
+              v-if="activeCard.cardImageUrl"
+              :src="activeCard.cardImageUrl"
+              alt=""
+              :style="cardImageStyle(activeCard, true)"
+              @load="markCardImageOrientation"
+            />
           </div>
           <div class="mycard-summary-copy">
             <strong>{{ activeCard.issuer }} {{ activeCard.name }}</strong>
