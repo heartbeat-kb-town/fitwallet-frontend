@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Menu, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import iconHome from '@/assets/icons/home.svg'
@@ -13,11 +13,16 @@ import iconShopping from '@/assets/icons/category-shopping.svg'
 import iconRefuel from '@/assets/icons/category-refuel.svg'
 import iconTransport from '@/assets/icons/potentialbenefit-transportation.svg'
 
+import BaseSpinner from '@/components/common/BaseSpinner.vue'
+import { useToast } from '@/composables/useToast'
 import { usePaymentStore } from '@/stores/paymentStore'
+import { useReportStore } from '@/stores/reportStore'
 
 const route = useRoute()
 const router = useRouter()
 const paymentStore = usePaymentStore()
+const reportStore = useReportStore()
+const { showToast } = useToast()
 
 // 어느 카드의 상세를 볼지는 URL 이 정한다 (#59). 없으면 전체 리포트.
 const initialCardId = typeof route.query.cardId === 'string' ? route.query.cardId : ''
@@ -42,7 +47,6 @@ function navigate(target) {
   router.push({ name: 'home' })
 }
 
-const month = ref(3)
 const page = ref(initialCardId ? 'received' : 'main')
 const missedTab = ref('app')
 const expanded = ref(new Set())
@@ -53,35 +57,154 @@ const toast = ref('')
 let animationFrame = 0
 let toastTimer
 
-const chartData = [
-  { name: '식비', value: 12000, color: '#ffcc00' },
-  { name: '마트', value: 6500, color: '#e6a800' },
-  { name: '카페', value: 4000, color: '#d4c4ab' },
-  { name: '쇼핑', value: 1500, color: '#ede8e0' },
-  { name: '통신', value: 500, color: '#f5f2ee' },
+function won(value) {
+  return `${Number(value).toLocaleString('ko-KR')}원`
+}
+
+/* ─── 조회 기간 ──────────────────────────────────────────────────────────── */
+
+// 기준은 오늘이다. 예전에는 3월이 하드코딩돼 있었고 버튼을 눌러도 숫자만 바뀌었다.
+const today = new Date()
+const cursor = ref({ year: today.getFullYear(), month: today.getMonth() + 1 })
+
+// 백엔드가 DATE_FORMAT(paid_at, '%Y-%m') 과 문자열로 비교한다.
+// `2026-8` 처럼 0 을 빼면 에러 없이 조용히 0건이 되므로 두 자리로 맞춘다.
+const yearMonth = computed(
+  () => `${cursor.value.year}-${String(cursor.value.month).padStart(2, '0')}`,
+)
+
+// 미래 달에는 결제가 있을 수 없다. 이번 달에서 다음 달 버튼을 잠근다.
+const isCurrentMonth = computed(
+  () => cursor.value.year === today.getFullYear() && cursor.value.month === today.getMonth() + 1,
+)
+
+/** 달을 옮긴다. 1월 ↔ 12월 을 넘길 때 연도까지 같이 움직여야 해서 Date 에 맡긴다. */
+function shiftMonth(delta) {
+  if (delta > 0 && isCurrentMonth.value) return
+  const shifted = new Date(cursor.value.year, cursor.value.month - 1 + delta, 1)
+  cursor.value = { year: shifted.getFullYear(), month: shifted.getMonth() + 1 }
+}
+
+/* ─── 리포트 요약 (API) ──────────────────────────────────────────────────── */
+
+const summary = computed(() => reportStore.summary)
+
+async function loadSummary() {
+  try {
+    await reportStore.fetchSummary(yearMonth.value)
+  } catch (error) {
+    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
+  }
+}
+
+// 달이 바뀌면 다시 조회한다. 화면에 들어올 때도 여기서 한 번 돈다.
+watch(yearMonth, loadSummary, { immediate: true })
+
+/**
+ * 도넛 조각 색.
+ *
+ * 색상 하드코딩 대신 `@theme` 토큰을 쓴다. 도넛은 인라인 style 의 conic-gradient 라
+ * `var()` 가 그대로 해석된다. 카테고리는 최대 5개(매퍼 LIMIT 5)라 색도 5개면 된다.
+ */
+const CHART_COLORS = [
+  'var(--color-primary)',
+  'var(--color-primary-dark)',
+  'var(--color-muted)',
+  'var(--color-muted-soft)',
+  'var(--color-muted-softer)',
 ]
 
-const rankings = [
-  { name: '식비', benefit: '12,000원', spend: '420,000원' },
-  { name: '마트', benefit: '6,500원', spend: '280,000원' },
-  { name: '카페', benefit: '4,000원', spend: '120,000원' },
-  { name: '쇼핑', benefit: '1,500원', spend: '80,000원' },
-  { name: '통신', benefit: '500원', spend: '50,000원' },
-]
+const chartData = computed(() =>
+  summary.value.categories.map((category, index) => ({
+    id: category.categoryId,
+    name: category.categoryName,
+    value: category.benefitAmount,
+    color: CHART_COLORS[index % CHART_COLORS.length],
+  })),
+)
 
-const recommendations = [
-  {
-    name: '카페 라이프 카드',
-    tags: ['카페', '생활비'],
-    description: '카페 10% 할인, 전월 실적 30만원 이상, 월 최대 1.5만원 한도',
-  },
-  {
-    name: '마트 세이브 카드',
-    tags: ['마트', '장보기'],
-    description: '마트·장보기 15% 할인, 전월 실적 40만원 이상, 월 최대 1.2만원 한도',
-  },
-]
+/**
+ * 도넛 비율의 분모. 가운데 찍히는 "총 혜택" 과 분모가 다르다.
+ *
+ * 백엔드가 카테고리를 **상위 5개만** 주므로 6번째부터의 혜택은 조각에 없다.
+ * `totalReceivedBenefit` 으로 나누면 그만큼 링이 안 닫혀 빈 부채꼴이 생긴다.
+ * 조각의 합으로 나눠 링을 채우고, 가운데 숫자는 진짜 총액을 보여준다.
+ */
+const slicesTotal = computed(() => chartData.value.reduce((sum, item) => sum + item.value, 0))
 
+const chartBackground = computed(() => {
+  // 이번 달 혜택이 0원이면 나눌 수가 없다. 빈 링으로 둔다.
+  if (!slicesTotal.value) return 'var(--color-muted-softer)'
+
+  let current = 0
+  const stops = chartData.value.map((item) => {
+    const start = current
+    current += (item.value / slicesTotal.value) * 100
+    return `${item.color} ${start}% ${current}%`
+  })
+  return `conic-gradient(${stops.join(', ')})`
+})
+
+/**
+ * 카테고리 랭킹.
+ *
+ * **다시 정렬하지 않는다.** 매퍼가 `benefitAmount DESC LIMIT 5` 로 정렬해서 준다.
+ */
+const rankings = computed(() =>
+  summary.value.categories.map((category) => ({
+    id: category.categoryId,
+    name: category.categoryName,
+    benefit: won(category.benefitAmount),
+    spend: won(category.spendAmount),
+  })),
+)
+
+/** 카드 추천. 이것도 서비스가 예상 혜택 내림차순 상위 2건으로 잘라서 준다. */
+const recommendations = computed(() => summary.value.recommendations)
+
+/**
+ * 추천 카드 그림 칸(`.recommendation-visual`)의 비율. style.css 의 96×64 를 그대로 옮겼다.
+ * 세로 이미지를 눕힐 때 쓰는 값이라 칸의 비율이지 카드의 비율이 아니다.
+ */
+const RECOMMENDATION_VISUAL_RATIO = 96 / 64
+
+/**
+ * 세로로 들어오는 카드 이미지.
+ *
+ * 카드사 이미지는 방향이 섞여 있다. KB·신한은 가로, 현대는 세로(604×956)다.
+ * URL 로는 알 수 없어서(신한 `..._v_f_s.png` 가 실제로는 가로였다) 로드된 뒤 실제 크기로 본다.
+ *
+ * TODO: `MerchantFlowView` 의 `pickImageStyle` 과 같은 처리다. 세 번째 화면이 생기면 공용으로 뺀다.
+ */
+const portraitCardIds = ref(new Set())
+
+function markOrientation(cardProductId, event) {
+  const { naturalWidth, naturalHeight } = event.target
+  if (!naturalWidth || naturalWidth >= naturalHeight) return
+  // Set 을 새로 만들어야 반응형이 걸린다.
+  portraitCardIds.value = new Set(portraitCardIds.value).add(cardProductId)
+}
+
+function recommendationImageStyle(card) {
+  if (!portraitCardIds.value.has(card.cardProductId)) {
+    return { position: 'absolute', inset: '0', width: '100%', height: '100%', objectFit: 'cover' }
+  }
+  // 눕히면 가로세로가 뒤바뀐다. 너비 = 칸 높이, 높이 = 칸 너비가 되도록 %를 뒤집어 준다.
+  return {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: `${100 / RECOMMENDATION_VISUAL_RATIO}%`,
+    height: `${RECOMMENDATION_VISUAL_RATIO * 100}%`,
+    objectFit: 'cover',
+    transform: 'translate(-50%, -50%) rotate(-90deg)',
+  }
+}
+
+/* ─── 받은 혜택 상세 · 놓친 혜택 상세 (목데이터) ─────────────────────────── */
+
+// TODO(mock): 백엔드 미구현. 카드별 상세는 응답 DTO(CardBenefitDetailResponse)만 추가돼 있고
+// (backend#116) 컨트롤러·서비스·매퍼가 없다. 엔드포인트가 생기면 reportApi 에 함수를 추가한다.
 const receivedCards = [
   {
     id: 'kb',
@@ -278,6 +401,9 @@ const receivedCards = [
   },
 ]
 
+// TODO(mock): 백엔드 미구현. 요약 API 는 놓친 혜택을 `totalMissedBenefit` **총액 하나**로만 준다.
+// "앱 미사용 / 카드 선택 손실" 분해와 거래 목록의 출처가 없다.
+// 총액만 실연동하면 이 화면 안에서 총액 ≠ 항목 합이 되므로 아래 hero 숫자까지 통째로 목데이터다.
 const missedData = {
   app: {
     info: '앱을 사용하지 않아 놓친 혜택이에요. 앱을 통해 결제했다면 받을 수 있었던 혜택이에요. 다음부터는 앱에서 최적 카드를 확인한 후 결제해 보세요.',
@@ -491,20 +617,9 @@ const missedData = {
 
 const currentCard = computed(() => receivedCards[selectedCard.value])
 const currentMissed = computed(() => missedData[missedTab.value])
-const totalBenefit = computed(() => chartData.reduce((sum, item) => sum + item.value, 0))
-const chartBackground = computed(() => {
-  let current = 0
-  const stops = chartData.map((item) => {
-    const start = current
-    current += (item.value / totalBenefit.value) * 100
-    return `${item.color} ${start}% ${current}%`
-  })
-  return `conic-gradient(${stops.join(', ')})`
-})
 
-function won(value) {
-  return `${Number(value).toLocaleString('ko-KR')}원`
-}
+// 도넛 가운데 숫자. 조각의 합(slicesTotal)이 아니라 진짜 총액이다.
+const totalBenefit = computed(() => summary.value.totalReceivedBenefit)
 
 function toggle(id) {
   const next = new Set(expanded.value)
@@ -540,25 +655,33 @@ function selectMissedTab(tab) {
   expanded.value = new Set(['food'])
 }
 
+/** 요약 카드 두 장의 숫자를 0 부터 굴린다. 목표값은 부를 때마다 응답에서 다시 읽는다. */
 function animateCounts() {
+  cancelAnimationFrame(animationFrame)
+
+  const receivedTarget = summary.value.totalReceivedBenefit
+  const missedTarget = summary.value.totalMissedBenefit
   const start = performance.now()
   const duration = 900
   const tick = (now) => {
     const progress = Math.min(1, (now - start) / duration)
     const eased = 1 - Math.pow(1 - progress, 3)
-    receivedCount.value = Math.round(12500 * eased)
-    missedCount.value = Math.round(36451 * eased)
+    receivedCount.value = Math.round(receivedTarget * eased)
+    missedCount.value = Math.round(missedTarget * eased)
     if (progress < 1) animationFrame = requestAnimationFrame(tick)
   }
   animationFrame = requestAnimationFrame(tick)
 }
+
+// 응답이 도착할 때마다 다시 굴린다. 달을 바꿔도 새 숫자로 이어진다.
+// 요약이 오기 전에 미리 굴리면 0 에서 0 으로 굴렀다가 값이 튀어 들어온다.
+watch(summary, animateCounts)
 
 onMounted(() => {
   if (initialCardId) {
     const index = receivedCards.findIndex((card) => card.id === initialCardId)
     selectedCard.value = index >= 0 ? index : 0
   }
-  animateCounts()
 })
 
 onBeforeUnmount(() => {
@@ -589,11 +712,17 @@ onBeforeUnmount(() => {
         }}
       </h1>
       <div v-if="page === 'main'" class="report-month">
-        <button type="button" aria-label="이전 달" @click="month = Math.max(1, month - 1)">
+        <button type="button" aria-label="이전 달" @click="shiftMonth(-1)">
           <ChevronLeft :size="17" />
         </button>
-        <strong>{{ month }}월</strong>
-        <button type="button" aria-label="다음 달" @click="month = Math.min(12, month + 1)">
+        <strong>{{ cursor.month }}월</strong>
+        <!-- 미래 달에는 결제가 있을 수 없다. 이번 달이면 잠근다. -->
+        <button
+          type="button"
+          aria-label="다음 달"
+          :disabled="isCurrentMonth"
+          @click="shiftMonth(1)"
+        >
           <ChevronRight :size="17" />
         </button>
       </div>
@@ -603,65 +732,89 @@ onBeforeUnmount(() => {
     </header>
 
     <div v-if="page === 'main'" class="report-scroll">
-      <div class="report-summary-grid">
-        <button class="report-summary-card" type="button" @click="openPage('received')">
-          <span class="report-summary-icon">🎁</span>
-          <span>받은 혜택</span>
-          <small>총금액</small>
-          <strong class="received">{{ won(receivedCount) }}</strong>
-        </button>
-        <button class="report-summary-card" type="button" @click="openPage('missed')">
-          <span class="report-summary-icon">↘</span>
-          <span>놓친 혜택</span>
-          <small>총금액</small>
-          <strong class="missed">{{ won(missedCount) }}</strong>
-        </button>
+      <div v-if="reportStore.isLoading" class="flex justify-center py-24 text-sub">
+        <BaseSpinner size="lg" label="리포트를 불러오는 중" />
       </div>
 
-      <section class="report-panel">
-        <h2>카테고리별 받은 혜택</h2>
-        <div class="report-donut-wrap">
-          <div class="report-donut" :style="{ background: chartBackground }">
-            <div>
-              <span>총 혜택</span>
-              <strong>{{ won(totalBenefit) }}</strong>
-            </div>
-          </div>
-          <div class="report-legend">
-            <span v-for="item in chartData.slice(0, 3)" :key="item.name">
-              <i :style="{ background: item.color }"></i>{{ item.name }}
-            </span>
-          </div>
-        </div>
-        <div class="report-ranking">
-          <div v-for="(item, index) in rankings" :key="item.name" :class="{ first: index === 0 }">
-            <span class="rank">{{ index + 1 }}</span>
-            <strong>{{ item.name }}</strong>
-            <p>
-              <b>{{ item.benefit }}</b
-              ><small>지출 {{ item.spend }}</small>
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section class="report-panel recommendation-panel">
-        <h2>카드 추천</h2>
-        <p>내 소비 패턴과 혜택 비중에 따라 추천해 드려요</p>
-        <article v-for="card in recommendations" :key="card.name" class="recommendation-card">
-          <div class="recommendation-visual"><span></span><i></i></div>
-          <div class="recommendation-copy">
-            <strong>{{ card.name }}</strong>
-            <p>{{ card.description }}</p>
-            <div>
-              <span v-for="tag in card.tags" :key="tag">{{ tag }}</span>
-            </div>
-          </div>
-          <button type="button" @click="notify('카드 신청 페이지는 준비 중이에요.')">
-            신청하기
+      <template v-else>
+        <div class="report-summary-grid">
+          <button class="report-summary-card" type="button" @click="openPage('received')">
+            <span class="report-summary-icon">🎁</span>
+            <span>받은 혜택</span>
+            <small>총금액</small>
+            <strong class="received">{{ won(receivedCount) }}</strong>
           </button>
-        </article>
-      </section>
+          <button class="report-summary-card" type="button" @click="openPage('missed')">
+            <span class="report-summary-icon">↘</span>
+            <span>놓친 혜택</span>
+            <small>총금액</small>
+            <strong class="missed">{{ won(missedCount) }}</strong>
+          </button>
+        </div>
+
+        <section class="report-panel">
+          <h2>카테고리별 받은 혜택</h2>
+          <div class="report-donut-wrap">
+            <div class="report-donut" :style="{ background: chartBackground }">
+              <div>
+                <span>총 혜택</span>
+                <strong>{{ won(totalBenefit) }}</strong>
+              </div>
+            </div>
+            <div class="report-legend">
+              <span v-for="item in chartData.slice(0, 3)" :key="item.id">
+                <i :style="{ background: item.color }"></i>{{ item.name }}
+              </span>
+            </div>
+          </div>
+          <div v-if="rankings.length" class="report-ranking">
+            <div v-for="(item, index) in rankings" :key="item.id" :class="{ first: index === 0 }">
+              <span class="rank">{{ index + 1 }}</span>
+              <strong>{{ item.name }}</strong>
+              <p>
+                <b>{{ item.benefit }}</b
+                ><small>지출 {{ item.spend }}</small>
+              </p>
+            </div>
+          </div>
+          <div v-else class="py-6 text-center text-xs text-sub">이 달에는 받은 혜택이 없어요</div>
+        </section>
+
+        <section class="report-panel recommendation-panel">
+          <h2>카드 추천</h2>
+          <p>내 소비 패턴과 혜택 비중에 따라 추천해 드려요</p>
+          <article
+            v-for="card in recommendations"
+            :key="card.cardProductId"
+            class="recommendation-card"
+          >
+            <div class="recommendation-visual">
+              <img
+                v-if="card.cardImageUrl"
+                :src="card.cardImageUrl"
+                alt=""
+                :style="recommendationImageStyle(card)"
+                @load="markOrientation(card.cardProductId, $event)"
+              />
+              <!-- 이미지가 없을 때만 원래의 장식용 점 두 개를 남긴다. -->
+              <template v-else><span></span><i></i></template>
+            </div>
+            <div class="recommendation-copy">
+              <strong>{{ card.cardName }}</strong>
+              <p>{{ card.description }}</p>
+              <div>
+                <span>예상 혜택 {{ won(card.expectedBenefit) }}</span>
+              </div>
+            </div>
+            <button type="button" @click="notify('카드 신청 페이지는 준비 중이에요.')">
+              신청하기
+            </button>
+          </article>
+          <div v-if="!recommendations.length" class="py-4 text-xs text-sub">
+            지금은 추천할 카드가 없어요. 이 달의 결제가 쌓이면 다시 추천해 드려요.
+          </div>
+        </section>
+      </template>
     </div>
 
     <div v-else-if="page === 'received'" class="report-scroll report-detail-scroll">
