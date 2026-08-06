@@ -4,9 +4,9 @@ let locationConsented = false
 </script>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Menu, ChevronDown, ChevronRight, X } from 'lucide-vue-next'
+import { Menu, X } from 'lucide-vue-next'
 import iconSearch from '@/assets/icons/search.svg'
 import iconHomeActive from '@/assets/icons/click-home.svg'
 import iconHome from '@/assets/icons/home.svg'
@@ -17,11 +17,30 @@ import iconMycardActive from '@/assets/icons/mycard-selected.svg'
 import iconReport from '@/assets/icons/report.svg'
 import iconReportActive from '@/assets/icons/report-selected.svg'
 import iconLocation from '@/assets/icons/location.svg'
-import { categories, favoritePlaces, cards, benefitProfiles, benefitIcons, events } from '@/data'
+import { categories, favoritePlaces, benefitIcons } from '@/data'
+import * as cardApi from '@/api/cardApi'
+import BaseSpinner from '@/components/common/BaseSpinner.vue'
+import { useAsyncState } from '@/composables/useAsyncState'
+import { useCardImage } from '@/composables/useCardImage'
+import { useToast } from '@/composables/useToast'
+import { useCardStore } from '@/stores/cardStore'
 import { usePaymentStore } from '@/stores/paymentStore'
 
 const router = useRouter()
 const paymentStore = usePaymentStore()
+const cardStore = useCardStore()
+const { showToast } = useToast()
+const { markCardImageOrientation, cardImageStyle } = useCardImage()
+
+/**
+ * 보유 카드. 목데이터가 아니라 `cardStore` 에서 온다 (#101).
+ *
+ * 예전에는 `src/data.js` 의 목 카드를 그렸는데, 거기 뜨는 `KB Gold & More` 는
+ * 사용자가 갖고 있지도 않은 카드였다. 보유 카드의 유일한 출처는 store 다 (#76).
+ */
+const cards = computed(() => cardStore.cards)
+
+onMounted(() => cardStore.ensureCardsWithImages())
 
 // 결제 탭으로 들어가면 카드 선택부터 시작한다 (기존 navigateTo('payment') 의 초기화).
 function openPayment() {
@@ -130,21 +149,83 @@ const vDragScroll = {
 const selectedCategory = ref(null)
 const consentCategory = ref(null)
 const benefitCard = ref(null)
-const eventCard = ref(null)
-const brandsOpen = ref(false)
 const activeTab = ref(0)
 const toast = ref('')
 let toastTimer
 
-const profile = computed(() => (benefitCard.value ? benefitProfiles[benefitCard.value.id] : null))
-const receivedDiscount = computed(
-  () => profile.value?.categories.reduce((sum, item) => sum + item.usedAmount, 0) ?? 0,
-)
+/**
+ * 혜택 현황 시트의 내용. 카드별 이용 실적에서 온다 (#101).
+ *
+ * **예전 시트는 목데이터라서 보여줄 수 있던 것이 더 많았다.** 카테고리별 한도·사용액·건수와
+ * 브랜드별 혜택이 있었는데 `/card/{id}/usage` 는 그것들을 주지 않는다.
+ * 지어내지 않고, 실제로 오는 것(실적 금액·구간·구간별 혜택)만 보여준다.
+ *
+ * 카테고리별 사용액이 오게 되면 그때 예전 모양으로 되돌린다 (#101 의 A안).
+ */
+const {
+  data: usage,
+  isLoading: isUsageLoading,
+  execute: fetchUsage,
+} = useAsyncState(cardApi.getCardUsage)
+
+/** 이번 달 실적 인정 금액. 실적 미달이어도 0 이 아니라 쌓인 만큼 온다. */
+const recognizedAmount = computed(() => Number(usage.value?.usageSummary?.recognizedAmount) || 0)
+
+/** 다음 구간 기준액. 최고 구간이거나 실적 조건이 없으면 null 이라 화면에서 분기한다. */
+const nextTierAmount = computed(() => {
+  const amount = usage.value?.nextTier?.minimumAmount
+  return amount == null ? null : Number(amount)
+})
+
+/** 실적 진행률. 백엔드가 계산해서 준다 — 화면에서 다시 구하지 않는다. */
 const progress = computed(() =>
-  profile.value
-    ? Math.min(100, Math.round((receivedDiscount.value / profile.value.totalLimit) * 100))
-    : 0,
+  Math.min(100, Math.round(Number(usage.value?.tierProgressRate) || 0)),
 )
+
+/** 헤더에 한 줄로 뜨는 실적 상태. */
+const tierLabel = computed(() => {
+  if (!usage.value) return ''
+
+  const current = usage.value.currentTier?.tierName
+  const until = usage.value.amountUntilNextTier
+  if (until != null && usage.value.nextTier) {
+    return `${current ?? '실적 구간'} 적용 중 · 다음 구간까지 ${won(Number(until))}`
+  }
+  return current ? `${current} 적용 중 (최고 구간)` : '실적 조건이 없는 카드예요'
+})
+
+/**
+ * 구간별 혜택을 한 줄로 편다.
+ *
+ * 실적 조건이 없는 카드는 `tiers` 가 비고 혜택이 `defaultBenefits` 로 온다 (cardApi 주석).
+ * 두 경우를 한 목록으로 합쳐 화면이 분기하지 않게 한다.
+ */
+const tierBenefits = computed(() => {
+  if (!usage.value) return []
+
+  const fromTiers = (usage.value.tiers ?? []).flatMap((tier) =>
+    (tier.benefits ?? []).map((benefit) => ({
+      key: `${tier.tierOrder}-${benefit.benefitId}`,
+      name: benefit.benefitName,
+      value: benefit.valueLabel,
+      // 적립과 할인은 사용자에게 다른 혜택이다. 뭉뚱그리지 않는다.
+      kind: benefit.benefitType === 'ACCUMULATE' ? '적립' : '할인',
+      tierName: tier.tierName,
+      reached: tier.achieved || tier.current,
+    })),
+  )
+
+  const fromDefault = (usage.value.defaultBenefits ?? []).map((benefit) => ({
+    key: `default-${benefit.benefitId}`,
+    name: benefit.benefitName,
+    value: benefit.valueLabel,
+    kind: benefit.benefitType === 'ACCUMULATE' ? '적립' : '할인',
+    tierName: '기본 혜택',
+    reached: true,
+  }))
+
+  return [...fromTiers, ...fromDefault]
+})
 
 function won(value) {
   return `${value.toLocaleString('ko-KR')}원`
@@ -176,9 +257,15 @@ function confirmLocation() {
   }
 }
 
-function openBenefit(card) {
+async function openBenefit(card) {
   benefitCard.value = card
-  brandsOpen.value = false
+  try {
+    // yearMonth 를 생략하면 현재 월이다 (cardApi 주석).
+    await fetchUsage(card.id)
+  } catch (error) {
+    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
+    benefitCard.value = null
+  }
 }
 
 function categoryIcon(name) {
@@ -276,23 +363,33 @@ function selectTab(index, label) {
       <h2>카드 혜택 현황</h2>
       <div v-drag-scroll class="horizontal-scroll">
         <article v-for="card in cards" :key="card.id" class="benefit-card">
-          <div class="card-visual" :style="{ background: card.gradient, color: card.text }">
-            <span class="card-glow one"></span>
-            <span class="card-glow two"></span>
-            <div class="card-top">
-              <div>
-                <strong>{{ card.name }}</strong>
-                <small :style="{ color: card.sub }">{{ card.label }}</small>
+          <div class="card-visual" :class="{ 'bg-muted-softer': !card.cardImageUrl }">
+            <img
+              v-if="card.cardImageUrl"
+              :src="card.cardImageUrl"
+              alt=""
+              draggable="false"
+              :style="cardImageStyle(card.cardImageUrl)"
+              @load="markCardImageOrientation"
+            />
+            <!-- 이미지가 있으면 카드 앞면에 카드명이 이미 찍혀 있다. 글자를 겹쳐 쓰지 않는다. -->
+            <template v-else>
+              <div class="card-top">
+                <div>
+                  <strong>{{ card.name }}</strong>
+                  <small>{{ card.issuer }}</small>
+                </div>
               </div>
-              <span class="issuer-mark" :class="card.id">{{ card.mark }}</span>
-            </div>
-            <span class="chip"></span>
-            <p :style="{ color: card.sub }">**** **** **** {{ card.last4 }}</p>
+              <span class="chip"></span>
+              <p>**** **** **** {{ card.last4 }}</p>
+            </template>
           </div>
           <div class="card-actions">
             <button @click="openBenefit(card)">혜택 현황</button>
             <span></span>
-            <button @click="eventCard = card">이벤트</button>
+            <!-- TODO(#101): 백엔드에 이벤트 도메인이 생기면 여기에 시트를 붙인다.
+                 자리를 남겨두려고 버튼만 두었다. 목데이터로 채우지 않는다. -->
+            <button @click="notify('카드 이벤트는 준비 중이에요')">이벤트</button>
           </div>
         </article>
       </div>
@@ -346,127 +443,51 @@ function selectTab(index, label) {
           <h2>{{ benefitCard.name }}</h2>
           <p>{{ benefitCard.issuer }}</p>
           <div class="progress-title">
-            <span>이번 달 잠재 혜택</span>
-            <strong
-              ><em>{{ won(receivedDiscount) }}</em> / {{ won(profile.totalLimit) }}</strong
-            >
+            <span>이번 달 실적</span>
+            <strong>
+              <em>{{ won(recognizedAmount) }}</em>
+              <template v-if="nextTierAmount"> / {{ won(nextTierAmount) }}</template>
+            </strong>
           </div>
           <div class="progress"><span :style="{ width: `${progress}%` }"></span></div>
-          <p class="tier">{{ profile.tier }}</p>
+          <p class="tier">{{ tierLabel }}</p>
         </div>
         <div class="sheet-scroll">
-          <p class="limit-caption">월별 <b>남은</b> 혜택 한도</p>
-          <h3>카테고리별 혜택</h3>
-          <div class="benefit-list">
-            <div v-for="item in profile.categories" :key="item.name" class="benefit-row">
-              <span class="mini-icon"
-                ><img :src="categoryIcon(item.name)" alt="" width="16" height="16"
-              /></span>
-              <div class="benefit-body">
-                <div class="row-title">
-                  <strong>{{ item.name }}</strong>
-                  <span v-if="item.exhausted" class="exhausted">한도 소진</span>
-                  <small>{{ item.perTxMax }}</small>
-                </div>
-                <div class="row-discount">
-                  <span>{{ item.discount }}</span>
-                  <strong
-                    ><em :class="{ muted: item.exhausted }">{{
-                      won(Math.max(0, item.monthlyLimit - item.usedAmount))
-                    }}</em>
-                    / {{ won(item.monthlyLimit) }}</strong
-                  >
-                </div>
-                <div class="row-total">
-                  <span>총 {{ item.txCount }}건 · {{ won(item.txTotal) }} 결제</span>
-                  <strong>총 {{ won(item.usedAmount) }} 할인</strong>
-                </div>
-              </div>
-            </div>
+          <div v-if="isUsageLoading" class="flex justify-center py-16 text-sub">
+            <BaseSpinner size="lg" label="이용 실적을 불러오는 중" />
           </div>
 
-          <button class="brand-toggle" @click="brandsOpen = !brandsOpen">
-            <strong>브랜드별 혜택</strong>
-            <ChevronDown :size="18" :class="{ rotated: brandsOpen }" />
-          </button>
-          <Transition name="expand">
-            <div v-if="brandsOpen" class="benefit-list brand-list">
-              <template v-if="profile.brands.length">
-                <div v-for="item in profile.brands" :key="item.name" class="benefit-row">
-                  <span
-                    class="brand-avatar"
-                    :style="{
-                      color: item.logoColor,
-                      borderColor: `${item.logoColor}55`,
-                      background: `${item.logoColor}16`,
-                    }"
-                    >{{ item.logoInitial }}</span
-                  >
-                  <div class="benefit-body">
-                    <div class="row-title">
-                      <strong>{{ item.name }}</strong>
-                      <span v-if="item.exhausted" class="exhausted">한도 소진</span>
-                      <small>{{ item.perTxMax }}</small>
-                    </div>
-                    <div class="row-discount">
-                      <span>{{ item.discount }}</span>
-                      <strong
-                        ><em :class="{ muted: item.exhausted }">{{
-                          won(Math.max(0, item.monthlyLimit - item.usedAmount))
-                        }}</em>
-                        / {{ won(item.monthlyLimit) }}</strong
-                      >
-                    </div>
-                    <div class="row-total">
-                      <span>총 {{ item.txCount }}건 · {{ won(item.txTotal) }} 결제</span>
-                      <strong>총 {{ won(item.usedAmount) }} 할인</strong>
-                    </div>
+          <template v-else>
+            <p class="limit-caption">실적 구간에 따라 <b>적용되는</b> 혜택</p>
+            <h3>구간별 혜택</h3>
+            <div v-if="tierBenefits.length" class="benefit-list">
+              <div v-for="item in tierBenefits" :key="item.key" class="benefit-row">
+                <span class="mini-icon"
+                  ><img :src="categoryIcon(item.name)" alt="" width="16" height="16"
+                /></span>
+                <div class="benefit-body">
+                  <div class="row-title">
+                    <strong>{{ item.name }}</strong>
+                    <span v-if="!item.reached" class="exhausted">미달성</span>
+                    <small>{{ item.tierName }}</small>
+                  </div>
+                  <div class="row-discount">
+                    <span>{{ item.kind }}</span>
+                    <strong
+                      ><em :class="{ muted: !item.reached }">{{ item.value }}</em></strong
+                    >
                   </div>
                 </div>
-              </template>
-              <div v-else class="empty-brand">
-                <strong>0</strong><span>등록된 브랜드 혜택이 없어요</span>
               </div>
             </div>
-          </Transition>
-
-          <div class="grand-total">
-            <span>총 {{ profile.totalCount }}건 · {{ won(profile.totalSpend) }} 결제</span>
-            <strong>총 {{ won(receivedDiscount) }} 할인</strong>
-          </div>
-          <button class="primary-button" @click="openReport(benefitCard.id)">
-            받은 혜택 리포트 보기
-          </button>
-        </div>
-      </section>
-    </div>
-  </Transition>
-
-  <Transition name="fade">
-    <div v-if="eventCard" class="sheet-layer fixed-layer">
-      <button class="scrim" aria-label="이벤트 닫기" @click="eventCard = null"></button>
-      <section class="sheet event-sheet">
-        <span class="handle"></span>
-        <button class="sheet-close" aria-label="닫기" @click="eventCard = null">
-          <X :size="18" />
-        </button>
-        <div class="event-head">
-          <h2>진행 중인 이벤트</h2>
-          <p>{{ eventCard.issuer }}의 {{ eventCard.name }} 이벤트예요</p>
-        </div>
-        <div class="event-list">
-          <article v-for="item in events[eventCard.id]" :key="item.id">
-            <div>
-              <span class="event-category">{{ item.category }}</span>
-              <h3>{{ item.title }}</h3>
-              <p>{{ item.condition }}</p>
-              <small>{{ item.period }}</small>
+            <div v-else class="py-6 text-center text-xs text-sub">
+              이 카드에 등록된 혜택 정보가 없어요
             </div>
-            <a :href="item.url" target="_blank" rel="noopener noreferrer">
-              <strong>{{ item.benefit }}</strong
-              ><ChevronRight :size="19" />
-            </a>
-          </article>
+
+            <button class="primary-button" @click="openReport(benefitCard.id)">
+              받은 혜택 리포트 보기
+            </button>
+          </template>
         </div>
       </section>
     </div>
