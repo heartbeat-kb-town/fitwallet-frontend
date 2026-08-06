@@ -22,7 +22,16 @@ import client from './client'
  */
 export const getUserCards = () => client.get('/user-cards')
 
-/** 보유 카드 한 장의 요약. 목록 한 건과 같은 모양(`CardListResponse`)이 나온다. */
+/**
+ * 보유 카드 한 장의 요약.
+ *
+ * 목록 한 건(`CardListResponse`)과 **다른 모양**이다. `CardSummaryResponse` 가 나오고
+ * `card` · `amount` · `usage` · `transactions` 로 나뉜다.
+ *
+ * `card` 에는 목록 응답에 없는 **`cardImageUrl` 과 `issuerName` 이 들어 있다.**
+ * 목록에서만 두 필드가 빠져 있어서, 카드 그림이 필요한 화면은 이걸 한 번 더 부른다
+ * (`cardStore.ensureCardImages`). 백엔드가 목록에 실어주면 그럴 필요가 없어진다.
+ */
 export const getUserCard = (cardId) => client.get(`/card/${cardId}/summary`)
 
 /**

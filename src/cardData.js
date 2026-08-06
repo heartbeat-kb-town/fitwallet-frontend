@@ -6,17 +6,13 @@
  * DTO 와 `CardMapper.xml` 의 `cardListColumns` 양쪽에서 빠졌다.
  * 같은 도메인의 `transactions` · `usage` 쪽 resultMap 에는 둘 다 있으니 목록에서만 누락이다.
  *
- * TODO(#76): 백엔드가 목록 응답에 `cardCompanyName` · `cardImageUrl` 을 실어주면
- *            이 파일은 통째로 사라진다. 그때까지만 쓰는 임시 보정이다.
- */
-
-/**
- * `payment-card-sheet.png` 안에서 카드 한 장이 시작하는 y 좌표.
+ * **카드 그림은 더 이상 여기서 만들지 않는다 (#97).** 카드별 요약이 `cardImageUrl` 을 주므로
+ * `cardStore.ensureCardImages` 가 실제 이미지를 받아온다. 스프라이트를 잘라 쓰던 방식은
+ * 카드 4종을 돌려 써서 실제 카드와 그림이 아예 달랐다.
  *
- * 카드 이미지 URL 을 못 받으므로 이 4종을 순서대로 돌려 쓴다.
- * 실제 카드 상품과 그림이 일치하지 않는다 — 화면이 비어 보이지 않게 하는 것이 목적이다.
+ * TODO(#76): 백엔드가 목록 응답에 `cardCompanyName` 을 실어주면 아래 카드사명 추출도
+ *            필요 없어지고 이 파일은 통째로 사라진다. 그때까지만 쓰는 임시 보정이다.
  */
-const CARD_SPRITE_OFFSETS = [208, 609, 1022, 1443]
 
 /**
  * `card_name` 앞에 붙는 카드사 표기 → 화면에 쓸 카드사명.
@@ -44,14 +40,4 @@ export function splitCardName(cardName = '') {
 
   const [prefix, issuer] = matched
   return { issuer, name: cardName.slice(prefix.length).trim() }
-}
-
-/**
- * 카드 이미지 위치. 목록에서의 자리로 정한다.
- *
- * 사용자가 순서를 바꿔도 그림이 따라 바뀌면 다른 카드처럼 보이므로,
- * **화면에 보이는 순서가 아니라 서버가 준 목록 순서**를 넘겨야 한다.
- */
-export function spriteOffsetAt(index) {
-  return CARD_SPRITE_OFFSETS[index % CARD_SPRITE_OFFSETS.length]
 }

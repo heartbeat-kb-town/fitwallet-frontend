@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as cardApi from '@/api/cardApi'
 import { useAsyncState } from '@/composables/useAsyncState'
-import { splitCardName, spriteOffsetAt } from '@/cardData'
+import { splitCardName } from '@/cardData'
 
 /**
  * 백엔드 `CardListResponse` 한 건을 화면이 쓰는 모양으로 옮긴다.
@@ -12,9 +12,8 @@ import { splitCardName, spriteOffsetAt } from '@/cardData'
  *   CREDIT → creditLimit · scheduledPaymentAmount
  *   DEBIT  → bankName · balance
  *
- * @param index 서버가 준 목록에서의 자리. 카드 그림을 고르는 데만 쓴다.
  */
-function toCard(response, index) {
+function toCard(response) {
   const isCredit = response.cardType === 'CREDIT'
   const { issuer, name } = splitCardName(response.cardName)
 
@@ -26,7 +25,6 @@ function toCard(response, index) {
     name,
     type: isCredit ? 'credit' : 'check',
     last4: response.maskedRearNumber,
-    cropY: spriteOffsetAt(index),
 
     // 카드 앞면에 큼직하게 뜨는 금액. 신용은 갚을 돈, 체크는 남은 돈이라 라벨이 다르다.
     amountLabel: isCredit ? '결제 예정 금액' : '잔액',
@@ -58,8 +56,22 @@ export const useCardStore = defineStore('card', () => {
    */
   const order = ref([])
 
+  /**
+   * 카드 이미지 URL. `user_card_id` → URL.
+   *
+   * TODO(#76): 목록 응답(`CardListResponse`)에 `cardImageUrl` 이 없다. `card_product.card_image_url`
+   *   컬럼은 DB 에 있고 시드에도 값이 다 들어 있는데 DTO 와 `cardListColumns` 양쪽에서 빠졌다.
+   *   카드별 요약(`/card/{id}/summary`)은 주므로 카드 수만큼 더 부른다.
+   *   백엔드가 목록에 실어주면 이 ref 와 `ensureCardImages` 는 통째로 사라진다.
+   */
+  const imageUrls = ref({})
+
   const cards = computed(() => {
-    const list = fetched.value ?? []
+    const list = (fetched.value ?? []).map((card) => ({
+      ...card,
+      // 아직 안 받았거나 카드 상품에 이미지가 없으면 null 이다. 화면이 v-if 로 분기한다.
+      cardImageUrl: imageUrls.value[card.id] ?? null,
+    }))
     if (!order.value.length) return list
 
     const byId = new Map(list.map((card) => [card.id, card]))
@@ -80,6 +92,42 @@ export const useCardStore = defineStore('card', () => {
     await fetchCards().catch(() => {})
   }
 
+  /**
+   * 아직 모르는 카드의 이미지 URL 을 채운다.
+   *
+   * 카드 한 장에 요청 하나다. 목록 응답에 이미지가 없어서 생긴 비용이라
+   * 백엔드가 실어주면 사라진다 (위 `imageUrls` 주석 참고).
+   *
+   * **실패해도 던지지 않는다.** 이미지는 못 받아도 카드 목록은 이미 떠 있고,
+   * 그림 한 장 때문에 화면 전체를 에러로 만들 이유가 없다. 못 받은 카드는 `null` 로 남는다.
+   */
+  async function ensureCardImages() {
+    const targets = (fetched.value ?? []).filter((card) => !(card.id in imageUrls.value))
+    if (!targets.length) return
+
+    const loaded = await Promise.all(
+      targets.map((card) =>
+        cardApi
+          .getUserCard(card.id)
+          .then((summary) => [card.id, summary.card?.cardImageUrl ?? null])
+          .catch(() => null),
+      ),
+    )
+
+    // 한 번에 갈아끼운다. 카드마다 대입하면 computed 가 카드 수만큼 다시 돈다.
+    const next = { ...imageUrls.value }
+    for (const entry of loaded) {
+      if (entry) next[entry[0]] = entry[1]
+    }
+    imageUrls.value = next
+  }
+
+  /** 목록과 이미지를 한 번에. 화면은 보통 이것만 부르면 된다. */
+  async function ensureCardsWithImages() {
+    await ensureCards()
+    await ensureCardImages()
+  }
+
   function reorder(nextOrder) {
     order.value = [...nextOrder]
   }
@@ -88,5 +136,16 @@ export const useCardStore = defineStore('card', () => {
     reorder([cardId, ...cards.value.map((card) => card.id).filter((id) => id !== cardId)])
   }
 
-  return { order, cards, isLoading, error, fetchCards, ensureCards, reorder, setPrimary }
+  return {
+    order,
+    cards,
+    isLoading,
+    error,
+    fetchCards,
+    ensureCards,
+    ensureCardImages,
+    ensureCardsWithImages,
+    reorder,
+    setPrimary,
+  }
 })

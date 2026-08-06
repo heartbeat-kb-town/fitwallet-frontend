@@ -7,6 +7,7 @@ import * as benefitApi from '@/api/benefitApi'
 import { CARD_BENEFIT_STATUS } from '@/api/benefitApi'
 import * as storeApi from '@/api/storeApi'
 import { useAsyncState } from '@/composables/useAsyncState'
+import { CARD_RATIO, useCardImage } from '@/composables/useCardImage'
 import { useToast } from '@/composables/useToast'
 import { getCurrentCoordinates } from '@/utils/geolocation'
 import { usePaymentStore } from '@/stores/paymentStore'
@@ -36,6 +37,7 @@ const route = useRoute()
 const router = useRouter()
 const paymentStore = usePaymentStore()
 const { showToast } = useToast()
+const { markCardImageOrientation, cardImageStyle } = useCardImage()
 
 // 보유 카드 목록(`cardStore`)을 여기서 쓰지 않는다. 예상 혜택 응답이 카드 id·이름·이미지를
 // 함께 주므로 이 화면이 알아야 할 카드 정보는 그 응답에 다 있다.
@@ -179,8 +181,7 @@ const PICK_STATUS_STYLE = { left: 'auto', right: '0', borderRadius: '0 0 0 11px'
  * 칸을 카드 비율로 맞추면 가로 카드는 **잘림도 여백도 없이** 딱 맞는다.
  * 동결된 `style.css` 를 건드리지 않으려고 인라인으로 덮는다.
  */
-const PICK_CARD_RATIO = 1.58
-const PICK_VISUAL_STYLE = { aspectRatio: `${PICK_CARD_RATIO} / 1` }
+const PICK_VISUAL_STYLE = { aspectRatio: `${CARD_RATIO} / 1` }
 
 /**
  * 카드 그림을 칸에 어떻게 앉힐지.
@@ -190,26 +191,11 @@ const PICK_VISUAL_STYLE = { aspectRatio: `${PICK_CARD_RATIO} / 1` }
  * 여백을 두면 화면이 비어 보인다. 실물 세로 카드를 가로로 든 모습과 같으니
  * 돌려서 채우는 게 맞다 — 신한 카드도 로고가 세로로 쓰여 있어 같은 관례다.
  *
- * **반시계로 돌린다.** 세로 카드는 칩이 위쪽 가운데인데, 반시계로 돌리면 칩이
- * 왼쪽 가운데로 와서 가로 카드의 칩 위치와 맞는다.
- *
- * 돌린 뒤 칸을 꽉 채우려면 이미지의 가로·세로를 칸 기준으로 맞바꿔 잡아야 한다.
- *   너비 = 칸 높이 = 칸 너비 / 비율   →  칸 너비의 (100 / 비율)%
- *   높이 = 칸 너비 = 칸 높이 × 비율   →  칸 높이의 (비율 × 100)%
+ * 판별과 계산은 `useCardImage` 가 한다 (#97). 위에서 칸을 카드 비율로 맞춰놨으므로
+ * 기본값(`CARD_RATIO`)을 그대로 쓴다.
  */
 function pickImageStyle(pick) {
-  if (!portraitCardIds.value.has(pick.userCardId)) {
-    return { position: 'absolute', inset: '0', width: '100%', height: '100%', objectFit: 'cover' }
-  }
-  return {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    width: `${100 / PICK_CARD_RATIO}%`,
-    height: `${PICK_CARD_RATIO * 100}%`,
-    objectFit: 'cover',
-    transform: 'translate(-50%, -50%) rotate(-90deg)',
-  }
+  return cardImageStyle(pick.cardImageUrl)
 }
 
 // 화면이 쓰던 세 갈래가 백엔드 판정과 그대로 대응된다.
@@ -249,28 +235,6 @@ const cardPicks = computed(() =>
 
 /** 보유 카드가 아예 없는 경우. 카드가 없어도 200 이라 이 값으로 갈라야 한다. */
 const hasNoCard = computed(() => expectedBenefits.value?.hasCard === false)
-
-/**
- * 세로형 카드 이미지인 카드들. `userCardId` 를 담는다.
- *
- * 카드사마다 이미지 방향이 다르다. KB·신한은 가로(약 1.58)인데 **현대카드는 전부 세로**다
- * (604×956). 실제 카드가 세로형이라 카드사 CDN 에 가로 이미지가 아예 없다.
- *
- * 가로 이미지는 `cover` 로 꽉 채우고, 세로 이미지만 `contain` 으로 전체를 보여준다.
- * 세로 이미지를 `cover` 로 채우면 위쪽 35% — 칩 언저리 — 만 남아서 어느 카드인지
- * 알아볼 수 없다. 이 화면은 이미지가 있으면 카드명을 따로 띄우지 않으므로 더 문제다.
- *
- * URL 만으로는 방향을 알 수 없다 (신한 `..._v_f_s.png` 가 실제로는 가로였다).
- * 그래서 이미지가 로드된 뒤 실제 크기로 판단한다.
- */
-const portraitCardIds = ref(new Set())
-
-function markOrientation(userCardId, event) {
-  const { naturalWidth, naturalHeight } = event.target
-  if (!naturalWidth || naturalWidth >= naturalHeight) return
-  // Set 을 새로 만들어야 반응형이 걸린다.
-  portraitCardIds.value = new Set(portraitCardIds.value).add(userCardId)
-}
 
 // 가맹점을 고르면 그 가맹점 기준으로 보유 카드를 판정받는다. 가맹점을 바꾸면 다시 받는다.
 watch(selectedStore, async (store) => {
@@ -462,7 +426,7 @@ async function confirmPin() {
               :src="pick.cardImageUrl"
               alt=""
               :style="pickImageStyle(pick)"
-              @load="markOrientation(pick.userCardId, $event)"
+              @load="markCardImageOrientation"
             />
             <span class="pick-status" :class="pick.status" :style="PICK_STATUS_STYLE">
               {{ pick.statusLabel }}

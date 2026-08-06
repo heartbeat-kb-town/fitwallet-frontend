@@ -6,12 +6,12 @@ import iconHome from '@/assets/icons/home.svg'
 import iconPaymentActive from '@/assets/icons/payment-selected.svg'
 import iconMycard from '@/assets/icons/mycard.svg'
 import iconReport from '@/assets/icons/report.svg'
-import cardSheet from '@/assets/cards/payment-card-sheet.png'
 import waitingPig from '@/assets/icons/pig-waiting.svg'
 import completePig from '@/assets/icons/pig-thorwcard.svg'
 
 import * as paymentApi from '@/api/paymentApi'
 import { QR_STATUS } from '@/api/paymentApi'
+import { useCardImage } from '@/composables/useCardImage'
 import { useToast } from '@/composables/useToast'
 import { useCardStore } from '@/stores/cardStore'
 import { usePaymentStore } from '@/stores/paymentStore'
@@ -23,6 +23,12 @@ const QR_POLL_INTERVAL_MS = 1000
 const route = useRoute()
 const router = useRouter()
 const cardStore = useCardStore()
+
+const { markCardImageOrientation, cardImageStyle } = useCardImage()
+
+// `.payment-card` 는 344×198 이라 실제 카드(약 1.58)보다 넓다.
+// 세로 이미지를 눕힐 때는 카드가 아니라 **칸** 의 비율을 기준으로 키워야 칸이 채워진다.
+const PAYMENT_CARD_RATIO = 344 / 198
 const paymentStore = usePaymentStore()
 const { showToast } = useToast()
 
@@ -325,7 +331,7 @@ function qrBack() {
 }
 
 onMounted(() => {
-  cardStore.ensureCards()
+  cardStore.ensureCardsWithImages()
 
   // 가맹점에서 카드를 고르고 비밀번호까지 입력한 경우 — PIN 은 이미 냈으니 QR 부터 만든다.
   // 카드 목록을 기다리지 않는다. 가맹점이 넘겨준 cardId 가 곧 userCardId 다.
@@ -370,10 +376,12 @@ onBeforeUnmount(clearFlowTimers)
           >
             <div class="payment-card-photo">
               <img
-                :src="cardSheet"
+                v-if="card.cardImageUrl"
+                :src="card.cardImageUrl"
                 alt=""
                 draggable="false"
-                :style="{ top: `${-card.cropY * 0.983}px` }"
+                :style="cardImageStyle(card.cardImageUrl, PAYMENT_CARD_RATIO)"
+                @load="markCardImageOrientation"
               />
             </div>
           </article>

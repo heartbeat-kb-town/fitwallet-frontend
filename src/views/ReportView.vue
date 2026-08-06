@@ -14,6 +14,7 @@ import iconRefuel from '@/assets/icons/category-refuel.svg'
 import iconTransport from '@/assets/icons/potentialbenefit-transportation.svg'
 
 import BaseSpinner from '@/components/common/BaseSpinner.vue'
+import { useCardImage } from '@/composables/useCardImage'
 import { useToast } from '@/composables/useToast'
 import { usePaymentStore } from '@/stores/paymentStore'
 import { useReportStore } from '@/stores/reportStore'
@@ -23,6 +24,7 @@ const router = useRouter()
 const paymentStore = usePaymentStore()
 const reportStore = useReportStore()
 const { showToast } = useToast()
+const { markCardImageOrientation, cardImageStyle } = useCardImage()
 
 // 어느 카드의 상세를 볼지는 URL 이 정한다 (#59). 없으면 전체 리포트.
 const initialCardId = typeof route.query.cardId === 'string' ? route.query.cardId : ''
@@ -170,37 +172,9 @@ const recommendations = computed(() => summary.value.recommendations)
  */
 const RECOMMENDATION_VISUAL_RATIO = 96 / 64
 
-/**
- * 세로로 들어오는 카드 이미지.
- *
- * 카드사 이미지는 방향이 섞여 있다. KB·신한은 가로, 현대는 세로(604×956)다.
- * URL 로는 알 수 없어서(신한 `..._v_f_s.png` 가 실제로는 가로였다) 로드된 뒤 실제 크기로 본다.
- *
- * TODO: `MerchantFlowView` 의 `pickImageStyle` 과 같은 처리다. 세 번째 화면이 생기면 공용으로 뺀다.
- */
-const portraitCardIds = ref(new Set())
-
-function markOrientation(cardProductId, event) {
-  const { naturalWidth, naturalHeight } = event.target
-  if (!naturalWidth || naturalWidth >= naturalHeight) return
-  // Set 을 새로 만들어야 반응형이 걸린다.
-  portraitCardIds.value = new Set(portraitCardIds.value).add(cardProductId)
-}
-
+/** 세로 카드 이미지를 눕히는 처리는 `useCardImage` 가 한다 (#97). */
 function recommendationImageStyle(card) {
-  if (!portraitCardIds.value.has(card.cardProductId)) {
-    return { position: 'absolute', inset: '0', width: '100%', height: '100%', objectFit: 'cover' }
-  }
-  // 눕히면 가로세로가 뒤바뀐다. 너비 = 칸 높이, 높이 = 칸 너비가 되도록 %를 뒤집어 준다.
-  return {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    width: `${100 / RECOMMENDATION_VISUAL_RATIO}%`,
-    height: `${RECOMMENDATION_VISUAL_RATIO * 100}%`,
-    objectFit: 'cover',
-    transform: 'translate(-50%, -50%) rotate(-90deg)',
-  }
+  return cardImageStyle(card.cardImageUrl, RECOMMENDATION_VISUAL_RATIO)
 }
 
 /* ─── 받은 혜택 상세 · 놓친 혜택 상세 (목데이터) ─────────────────────────── */
@@ -813,7 +787,7 @@ onBeforeUnmount(() => {
                 :src="card.cardImageUrl"
                 alt=""
                 :style="recommendationImageStyle(card)"
-                @load="markOrientation(card.cardProductId, $event)"
+                @load="markCardImageOrientation"
               />
               <!-- 이미지가 없을 때만 원래의 장식용 점 두 개를 남긴다. -->
               <template v-else><span></span><i></i></template>
