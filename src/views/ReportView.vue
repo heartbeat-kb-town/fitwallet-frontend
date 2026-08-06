@@ -57,8 +57,10 @@ const toast = ref('')
 let animationFrame = 0
 let toastTimer
 
+// 원 단위로 반올림한다. 백엔드 금액은 BigDecimal 이라 소수가 섞여 온다
+// (카드 추천의 expectedBenefit 이 지출액 × 할인율이라 501,969.6 처럼 나온다).
 function won(value) {
-  return `${Number(value).toLocaleString('ko-KR')}원`
+  return `${Math.round(Number(value)).toLocaleString('ko-KR')}원`
 }
 
 /* ─── 조회 기간 ──────────────────────────────────────────────────────────── */
@@ -734,6 +736,23 @@ onBeforeUnmount(() => {
     <div v-if="page === 'main'" class="report-scroll">
       <div v-if="reportStore.isLoading" class="flex justify-center py-24 text-sub">
         <BaseSpinner size="lg" label="리포트를 불러오는 중" />
+      </div>
+
+      <!-- 실패했으면 직전 달 숫자를 그대로 두지 않는다. useAsyncState 는 성공했을 때만
+           data 를 갈아끼우므로, 이 분기가 없으면 헤더는 8월인데 내용은 7월인 화면이 된다.
+           조회가 실패한 걸 사용자가 알 방법이 없어진다. -->
+      <div
+        v-else-if="reportStore.error"
+        class="flex flex-col items-center gap-4 py-24 text-center text-sm text-sub"
+      >
+        <p>리포트를 불러오지 못했어요</p>
+        <button
+          type="button"
+          class="rounded-lg bg-icon-bg px-4 py-2 text-xs font-bold text-ink"
+          @click="loadSummary"
+        >
+          다시 시도
+        </button>
       </div>
 
       <template v-else>
