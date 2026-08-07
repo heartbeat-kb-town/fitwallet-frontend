@@ -196,6 +196,38 @@ const selectedCategory = ref(null)
 const consentCategory = ref(null)
 const isSavingConsent = ref(false)
 const benefitCard = ref(null)
+
+/**
+ * 카드 이벤트 시트 (#125).
+ *
+ * 예전에는 "준비 중이에요" 토스트만 띄웠다. 백엔드에 이벤트 도메인이 없어서
+ * 목데이터로 채우지 않고 자리만 남겨뒀던 것인데, 이제 API 가 생겼다.
+ */
+const eventCard = ref(null)
+
+const {
+  data: cardEvents,
+  isLoading: isEventsLoading,
+  execute: fetchCardEvents,
+} = useAsyncState(cardApi.getCardEvents)
+
+/**
+ * 화면이 쓰는 모양으로 옮긴다.
+ *
+ * `daysRemaining` 과 기간은 백엔드가 준 값을 그대로 쓴다 — 날짜를 다시 계산하지 않는다.
+ */
+const events = computed(() =>
+  (cardEvents.value?.events ?? []).map((event) => ({
+    id: event.eventId,
+    summary: event.summary,
+    // 이 카드 전용인지 카드사 전체인지 구분한다. 사용자에게 의미가 다르다.
+    scope: event.targetType === 'ISSUER' ? '카드사 전체' : '이 카드',
+    period: `${event.startsAt} ~ ${event.endsAt}`,
+    daysRemaining: event.daysRemaining,
+    // detailAvailable 이 false 면 링크를 걸지 않는다. URL 이 있어도 마찬가지다.
+    detailUrl: event.detailAvailable ? event.detailUrl : null,
+  })),
+)
 const activeTab = ref(0)
 const toast = ref('')
 let toastTimer
@@ -338,6 +370,16 @@ async function openBenefit(card) {
   }
 }
 
+async function openEvents(card) {
+  eventCard.value = card
+  try {
+    await fetchCardEvents(card.id)
+  } catch (error) {
+    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
+    eventCard.value = null
+  }
+}
+
 function categoryIcon(name) {
   return Object.entries(benefitIcons).find(([key]) => name.includes(key))?.[1] ?? iconPayment
 }
@@ -465,9 +507,7 @@ function selectTab(index, label) {
           <div class="card-actions">
             <button @click="openBenefit(card)">혜택 현황</button>
             <span></span>
-            <!-- TODO(#101): 백엔드에 이벤트 도메인이 생기면 여기에 시트를 붙인다.
-                 자리를 남겨두려고 버튼만 두었다. 목데이터로 채우지 않는다. -->
-            <button @click="notify('카드 이벤트는 준비 중이에요')">이벤트</button>
+            <button @click="openEvents(card)">이벤트</button>
           </div>
         </article>
       </div>
@@ -569,6 +609,69 @@ function selectTab(index, label) {
             <button class="primary-button" @click="openReport(benefitCard.id)">
               받은 혜택 리포트 보기
             </button>
+          </template>
+        </div>
+      </section>
+    </div>
+  </Transition>
+
+  <!-- 카드 이벤트 시트 (#125). 혜택 현황 시트와 같은 구조를 쓴다. -->
+  <Transition name="sheet">
+    <div v-if="eventCard" class="sheet-layer fixed-layer">
+      <button class="scrim" aria-label="이벤트 닫기" @click="eventCard = null"></button>
+      <section class="sheet status-sheet">
+        <div class="sheet-head">
+          <span class="handle"></span>
+          <button class="sheet-close" aria-label="닫기" @click="eventCard = null">
+            <X :size="18" />
+          </button>
+          <h2>{{ eventCard.name }}</h2>
+          <p>{{ eventCard.issuer }}</p>
+        </div>
+
+        <div class="sheet-scroll">
+          <div v-if="isEventsLoading" class="flex justify-center py-16 text-sub">
+            <BaseSpinner size="lg" label="이벤트를 불러오는 중" />
+          </div>
+
+          <template v-else>
+            <h3>진행 중인 이벤트</h3>
+
+            <div v-if="events.length" class="flex flex-col gap-3">
+              <article
+                v-for="event in events"
+                :key="event.id"
+                class="rounded-2xl border border-line p-4"
+              >
+                <div class="mb-2 flex items-center gap-2">
+                  <span class="rounded-full bg-icon-bg px-2 py-0.5 text-[11px] text-sub">
+                    {{ event.scope }}
+                  </span>
+                  <!-- 남은 일수는 백엔드가 계산해 준다. 화면에서 날짜를 다시 빼지 않는다. -->
+                  <span v-if="event.daysRemaining != null" class="text-[11px] font-bold text-ink">
+                    D-{{ event.daysRemaining }}
+                  </span>
+                </div>
+
+                <p class="text-[13px] leading-snug text-ink">{{ event.summary }}</p>
+                <p class="mt-2 text-[11px] text-sub">{{ event.period }}</p>
+
+                <!-- 카드사 페이지로 나가는 외부 링크다. -->
+                <a
+                  v-if="event.detailUrl"
+                  :href="event.detailUrl"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  class="mt-2 inline-block text-[12px] font-bold text-primary-dark underline"
+                >
+                  자세히 보기
+                </a>
+              </article>
+            </div>
+
+            <div v-else class="py-6 text-center text-xs text-sub">
+              지금 진행 중인 이벤트가 없어요
+            </div>
           </template>
         </div>
       </section>

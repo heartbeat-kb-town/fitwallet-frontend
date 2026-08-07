@@ -53,6 +53,22 @@ export const getCardTransactions = (cardId, params) =>
 export const getCardUsage = (cardId, params) => client.get(`/card/${cardId}/usage`, { params })
 
 /**
+ * 카드에 걸린 이벤트.
+ *
+ * 카드 상품 전용(`CARD_PRODUCT`)과 카드사 전체(`ISSUER`) 가 함께 온다.
+ * 카드사 이벤트는 그 카드사 카드를 여러 장 갖고 있으면 카드마다 중복해서 보이는데,
+ * 백엔드가 카드 단위로 주는 구조라 정상이다.
+ *
+ * `daysRemaining` 은 **백엔드가 계산해서 준다.** 화면에서 날짜를 다시 빼지 않는다.
+ * `detailUrl` 은 카드사 페이지로 나가는 **외부 링크**다. `detailAvailable` 로 노출을 가른다.
+ *
+ * @returns `{ card, eventCount, events[] }` — 이벤트가 없으면 `events` 가 빈 배열이다.
+ *
+ *   - 404 CARD_NOT_FOUND : 내 카드가 아니거나 없는 카드
+ */
+export const getCardEvents = (cardId) => client.get(`/card/${cardId}/event`)
+
+/**
  * 카드 등록.
  *
  * @param payload `{ cardProductId, first4, last4, expiryDate }`
