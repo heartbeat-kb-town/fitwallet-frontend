@@ -22,7 +22,7 @@ import iconMycardActive from '@/assets/icons/mycard-selected.svg'
 import iconReport from '@/assets/icons/report.svg'
 import iconReportActive from '@/assets/icons/report-selected.svg'
 import iconLocation from '@/assets/icons/location.svg'
-import { categories, favoritePlaces, benefitIcons } from '@/data'
+import { categories, benefitIcons } from '@/data'
 import * as cardApi from '@/api/cardApi'
 import * as userApi from '@/api/userApi'
 import BaseSpinner from '@/components/common/BaseSpinner.vue'
@@ -46,7 +46,47 @@ const { markCardImageOrientation, cardImageStyle } = useCardImage()
  */
 const cards = computed(() => cardStore.cards)
 
-onMounted(() => cardStore.ensureCardsWithImages())
+/**
+ * 자주 찾는 장소. 목데이터가 아니라 API 에서 온다 (#114).
+ *
+ * 예전에는 `data.js` 의 `favoritePlaces` 를 그렸는데, "자주 찾는" 이라고 적어 놓고
+ * 누구에게나 블루보틀·파이브가이즈가 떴다. 사용자가 가본 적 없는 가게였다.
+ *
+ * 정렬과 개수는 백엔드가 정한다 (최근 1개월, 횟수 내림차순 상위 3건).
+ */
+const { data: frequentPlaces, execute: fetchFrequentPlaces } = useAsyncState(
+  userApi.getFrequentPlaces,
+  [],
+)
+
+/**
+ * 응답에는 `categoryId` 도 가게 사진도 없다. `categoryName` 으로 로컬 카테고리를 찾아
+ * 아이콘과 `categoryId` 를 얻는다. 카테고리 이름은 백엔드 `category` 테이블과 정확히 같다
+ * (카페/디저트 · 편의점/마트 · 쇼핑 · 푸드 · 병원 · 주유).
+ *
+ * 못 찾으면 `categoryId` 없이 이름만으로 검색한다. 가맹점 화면은 키워드가 있으면
+ * 카테고리를 보지 않으므로 이동은 그대로 동작한다.
+ */
+const places = computed(() =>
+  (frequentPlaces.value ?? []).map((place) => {
+    const category = categories.find((item) => item.name === place.categoryName)
+
+    return {
+      id: place.storeId,
+      name: place.storeName,
+      category: place.categoryName,
+      categoryId: category?.id,
+      icon: category?.icon,
+    }
+  }),
+)
+
+onMounted(() => {
+  cardStore.ensureCardsWithImages()
+
+  // 실패해도 홈의 나머지는 그대로 그린다. 이 섹션만 비워 두면 된다.
+  fetchFrequentPlaces().catch(() => {})
+})
 
 // 결제 탭으로 들어가면 카드 선택부터 시작한다 (기존 navigateTo('payment') 의 초기화).
 function openPayment() {
@@ -362,11 +402,12 @@ function selectTab(index, label) {
       </button>
     </div>
 
-    <section class="home-section">
+    <!-- 결제 내역이 없으면 빈 배열이 온다. 그때는 섹션을 통째로 감춘다. -->
+    <section v-if="places.length" class="home-section">
       <h2>자주 찾는 장소</h2>
       <div v-drag-scroll class="horizontal-scroll">
         <button
-          v-for="place in favoritePlaces"
+          v-for="place in places"
           :key="place.id"
           class="place-card"
           @click="
@@ -377,9 +418,16 @@ function selectTab(index, label) {
             })
           "
         >
-          <div class="place-image">
-            <img :src="place.img" :alt="place.name" />
-            <span v-if="place.isNew" class="new-badge">NEW</span>
+          <!--
+            백엔드가 가게 사진을 주지 않아 카테고리 아이콘을 그린다.
+            목 사진을 그대로 두면 `HD현대오일뱅크직영 효진주유소` 에 블루보틀 사진이 붙는다.
+
+            `.place-image` 를 쓰지 않고 Tailwind 로 새로 짠다. style.css 4700줄은 레이어 밖에
+            있어서 `.place-image img { object-fit: cover }` 가 유틸리티를 이긴다 —
+            클래스를 그대로 두면 아이콘이 칸에 맞춰 늘어난다.
+          -->
+          <div class="flex h-[130px] items-center justify-center bg-icon-bg">
+            <img v-if="place.icon" :src="place.icon" alt="" class="size-12 object-contain" />
           </div>
           <div class="place-info">
             <strong>{{ place.name }}</strong>

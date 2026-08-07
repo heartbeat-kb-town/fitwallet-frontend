@@ -256,23 +256,27 @@ grep -rn "Mapping(" ../fitwallet-backend/src/main/java/com/fitwallet/domain/*/co
 
 `setAccessToken()` / `clearAccessToken()`을 `client.js`에서 export하고 로그인·로그아웃 시 갈아끼운다.
 
-### 현재 제약 — 새로고침하면 로그아웃된다 (재발급 미연동)
+### 재발급 — 새로고침해도 로그인이 유지된다 (#111)
 
-메모리 보관이라 **새로고침하면 access token이 날아간다.**
-원래는 앱 부팅 시 재발급 API로 복구해야 하는데 **아직 연동하지 않았다.**
+메모리 보관이라 새로고침하면 access token이 날아가지만, **`POST /api/user/reissue`로 되살린다.**
+`refreshToken` HttpOnly 쿠키만 살아 있으면 복구된다.
 
-> ⚠️ **백엔드에는 `/api/user/reissue`가 이미 있다** (`UserController.java`, `POST`).
-> 응답은 `TokenReissueResponse`이고 refreshToken 쿠키를 읽어 새 access token을 준다.
-> 문서가 "없다"고 적혀 있던 시절의 판단을 그대로 믿지 말 것 — **프론트가 안 붙였을 뿐이다.**
+- **앱 부팅 시 한 번** 시도한다. `main.js`가 `reissueAccessToken()`을 **기다렸다가 mount**한다.
+  먼저 mount하면 `requiresAuth` 라우트가 토큰이 심어지기 전에 판정돼 로그인 화면으로 튕긴다.
+- **401을 받으면 `재발급 → 원요청 재시도`**로 이어간다. 재발급까지 실패하면 그때 토큰을 비운다.
+- 재시도는 **요청당 한 번만**이다(`config._retriedAfterReissue`). 재발급 직후에도 401이면
+  만료가 아니라 권한 문제이고, 거기서 또 재발급하면 같은 401을 무한히 돈다.
+- 동시에 여러 요청이 401을 받아도 **재발급은 한 번만** 나간다(in-flight 프로미스 공유).
+  각자 부르면 refresh token을 회전시키는 구현에서 뒤늦은 쪽이 무효 토큰으로 실패한다.
+- ⚠️ **재발급은 `client`가 아니라 `reissueClient`로 부른다.** 같은 인스턴스로 부르면
+  재발급의 401을 응답 인터셉터가 다시 물어 무한 루프가 된다. `Authorization` 헤더도 붙이지 않는다 —
+  백엔드는 쿠키만 본다.
+
 > `/logout`은 아직 없다(백엔드 전체에 `logout` 문자열이 없다).
 
-- 지금 401 처리는 **재발급 시도 없이** access token을 비우고 로그인 화면으로 보낸다.
-- 붙일 때는 `401 → 재발급 → 원요청 재시도`로 교체하고, 앱 부팅 시에도 한 번 시도한다.
-  재발급까지 실패하면 그때 로그인으로 보낸다.
-- 로컬에서 화면을 확인할 때 이게 계속 발목을 잡는다. **로그인 후에는 주소로 이동하지 말고
-  화면 안 버튼으로만 이동해야 한다.**
-
 라우터 가드는 `meta.requiresAuth`가 있는 라우트에서 토큰이 없으면 `login`으로 리다이렉트한다.
+**401을 받았을 때 로그인 화면으로 보내는 것은 아직 붙이지 않았다** — `client.js`가 라우터를
+import하면 라우터가 다시 `client.js`의 `getAccessToken`을 import해 순환이 생긴다.
 
 ## 에러 처리
 

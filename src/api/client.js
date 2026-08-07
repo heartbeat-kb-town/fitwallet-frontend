@@ -33,6 +33,21 @@ export class ApiError extends Error {
   }
 }
 
+/** axios 실패를 봉투에서 벗겨 ApiError 로 옮긴다. */
+function toApiError(error) {
+  const envelope = error.response?.data
+
+  return new ApiError(
+    envelope?.code,
+    // 네트워크 오류처럼 응답 자체가 없으면 백엔드 message 도 없다.
+    envelope?.message ?? error.message,
+    error.response?.status,
+    envelope?.errors ?? [],
+    // 실패 응답에도 알맹이가 실려 오는 경우가 있다 (PIN_MISMATCH 의 remainingAttempts).
+    envelope?.data ?? null,
+  )
+}
+
 // 401 이라고 다 세션 만료가 아니다. 백엔드가 주는 401 은 셋이고 그중 하나만 세션 끊김이다.
 //
 //   UNAUTHORIZED        (common)  진짜 세션 끊김        → 인터셉터가 토큰을 비운다
@@ -46,7 +61,7 @@ const BUSINESS_401_CODES = ['INVALID_CREDENTIALS', 'PIN_MISMATCH']
 
 // access token 은 메모리에만 둔다. localStorage / sessionStorage 에 절대 넣지 않는다.
 // refresh 를 HttpOnly 쿠키로 감싼 설계라, access 를 스토리지에 두면 XSS 방어가 무의미해진다.
-// 대신 새로고침하면 날아간다. 백엔드에 /reissue 가 생기면 앱 부팅 시 복구한다.
+// 새로고침하면 날아가지만, 부팅 시 reissueAccessToken() 이 쿠키로 복구한다 (main.js).
 //
 // 평범한 모듈 변수가 아니라 ref 다. store 가 isLoggedIn 같은 computed 로 이걸 보는데,
 // 일반 변수면 값이 바뀌어도 computed 가 다시 계산되지 않는다.
@@ -63,12 +78,58 @@ export const clearAccessToken = () => {
 
 export const getAccessToken = () => accessToken.value
 
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
+
 const client = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api',
+  baseURL: BASE_URL,
   // refreshToken HttpOnly 쿠키를 주고받으려면 반드시 켜야 한다.
   // 끄면 Set-Cookie 자체가 저장되지 않는다.
   withCredentials: true,
 })
+
+/**
+ * 재발급 전용 인스턴스.
+ *
+ * **재발급을 client 로 부르면 안 된다.** 재발급이 401 일 때 아래 응답 인터셉터가 그것을
+ * 다시 물어 재발급을 또 부르고, 그게 다시 401 이 되는 무한 루프가 된다.
+ *
+ * Authorization 헤더도 붙지 않는다. 만료된 access token 을 실어 보낼 이유가 없고
+ * 백엔드는 refreshToken 쿠키만 본다.
+ */
+const reissueClient = axios.create({
+  baseURL: BASE_URL,
+  withCredentials: true,
+})
+
+// 진행 중인 재발급. 동시에 여러 요청이 401 을 받아도 재발급은 한 번만 한다.
+let reissueInFlight = null
+
+/**
+ * refreshToken 쿠키로 access token 을 다시 받아 심는다.
+ *
+ * 401 을 받은 요청들이 각자 재발급을 부르면, refresh token 을 회전시키는 구현에서
+ * 뒤늦게 도착한 쪽이 이미 무효가 된 토큰으로 실패한다. 그래서 한 번만 부르고 결과를 나눠 쓴다.
+ *
+ * 실패는 그대로 던진다. 부르는 쪽이 "복구 불가" 로 판단해 토큰을 비운다.
+ * 로그인한 적이 없어 쿠키가 아예 없는 경우도 여기로 온다 — 정상적인 실패다.
+ */
+export function reissueAccessToken() {
+  reissueInFlight ??= reissueClient
+    .post('/user/reissue')
+    .then((res) => {
+      const token = res.data?.data?.accessToken
+      if (!token) {
+        throw new ApiError('INVALID_RESPONSE', '재발급 응답에 토큰이 없습니다.', res.status)
+      }
+      setAccessToken(token)
+      return token
+    })
+    .finally(() => {
+      reissueInFlight = null
+    })
+
+  return reissueInFlight
+}
 
 client.interceptors.request.use((config) => {
   if (accessToken.value) {
@@ -93,10 +154,11 @@ client.interceptors.response.use(
     }
     return res.data.data
   },
-  (error) => {
+  async (error) => {
     const status = error.response?.status
     const envelope = error.response?.data
     const isBusiness401 = BUSINESS_401_CODES.includes(envelope?.code)
+    const original = error.config
 
     // 세션이 끊긴 401 은 인터셉터가 전담한다. 화면에서 따로 처리하지 않는다.
     // 비즈니스 401 은 건드리지 않는다 (위 BUSINESS_401_CODES 참고).
@@ -104,25 +166,31 @@ client.interceptors.response.use(
     // 코드를 모르는 401 — 응답 봉투가 아예 없는 경우 — 은 세션 만료로 본다.
     // 판단이 안 될 때는 로그인으로 보내는 쪽이 안전하다.
     //
-    // TODO: 백엔드에 /reissue 가 생기면 401 → 재발급 → 원요청 재시도로 교체한다.
-    //       지금은 재발급 시도 없이 토큰만 비운다.
-    // TODO: 로그인 화면으로 보내는 것은 views 이관 후에 붙인다.
-    //       지금은 App.vue 의 수동 스위처가 화면을 쥐고 있어 라우터로 보내도 화면이 바뀌지 않는다.
+    // TODO: 로그인 화면으로 보내는 것은 별도 이슈다. client.js 가 라우터를 import 하면
+    //       라우터가 다시 client.js 의 getAccessToken 을 import 해 순환이 생긴다.
     if (status === 401 && !isBusiness401) {
+      // 재시도는 요청당 한 번만 한다. 재발급 직후에도 401 이면 만료가 아니라 권한 문제이고,
+      // 그때 또 재발급하면 같은 401 을 무한히 돈다.
+      if (original && !original._retriedAfterReissue) {
+        original._retriedAfterReissue = true
+
+        try {
+          await reissueAccessToken()
+        } catch {
+          // 재발급까지 실패했으면 진짜 세션 만료다.
+          clearAccessToken()
+          return Promise.reject(toApiError(error))
+        }
+
+        // 재요청 결과를 그대로 내보낸다. 이 인터셉터를 다시 타므로 봉투는 벗겨져 나가고,
+        // 실패하더라도 그쪽 에러가 사용자가 알아야 할 진짜 이유다.
+        return client(original)
+      }
+
       clearAccessToken()
     }
 
-    return Promise.reject(
-      new ApiError(
-        envelope?.code,
-        // 네트워크 오류처럼 응답 자체가 없으면 백엔드 message 도 없다.
-        envelope?.message ?? error.message,
-        status,
-        envelope?.errors ?? [],
-        // 실패 응답에도 알맹이가 실려 오는 경우가 있다 (PIN_MISMATCH 의 remainingAttempts).
-        envelope?.data ?? null,
-      ),
-    )
+    return Promise.reject(toApiError(error))
   },
 )
 
