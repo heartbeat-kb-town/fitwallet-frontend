@@ -15,6 +15,19 @@ export const postLogin = ({ loginId, password }) =>
   client.post('/user/login', { loginId, password })
 
 /**
+ * 위치 정보 이용 동의 상태 변경.
+ *
+ * **화면에서 동의를 받는 것만으로는 부족하다.** 가맹점 조회(`/store/search`)가
+ * `users.is_location_agreed` 를 직접 보고 막는다 (403 `LOCATION_AGREEMENT_REQUIRED`).
+ * 서버에 저장하지 않으면 동의를 눌러도 목록이 뜨지 않는다.
+ *
+ * 같은 값을 여러 번 보내도 되는 멱등한 요청이다. 성공 응답의 알맹이는 비어 있다.
+ * 로그인이 필요하다.
+ */
+export const patchLocationAgreement = ({ agreed }) =>
+  client.patch('/user/location-agreement', { agreed })
+
+/**
  * 자주 찾는 장소.
  *
  * 최근 **1개월** 결제 내역을 가게별로 묶어 횟수 내림차순 **상위 3건**을 준다

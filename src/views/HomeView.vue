@@ -1,5 +1,10 @@
 <script>
-// 위치 정보 동의는 세션 동안 한 번만 받도록 모듈 스코프에 저장 (홈 재진입해도 유지, 새로고침 시 초기화)
+// 같은 세션에서 동의 시트를 두 번 띄우지 않기 위한 캐시. 홈에 다시 들어와도 유지된다.
+//
+// **동의의 진짜 상태는 서버에 있다** (`users.is_location_agreed`). 이건 요청을 아끼는 용도일 뿐이다.
+// 새로고침하면 false 로 돌아가 시트가 다시 뜨는데, 그때 동의를 한 번 더 저장한다.
+// 멱등한 요청이라 문제 없다. 서버 값을 읽어 시트 노출을 정하려면 `GET /user/me` 가 필요한데
+// 백엔드에 아직 없다 (#117).
 let locationConsented = false
 </script>
 
@@ -189,6 +194,7 @@ const vDragScroll = {
 
 const selectedCategory = ref(null)
 const consentCategory = ref(null)
+const isSavingConsent = ref(false)
 const benefitCard = ref(null)
 const activeTab = ref(0)
 const toast = ref('')
@@ -289,10 +295,33 @@ function chooseCategory(category) {
   consentCategory.value = category
 }
 
-function confirmLocation() {
+/**
+ * 위치 정보 이용 동의.
+ *
+ * **서버에 저장하고 나서 넘어간다.** 가맹점 조회가 `users.is_location_agreed` 를 보고
+ * 403 으로 막으므로(`DefaultStoreService`), 먼저 넘어가면 빈 화면을 보여주게 된다.
+ *
+ * 예전에는 모듈 변수만 세우고 서버에 알리지 않아, 동의를 눌러도 목록이 뜨지 않았다 (#117).
+ */
+async function confirmLocation() {
+  if (isSavingConsent.value) return
+
   const category = consentCategory.value
-  consentCategory.value = null
+  isSavingConsent.value = true
+
+  try {
+    await userApi.patchLocationAgreement({ agreed: true })
+  } catch (error) {
+    // 시트를 닫지 않는다. 닫으면 사용자가 다시 동의할 방법이 없다.
+    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
+    return
+  } finally {
+    isSavingConsent.value = false
+  }
+
   locationConsented = true
+  consentCategory.value = null
+
   if (category) {
     openMerchants({ categoryId: category.id, title: category.name })
   }
@@ -474,8 +503,12 @@ function selectTab(index, label) {
           <h2>내 주변 {{ consentCategory.name }} 혜택을 볼까요?</h2>
           <p>가까운 매장과 지금 받을 수 있는 카드 혜택을 찾기 위해 위치 정보가 필요해요.</p>
         </div>
-        <button class="primary-button" @click="confirmLocation">위치 정보 동의하고 보기</button>
-        <button class="text-button" @click="consentCategory = null">다음에 할게요</button>
+        <button class="primary-button" :disabled="isSavingConsent" @click="confirmLocation">
+          {{ isSavingConsent ? '저장 중…' : '위치 정보 동의하고 보기' }}
+        </button>
+        <button class="text-button" :disabled="isSavingConsent" @click="consentCategory = null">
+          다음에 할게요
+        </button>
       </section>
     </div>
   </Transition>
