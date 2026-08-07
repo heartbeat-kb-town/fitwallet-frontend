@@ -51,11 +51,14 @@ export const routes = [
     path: '/pin/register',
     name: 'pin-register',
     component: () => import('@/views/PinRegisterView.vue'),
+    // 결제 PIN 등록 API 가 인증을 요구한다. 토큰 없이 6자리를 두 번 받아봐야 401 로 버려진다.
+    meta: { requiresAuth: true },
   },
   {
     path: '/pin/confirm',
     name: 'pin-confirm',
     component: () => import('@/views/PinConfirmView.vue'),
+    meta: { requiresAuth: true },
     // 등록을 건너뛰고 주소창으로 바로 들어오면 확인할 대상이 없다.
     beforeEnter: () => (useSignupStore().registeredPin ? true : { name: 'pin-register' }),
   },
