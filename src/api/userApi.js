@@ -15,6 +15,20 @@ export const postLogin = ({ loginId, password }) =>
   client.post('/user/login', { loginId, password })
 
 /**
+ * 자주 찾는 장소.
+ *
+ * 최근 **1개월** 결제 내역을 가게별로 묶어 횟수 내림차순 **상위 3건**을 준다
+ * (백엔드 `UserMapper.xml` 의 `findFrequentPlaces`). 정렬도 개수도 백엔드가 정한다 —
+ * 화면에서 다시 자르거나 정렬하지 않는다.
+ *
+ * 한 건은 `{ storeId, storeName, address, categoryName }` 이다.
+ * **가게 사진과 `categoryId` 는 응답에 없다.** 화면이 `categoryName` 으로 로컬 카테고리를 찾는다.
+ *
+ * 로그인이 필요하고, 결제 내역이 없으면 빈 배열이 온다.
+ */
+export const getFrequentPlaces = () => client.get('/user/frequent-places')
+
+/**
  * 회원가입.
  *
  * **성공 응답에 토큰이 없다** (백엔드가 `Void` 를 준다).
