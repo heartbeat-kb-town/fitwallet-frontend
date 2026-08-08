@@ -8,9 +8,12 @@ import iconMycard from '@/assets/icons/mycard.svg'
 import iconReport from '@/assets/icons/report.svg'
 import waitingPig from '@/assets/icons/pig-waiting.svg'
 import completePig from '@/assets/icons/pig-thorwcard.svg'
+import cryPig from '@/assets/icons/pig-cry.svg'
+import pickPig from '@/assets/icons/pig-pickcard.svg'
 
 import * as paymentApi from '@/api/paymentApi'
 import { QR_STATUS } from '@/api/paymentApi'
+import BaseModal from '@/components/common/BaseModal.vue'
 import { useCardImage } from '@/composables/useCardImage'
 import { useToast } from '@/composables/useToast'
 import { useCardStore } from '@/stores/cardStore'
@@ -89,11 +92,56 @@ const paidAt = ref('')
 // 어느 입력이 문제인지 알려주지 못하고, 시트가 떠 있어 토스트가 가린다.
 const pinMessage = ref('')
 const qrToken = ref('')
+
+// QR 상태 폴링이 함께 준다. 결과 조회의 열쇠다 (숫자가 아니라 문자열).
+const paymentId = ref('')
+
+/**
+ * 결제 결과. 완료 화면의 영수증이 전부 여기서 온다 (#122).
+ *
+ * 예전에는 금액과 혜택이 하드코딩(8,000원 · 1,200원)이었고 가맹점명이 없으면
+ * "스타벅스 강남점" 으로 떨어졌다. 지어낸 숫자를 영수증에 적지 않는다.
+ */
+const paymentResult = ref(null)
+
+/**
+ * 결제 실패 팝업.
+ *
+ * 백엔드 목 구현이 **10% 확률로 승인을 거절한다**(`MOCK_SUCCESS_RATE = 0.9`).
+ * 시연 중에도 열 번에 한 번은 여기로 오므로 화면이 반드시 있어야 한다.
+ *
+ * 전체 화면이 아니라 팝업이고, 닫으면 결제 비밀번호부터 다시 받는다.
+ */
+const isPaymentFailed = ref(false)
+
+/**
+ * 결제 정보확인 화면에 띄울 값. 가맹점이 QR 을 스캔한 뒤, 결제를 마치기 전에 보여준다.
+ *
+ * ⚠️ **백엔드가 아직 이 값을 주지 않는다.** `markSessionProcessing` 이 store_id 와 amount 를
+ * DB 에는 쓰지만, PROCESSING 응답에는 `paymentId` 와 `status` 만 담아 보낸다
+ * (`DefaultPaymentService:132`). `storeName` · `amount` 는 COMPLETED 응답에만 채워진다.
+ *
+ * 그래서 지금은 **두 칸이 `-` 로 뜬다.** 그래도 화면을 켜 두기로 했다 — 흐름을 미리 확인할 수
+ * 있고, 백엔드가 빌더에 두 줄만 채워주면 프론트 수정 없이 값이 들어온다.
+ * **금액을 화면에서 지어내지 않는다.** 확인 화면에 가짜 금액을 적으면 확인이 아니게 된다.
+ */
+const confirmInfo = ref(null)
+
 let countdownTimer
 let phaseTimer
 let pollTimer
+let resultTimer
 
 const activeCard = computed(() => cards.value[activeIndex.value])
+
+/** 결제로 받은 혜택. 응답 필드명은 `expectedBenefitAmount` 지만 완료 시점에는 확정된 값이다. */
+const receivedBenefit = computed(() => Number(paymentResult.value?.expectedBenefitAmount) || 0)
+
+/** 금액 표기. 값이 없으면 0 원이 아니라 빈 표시로 둔다 — 0 원 결제와 구분되어야 한다. */
+function won(value) {
+  if (value == null) return '-'
+  return `${Number(value).toLocaleString('ko-KR')}원`
+}
 const countdownText = computed(() => {
   const minutes = Math.floor(secondsLeft.value / 60)
   const seconds = String(secondsLeft.value % 60).padStart(2, '0')
@@ -154,6 +202,16 @@ function openPin() {
   phase.value = 'pin'
 }
 
+/** 실패 팝업의 "뒤로 가기". 닫으면 뒤에 이미 깔려 있는 결제 비밀번호 화면이 드러난다. */
+function closePaymentFailure() {
+  isPaymentFailed.value = false
+}
+
+/** 정보확인 화면의 "결제 하러가기". 결과 폴링을 다시 돌려 결제를 마무리한다. */
+function confirmPayment() {
+  phase.value = 'processing'
+}
+
 function addDigit(digit) {
   if (pin.value.length < 6) pin.value.push(digit)
 }
@@ -201,6 +259,9 @@ async function startQrSession(userCardId) {
   try {
     const session = await paymentStore.createQr(userCardId)
     qrToken.value = session.qrToken
+    // 새 결제다. 지난 결제의 확인 내용이 남아 있으면 정보확인 화면을 건너뛴다.
+    confirmInfo.value = null
+    paymentResult.value = null
     qrTab.value = 'scan'
     // 만료 시간은 백엔드가 정한다. 화면에 180 을 박아두면 정책이 바뀔 때 어긋난다.
     secondsLeft.value = session.expiresIn
@@ -253,12 +314,23 @@ function clearFlowTimers() {
   window.clearInterval(countdownTimer)
   window.clearTimeout(phaseTimer)
   window.clearInterval(pollTimer)
+  window.clearInterval(resultTimer)
+}
+
+const pad = (number) => String(number).padStart(2, '0')
+
+function format(date) {
+  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
 function formatNow() {
-  const now = new Date()
-  const pad = (number) => String(number).padStart(2, '0')
-  return `${now.getFullYear()}.${pad(now.getMonth() + 1)}.${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+  return format(new Date())
+}
+
+/** 서버가 준 `paidAt`(LocalDateTime 문자열)을 영수증 표기로 옮긴다. */
+function formatDateTime(value) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? formatNow() : format(date)
 }
 
 /**
@@ -269,18 +341,18 @@ function formatNow() {
  */
 async function pollQrStatus() {
   try {
-    const { status } = await paymentApi.getQrStatus(qrToken.value)
+    const { status, paymentId: sessionPaymentId } = await paymentApi.getQrStatus(qrToken.value)
 
-    // ⚠️ 백엔드는 SCANNED 까지만 만든다. PROCESSING·COMPLETED 로 바꾸는 코드가 없다.
-    //    그래서 SCANNED 를 "결제가 시작됐다" 신호로 쓴다.
-    //    결제 승인 API 가 생기면 COMPLETED 분기가 실제로 타지기 시작한다.
+    // 결과 조회에 필요하다. 예전에는 이 값을 구조분해에서 버렸다.
+    if (sessionPaymentId) paymentId.value = sessionPaymentId
+
+    // 스캔되면 결과 폴링으로 넘긴다. 그 뒤는 getPaymentResult 가 굴린다 (phase watcher 참고).
     if (status === QR_STATUS.SCANNED || status === QR_STATUS.PROCESSING) {
       phase.value = 'processing'
       return
     }
     if (status === QR_STATUS.COMPLETED) {
-      paidAt.value = formatNow()
-      phase.value = 'done'
+      phase.value = 'processing'
       return
     }
     if (status === QR_STATUS.EXPIRED || status === QR_STATUS.FAILED) {
@@ -297,6 +369,60 @@ async function pollQrStatus() {
   }
 }
 
+/**
+ * 결제 결과를 물어본다.
+ *
+ * ⚠️ **이 호출이 결제를 진행시킨다.** 백엔드가 부를 때마다 상태를 전진시키고,
+ * COMPLETED 가 될 때 결제 내역을 기록한다 (`paymentApi.getPaymentResult` 주석).
+ * 부르지 않으면 결제가 끝나지 않고 DB 에도 남지 않는다.
+ */
+async function pollPaymentResult() {
+  if (!paymentId.value) return
+
+  try {
+    const result = await paymentApi.getPaymentResult(paymentId.value)
+
+    if (result.status === QR_STATUS.COMPLETED) {
+      paymentResult.value = result
+      // 서버가 준 시각을 쓴다. 없으면 그때만 화면 시계로 떨어진다.
+      paidAt.value = result.paidAt ? formatDateTime(result.paidAt) : formatNow()
+      phase.value = 'done'
+
+      // 방금 결제로 카드 잔액·실적이 달라졌다. 다음 화면이 옛 값을 보지 않게 새로 받는다.
+      cardStore.fetchCards().catch(() => {})
+      return
+    }
+
+    // 가맹점이 스캔해서 금액이 확정됐고 아직 확인을 안 받았으면 정보확인 화면을 띄운다.
+    // 둘 다 와야 한다 — 하나만 오면 나머지 칸이 비어 보인다.
+    // 가맹점이 스캔해 결제가 시작됐다. 마치기 전에 정보확인을 한 번 거친다.
+    // storeName 이 아직 안 오므로, 가맹점을 거쳐 들어온 결제면 그때 들고 온 이름이라도 쓴다.
+    if (result.status === QR_STATUS.PROCESSING && !confirmInfo.value) {
+      confirmInfo.value = {
+        storeName: result.storeName ?? merchantName ?? null,
+        amount: result.amount ?? null,
+      }
+      phase.value = 'confirm'
+      return
+    }
+
+    if (result.status === QR_STATUS.FAILED) {
+      // 실패한 QR 세션은 죽었다. 뒤에 결제 비밀번호 화면을 깔아두고 팝업을 띄운다.
+      // 팝업을 닫으면 바로 PIN 부터 다시 받을 수 있다 — 실패한 자리에 남겨두지 않는다.
+      openPin()
+      isPaymentFailed.value = true
+    }
+    // PROCESSING 이면 아직이다. 다음 차례에 다시 물어본다.
+  } catch (error) {
+    if (error.code === 'PAYMENT_NOT_FOUND') {
+      showToast('결제 정보를 찾을 수 없어요. 다시 시도해 주세요')
+      phase.value = 'cards'
+      return
+    }
+    // 일시적인 오류일 수 있다. 폴링을 세우지 않는다.
+  }
+}
+
 watch(phase, (nextPhase) => {
   clearFlowTimers()
 
@@ -309,13 +435,10 @@ watch(phase, (nextPhase) => {
   }
 
   if (nextPhase === 'processing') {
-    // TODO(mock): 결제 승인·완료 API 가 백엔드에 없다(#81). SCANNED 다음이 없어서
-    //             완료 화면으로 넘기는 것만 타이머로 남겼다. 생기면 이 타이머를 지우고
-    //             위 폴링의 COMPLETED 분기가 화면을 넘기게 한다.
-    phaseTimer = window.setTimeout(() => {
-      paidAt.value = formatNow()
-      phase.value = 'done'
-    }, 2200)
+    // 결과 조회가 상태를 전진시킨다. 백엔드가 PROCESSING 을 2초 붙잡아 두므로
+    // QR 폴링과 같은 1초 간격이면 두세 번 안에 결론이 난다 (#122).
+    pollPaymentResult()
+    resultTimer = window.setInterval(pollPaymentResult, QR_POLL_INTERVAL_MS)
   }
 })
 
@@ -599,19 +722,52 @@ onBeforeUnmount(clearFlowTimers)
       <p>잠시만 기다려주세요</p>
     </section>
 
+    <!--
+      결제 정보확인. 가맹점이 QR 을 스캔해 금액이 확정된 뒤, 결제를 마치기 전에 한 번 보여준다.
+      백엔드가 storeName·amount 를 줄 때만 이 단계가 생긴다 (confirmInfo 주석 참고).
+    -->
+    <section v-else-if="phase === 'confirm'" class="payment-done-screen">
+      <div class="payment-done-scroll">
+        <img :src="pickPig" alt="" />
+        <h2>결제 정보를 확인하세요</h2>
+
+        <dl class="payment-receipt">
+          <div>
+            <dt>가맹점명</dt>
+            <!-- 아직 안 오는 값이다. 빈칸으로 두면 깨진 화면처럼 보여 금액과 같은 표시로 맞춘다. -->
+            <dd>{{ confirmInfo?.storeName ?? '-' }}</dd>
+          </div>
+          <div>
+            <dt>결제 금액</dt>
+            <dd>{{ won(confirmInfo?.amount) }}</dd>
+          </div>
+        </dl>
+      </div>
+
+      <div class="payment-done-actions">
+        <button class="benefit-button" type="button" @click="confirmPayment()">
+          결제 하러가기
+        </button>
+        <button class="home-button" type="button" @click="goHome()">홈으로</button>
+      </div>
+    </section>
+
     <section v-else class="payment-done-screen">
       <div class="payment-done-scroll">
         <img :src="completePig" alt="" />
         <h2>결제가 완료되었습니다</h2>
 
         <dl class="payment-receipt">
+          <!-- 영수증은 전부 결제 결과 응답에서 온다. 지어낸 값을 적지 않는다 (#122). -->
           <div>
             <dt>가맹점명</dt>
-            <dd>{{ merchantName || '스타벅스 강남점' }}</dd>
+            <dd>{{ paymentResult?.storeName ?? merchantName ?? '-' }}</dd>
           </div>
           <div>
             <dt>결제 수단</dt>
-            <dd>{{ activeCard?.issuer }} {{ activeCard?.name }} 카드</dd>
+            <dd>
+              {{ paymentResult?.paymentMethod ?? `${activeCard?.issuer} ${activeCard?.name} 카드` }}
+            </dd>
           </div>
           <div>
             <dt>결제 일시</dt>
@@ -619,11 +775,12 @@ onBeforeUnmount(clearFlowTimers)
           </div>
           <div>
             <dt>결제 금액</dt>
-            <dd>8,000원</dd>
+            <dd>{{ won(paymentResult?.amount) }}</dd>
           </div>
-          <div>
-            <dt>예정 혜택</dt>
-            <dd class="benefit">1,200원</dd>
+          <!-- 혜택이 없는 결제도 있다. 0원을 "받은 혜택" 으로 적기보다 줄을 빼는 편이 정확하다. -->
+          <div v-if="receivedBenefit > 0">
+            <dt>받은 혜택</dt>
+            <dd class="benefit">{{ won(receivedBenefit) }}</dd>
           </div>
         </dl>
       </div>
@@ -633,5 +790,24 @@ onBeforeUnmount(clearFlowTimers)
         <button class="home-button" type="button" @click="goHome()">홈으로</button>
       </div>
     </section>
+
+    <!--
+      결제 실패 팝업 (#123).
+      딤을 눌러 닫히지 않게 한다 — 결제 결과는 사용자가 버튼으로 확인하고 넘어가야 한다.
+    -->
+    <!-- title 을 쓰지 않는다. 디자인에 상단 제목이 없고, "결제가 실패했어요" 와 겹친다. -->
+    <BaseModal :is-open="isPaymentFailed" :can-close-on-backdrop="false" aria-label="결제 실패">
+      <div class="flex flex-col items-center gap-2 py-2 text-center">
+        <img :src="cryPig" alt="" width="141" height="147" />
+        <p class="text-[17px] font-bold text-ink">결제가 실패했어요</p>
+        <p class="text-[13px] text-sub">결제 비밀번호부터 다시 진행해 주세요</p>
+      </div>
+
+      <template #footer>
+        <button class="primary-button" type="button" @click="closePaymentFailure()">
+          뒤로 가기
+        </button>
+      </template>
+    </BaseModal>
   </section>
 </template>

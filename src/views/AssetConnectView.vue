@@ -2,17 +2,50 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
+import * as cardApi from '@/api/cardApi'
+import { useToast } from '@/composables/useToast'
+import { useCardStore } from '@/stores/cardStore'
 
 const router = useRouter()
+const cardStore = useCardStore()
+const { showToast } = useToast()
+
 const agreed = ref(false)
+const isConnecting = ref(false)
 
 function goBack() {
   router.push({ name: 'signup-complete' })
 }
 
-// TODO(#27): 마이데이터 연동(POST /api/cards/mydata)은 별도 이슈다.
-//            홈은 셸의 기본 화면이라 query 없이 셸로 보내면 된다.
-function connect() {
+/**
+ * 마이데이터 자산 연동.
+ *
+ * **연동에 성공하고 카드를 다시 받아온 뒤에 홈으로 넘어간다.** 먼저 넘어가면
+ * 카드가 아직 없는 빈 홈을 한 번 보여주게 된다.
+ *
+ * 예전에는 서버를 부르지 않고 홈으로 넘어가기만 했다. 그래서 신규 가입자는
+ * 카드가 하나도 없는 채로 시작했다 (#119).
+ */
+async function connect() {
+  if (!agreed.value || isConnecting.value) return
+
+  isConnecting.value = true
+
+  try {
+    await cardApi.postMyDataCards()
+
+    // ensureCards() 가 아니라 fetchCards() 다. ensureCards 는 이미 카드가 있으면
+    // 건너뛰는데, 여기서는 방금 늘어난 카드를 받아와야 한다.
+    await cardStore.fetchCards()
+    await cardStore.ensureCardImages()
+  } catch (error) {
+    // 화면에 머문다. 홈으로 보내면 왜 카드가 없는지 알 수 없다.
+    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
+    return
+  } finally {
+    isConnecting.value = false
+  }
+
   router.push({ name: 'home' })
 }
 </script>
@@ -89,7 +122,18 @@ function connect() {
     </div>
 
     <footer class="asset-footer">
-      <button class="primary-button" type="button" @click="connect()">연결하고 시작하기</button>
+      <!--
+        두 약관이 모두 [필수] 다. 마이데이터는 금융 데이터를 가져오는 동작이라
+        동의 없이 요청을 보내면 안 된다.
+      -->
+      <button
+        class="primary-button disabled:cursor-not-allowed disabled:opacity-45"
+        type="button"
+        :disabled="!agreed || isConnecting"
+        @click="connect()"
+      >
+        {{ isConnecting ? '연결 중…' : '연결하고 시작하기' }}
+      </button>
     </footer>
   </div>
 </template>
