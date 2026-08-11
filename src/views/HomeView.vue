@@ -11,7 +11,7 @@ let locationConsented = false
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Menu, X } from 'lucide-vue-next'
+import { ChevronDown, Info, Menu, X } from 'lucide-vue-next'
 import iconSearch from '@/assets/icons/search.svg'
 import iconHomeActive from '@/assets/icons/click-home.svg'
 import iconHome from '@/assets/icons/home.svg'
@@ -233,78 +233,123 @@ const toast = ref('')
 let toastTimer
 
 /**
- * 혜택 현황 시트의 내용. 카드별 이용 실적에서 온다 (#101).
+ * 혜택 현황 시트 전체가 이 응답 하나로 그려진다 (#121).
  *
- * **예전 시트는 목데이터라서 보여줄 수 있던 것이 더 많았다.** 카테고리별 한도·사용액·건수와
- * 브랜드별 혜택이 있었는데 `/card/{id}/usage` 는 그것들을 주지 않는다.
- * 지어내지 않고, 실제로 오는 것(실적 금액·구간·구간별 혜택)만 보여준다.
- *
- * 카테고리별 사용액이 오게 되면 그때 예전 모양으로 되돌린다 (#101 의 A안).
+ * 상단 요약·진행바, 카테고리별 혜택, 브랜드별 혜택이 전부 여기서 온다.
+ * 예전 목데이터 시트가 보여주던 카테고리별 한도·사용액·건수와 브랜드별 혜택이
+ * 이 API 로 돌아왔다. `/card/{id}/usage` 는 그것들을 주지 않아 한동안 비어 있었다.
  */
 const {
-  data: usage,
-  isLoading: isUsageLoading,
-  execute: fetchUsage,
-} = useAsyncState(cardApi.getCardUsage)
+  data: monthlyBenefit,
+  isLoading: isBenefitLoading,
+  execute: fetchMonthlyBenefit,
+} = useAsyncState(cardApi.getCardMonthlyBenefit)
 
-/** 이번 달 실적 인정 금액. 실적 미달이어도 0 이 아니라 쌓인 만큼 온다. */
-const recognizedAmount = computed(() => Number(usage.value?.usageSummary?.recognizedAmount) || 0)
+/**
+ * 한도 금액을 표시 단위로 적는다. 포인트 혜택은 `원` 이 아니라 `P` 다.
+ *
+ * 단위는 `limitUnit` 이 알려준다 (`KRW` · `POINT`). 화면이 카드 종류로 추측하지 않는다.
+ */
+function limitAmount(value, unit) {
+  const amount = (Number(value) || 0).toLocaleString('ko-KR')
+  return unit === 'POINT' ? `${amount}P` : `${amount}원`
+}
 
-/** 다음 구간 기준액. 최고 구간이거나 실적 조건이 없으면 null 이라 화면에서 분기한다. */
-const nextTierAmount = computed(() => {
-  const amount = usage.value?.nextTier?.minimumAmount
-  return amount == null ? null : Number(amount)
-})
+/**
+ * 카테고리·브랜드 혜택 행을 화면이 쓰는 한 가지 모양으로 맞춘다.
+ *
+ * **표시 문자열은 되도록 백엔드가 만들어 준 것을 쓴다.** `valueLabel` ·
+ * `receivedBenefitLabel` · `perTransactionLimitLabel` 은 할인/적립과 원화/포인트가
+ * 섞여 있어 화면이 단위를 다시 정하면 틀린다.
+ *
+ * ⚠️ **한도만 예외다.** 백엔드 `limitLabel` 은 `"3,500원 / 5,000원"` 처럼
+ * **사용량 / 전체 한도** 인데, 디자인은 **남은 한도 / 전체 한도** 를 요구한다.
+ * 그대로 쓰면 캡션("월별 남은 혜택 한도")과 숫자가 정반대가 된다.
+ * `remainingValue` 가 함께 오므로 그걸로 다시 적는다.
+ */
+function toBenefitRow(item, key) {
+  // 월 한도가 여럿 걸린 혜택이 있다. 대표로 첫 줄만 시트에 노출한다.
+  const limit = item.monthlyLimits?.[0] ?? null
 
-/** 실적 진행률. 백엔드가 계산해서 준다 — 화면에서 다시 구하지 않는다. */
-const progress = computed(() =>
-  Math.min(100, Math.round(Number(usage.value?.tierProgressRate) || 0)),
+  return {
+    key,
+    name: item.displayName,
+    imageUrl: item.categoryImageUrl ?? item.brandImageUrl ?? null,
+    value: item.valueLabel,
+    perTransactionLimit: item.perTransactionLimitLabel,
+    remainingLabel: limit ? limitAmount(limit.remainingValue, limit.limitUnit) : null,
+    totalLimitLabel: limit ? limitAmount(limit.limitValue, limit.limitUnit) : null,
+    received: item.receivedBenefitLabel,
+    transactionCount: item.transactionCount,
+    totalPaymentAmount: Number(item.totalPaymentAmount) || 0,
+    exhausted: item.itemLimitStatus === 'LIMIT_EXHAUSTED',
+  }
+}
+
+/** 백엔드가 소진분을 하단으로 정렬해서 준다. 화면이 다시 정렬하지 않는다. */
+const categoryBenefits = computed(() =>
+  (monthlyBenefit.value?.categoryBenefits ?? []).map((item) =>
+    toBenefitRow(item, `category-${item.benefitServiceId}-${item.categoryId}`),
+  ),
 )
 
-/** 헤더에 한 줄로 뜨는 실적 상태. */
-const tierLabel = computed(() => {
-  if (!usage.value) return ''
+const brandBenefits = computed(() =>
+  (monthlyBenefit.value?.brandBenefits ?? []).map((item) =>
+    toBenefitRow(item, `brand-${item.benefitServiceId}-${item.brandId}`),
+  ),
+)
 
-  const current = usage.value.currentTier?.tierName
-  const until = usage.value.amountUntilNextTier
-  if (until != null && usage.value.nextTier) {
-    return `${current ?? '실적 구간'} 적용 중 · 다음 구간까지 ${won(Number(until))}`
+/** 브랜드 혜택은 접어 둔다. 카드에 따라 행이 길어진다. */
+const brandsOpen = ref(false)
+
+/**
+ * 시트 상단 요약. **디자인의 진행바는 실적이 아니라 잠재 혜택이다.**
+ *
+ * `/card/{id}/usage` 밖에 없던 동안은 실적 진행률로 대신 그렸는데(#105),
+ * 잠재 혜택과 전체 한도가 `monthlySummary` 로 오면서 디자인대로 되돌렸다 (#121).
+ *
+ * 전체 한도가 없는 카드는 `potentialBenefitRate` 가 null 이라 분모를 감춘다.
+ */
+const benefitSummary = computed(() => {
+  const summary = monthlyBenefit.value?.monthlySummary
+  if (!summary) return null
+
+  return {
+    potential: Number(summary.potentialBenefitAmount) || 0,
+    total: Number(summary.totalBenefitLimit) || 0,
+    hasLimit: summary.potentialBenefitRate != null,
   }
-  return current ? `${current} 적용 중 (최고 구간)` : '실적 조건이 없는 카드예요'
+})
+
+/** 잠재 혜택 진행률. 백엔드가 계산해서 준다 — 화면에서 다시 나누지 않는다. */
+const benefitProgress = computed(() =>
+  Math.min(
+    100,
+    Math.round(Number(monthlyBenefit.value?.monthlySummary?.potentialBenefitRate) || 0),
+  ),
+)
+
+/**
+ * 진행바 아래 한 줄. 디자인은 "전월 실적 2구간 기준 적용 중" 이다.
+ *
+ * 구간명은 `performance.currentTier` 에서 오고, 실적 조건이 없는 카드는 그게 null 이라
+ * 백엔드가 준 `message` 를 그대로 쓴다.
+ */
+const performanceLabel = computed(() => {
+  const performance = monthlyBenefit.value?.performance
+  if (!performance) return ''
+
+  const tierName = performance.currentTier?.tierName
+  return tierName ? `전월 실적 ${tierName} 적용 중` : performance.message
 })
 
 /**
- * 구간별 혜택을 한 줄로 편다.
+ * 잠재 혜택 설명 토글. 상단 ⓘ 를 누를 때마다 열리고 닫힌다.
  *
- * 실적 조건이 없는 카드는 `tiers` 가 비고 혜택이 `defaultBenefits` 로 온다 (cardApi 주석).
- * 두 경우를 한 목록으로 합쳐 화면이 분기하지 않게 한다.
+ * 문구는 디자인 주석 그대로다. 잠재 혜택이 무엇을 합한 값인지 화면 어디에도 없어서,
+ * 진행바 숫자가 어디서 나온 건지 사용자가 알 방법이 없었다.
  */
-const tierBenefits = computed(() => {
-  if (!usage.value) return []
-
-  const fromTiers = (usage.value.tiers ?? []).flatMap((tier) =>
-    (tier.benefits ?? []).map((benefit) => ({
-      key: `${tier.tierOrder}-${benefit.benefitId}`,
-      name: benefit.benefitName,
-      value: benefit.valueLabel,
-      // 적립과 할인은 사용자에게 다른 혜택이다. 뭉뚱그리지 않는다.
-      kind: benefit.benefitType === 'ACCUMULATE' ? '적립' : '할인',
-      tierName: tier.tierName,
-      reached: tier.achieved || tier.current,
-    })),
-  )
-
-  const fromDefault = (usage.value.defaultBenefits ?? []).map((benefit) => ({
-    key: `default-${benefit.benefitId}`,
-    name: benefit.benefitName,
-    value: benefit.valueLabel,
-    kind: benefit.benefitType === 'ACCUMULATE' ? '적립' : '할인',
-    tierName: '기본 혜택',
-    reached: true,
-  }))
-
-  return [...fromTiers, ...fromDefault]
-})
+const isPotentialInfoOpen = ref(false)
 
 function won(value) {
   return `${value.toLocaleString('ko-KR')}원`
@@ -359,11 +404,16 @@ async function confirmLocation() {
   }
 }
 
+/**
+ * 혜택 현황 시트를 연다.
+ *
+ * `card.id` 는 이미 `userCardId` 다. `card_product_id` 가 아니다.
+ */
 async function openBenefit(card) {
   benefitCard.value = card
+  brandsOpen.value = false
   try {
-    // yearMonth 를 생략하면 현재 월이다 (cardApi 주석).
-    await fetchUsage(card.id)
+    await fetchMonthlyBenefit(card.id)
   } catch (error) {
     showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
     benefitCard.value = null
@@ -564,44 +614,151 @@ function selectTab(index, label) {
           </button>
           <h2>{{ benefitCard.name }}</h2>
           <p>{{ benefitCard.issuer }}</p>
+          <!--
+            상단은 실적이 아니라 **잠재 혜택**이다 (#121, 디자인 기준).
+            `/card/{id}/usage` 밖에 없던 동안만 실적 진행률로 대신 그렸다 (#105).
+          -->
           <div class="progress-title">
-            <span>이번 달 실적</span>
-            <strong>
-              <em>{{ won(recognizedAmount) }}</em>
-              <template v-if="nextTierAmount"> / {{ won(nextTierAmount) }}</template>
+            <span class="inline-flex items-center gap-1">
+              이번 달 잠재 혜택
+              <!--
+                Preflight 를 빼둔 프로젝트라 `bg-transparent` 를 직접 준다.
+                안 주면 브라우저 기본 버튼 배경(회색 알약)이 그대로 보인다.
+              -->
+              <button
+                type="button"
+                class="inline-flex bg-transparent p-0 text-muted transition-colors hover:text-sub"
+                :aria-expanded="isPotentialInfoOpen"
+                aria-label="잠재 혜택이 무엇인지 보기"
+                @click="isPotentialInfoOpen = !isPotentialInfoOpen"
+              >
+                <Info :size="13" />
+              </button>
+            </span>
+            <strong v-if="benefitSummary">
+              <em>{{ won(benefitSummary.potential) }}</em>
+              <template v-if="benefitSummary.hasLimit">
+                / {{ won(benefitSummary.total) }}
+              </template>
             </strong>
           </div>
-          <div class="progress"><span :style="{ width: `${progress}%` }"></span></div>
-          <p class="tier">{{ tierLabel }}</p>
+          <div class="progress"><span :style="{ width: `${benefitProgress}%` }"></span></div>
+          <p class="tier">{{ performanceLabel }}</p>
+
+          <!-- 잠재 혜택 설명. ⓘ 를 누를 때마다 열리고 닫힌다. 문구는 디자인 주석 그대로다. -->
+          <Transition name="expand">
+            <p
+              v-if="isPotentialInfoOpen"
+              class="mt-2 rounded-xl bg-icon-bg px-3 py-2 text-xs leading-relaxed text-sub"
+            >
+              잠재혜택은 청구할인, 포인트 적립, 캐시백, 할인쿠폰을 합산한 혜택이에요.
+            </p>
+          </Transition>
         </div>
         <div class="sheet-scroll">
-          <div v-if="isUsageLoading" class="flex justify-center py-16 text-sub">
-            <BaseSpinner size="lg" label="이용 실적을 불러오는 중" />
+          <div v-if="isBenefitLoading" class="flex justify-center py-16 text-sub">
+            <BaseSpinner size="lg" label="혜택 현황을 불러오는 중" />
           </div>
 
           <template v-else>
-            <p class="limit-caption">실적 구간에 따라 <b>적용되는</b> 혜택</p>
-            <h3>구간별 혜택</h3>
-            <div v-if="tierBenefits.length" class="benefit-list">
-              <div v-for="item in tierBenefits" :key="item.key" class="benefit-row">
-                <span class="mini-icon"
-                  ><img :src="categoryIcon(item.name)" alt="" width="16" height="16"
-                /></span>
-                <div class="benefit-body">
-                  <div class="row-title">
-                    <strong>{{ item.name }}</strong>
-                    <span v-if="!item.reached" class="exhausted">미달성</span>
-                    <small>{{ item.tierName }}</small>
-                  </div>
-                  <div class="row-discount">
-                    <span>{{ item.kind }}</span>
-                    <strong
-                      ><em :class="{ muted: !item.reached }">{{ item.value }}</em></strong
-                    >
+            <!-- 카테고리·브랜드 혜택. 월 한도가 걸린 혜택이 없으면 둘 다 빈 배열로 온다. -->
+            <template v-if="categoryBenefits.length || brandBenefits.length">
+              <p class="limit-caption">
+                월별 <b>남은</b> 혜택 한도
+                <span v-if="monthlyBenefit?.asOfDate" class="text-xs">
+                  · {{ monthlyBenefit.asOfDate }} 기준
+                </span>
+              </p>
+
+              <template v-if="categoryBenefits.length">
+                <h3>카테고리별 혜택</h3>
+                <div class="benefit-list">
+                  <div v-for="item in categoryBenefits" :key="item.key" class="benefit-row">
+                    <span class="mini-icon">
+                      <img
+                        :src="item.imageUrl ?? categoryIcon(item.name)"
+                        alt=""
+                        width="16"
+                        height="16"
+                      />
+                    </span>
+                    <div class="benefit-body">
+                      <div class="row-title">
+                        <strong>{{ item.name }}</strong>
+                        <span v-if="item.exhausted" class="exhausted">한도 소진</span>
+                        <small v-if="item.perTransactionLimit">{{
+                          item.perTransactionLimit
+                        }}</small>
+                      </div>
+                      <div class="row-discount">
+                        <span>{{ item.value }}</span>
+                        <strong v-if="item.remainingLabel">
+                          <em :class="{ muted: item.exhausted }">{{ item.remainingLabel }}</em>
+                          / {{ item.totalLimitLabel }}
+                        </strong>
+                      </div>
+                      <div class="row-total">
+                        <span>
+                          총 {{ item.transactionCount }}건 · {{ won(item.totalPaymentAmount) }} 결제
+                        </span>
+                        <strong>{{ item.received }}</strong>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              </template>
+
+              <button class="brand-toggle" @click="brandsOpen = !brandsOpen">
+                <strong>브랜드별 혜택</strong>
+                <ChevronDown :size="18" :class="{ rotated: brandsOpen }" />
+              </button>
+              <Transition name="expand">
+                <div v-if="brandsOpen" class="benefit-list brand-list">
+                  <template v-if="brandBenefits.length">
+                    <div v-for="item in brandBenefits" :key="item.key" class="benefit-row">
+                      <span class="brand-avatar">
+                        <img
+                          v-if="item.imageUrl"
+                          :src="item.imageUrl"
+                          alt=""
+                          width="16"
+                          height="16"
+                        />
+                        <template v-else>{{ item.name.slice(0, 1) }}</template>
+                      </span>
+                      <div class="benefit-body">
+                        <div class="row-title">
+                          <strong>{{ item.name }}</strong>
+                          <span v-if="item.exhausted" class="exhausted">한도 소진</span>
+                          <small v-if="item.perTransactionLimit">
+                            {{ item.perTransactionLimit }}
+                          </small>
+                        </div>
+                        <div class="row-discount">
+                          <span>{{ item.value }}</span>
+                          <strong v-if="item.remainingLabel">
+                            <em :class="{ muted: item.exhausted }">{{ item.remainingLabel }}</em>
+                            / {{ item.totalLimitLabel }}
+                          </strong>
+                        </div>
+                        <div class="row-total">
+                          <span>
+                            총 {{ item.transactionCount }}건 ·
+                            {{ won(item.totalPaymentAmount) }} 결제
+                          </span>
+                          <strong>{{ item.received }}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                  <div v-else class="empty-brand">
+                    <strong>0</strong><span>등록된 브랜드 혜택이 없어요</span>
+                  </div>
+                </div>
+              </Transition>
+            </template>
+
+            <!-- 월 한도가 걸린 혜택이 하나도 없는 카드. 두 배열이 함께 빈다. -->
             <div v-else class="py-6 text-center text-xs text-sub">
               이 카드에 등록된 혜택 정보가 없어요
             </div>
