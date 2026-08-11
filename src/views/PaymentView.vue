@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Menu } from 'lucide-vue-next'
 import iconHome from '@/assets/icons/home.svg'
@@ -15,6 +15,7 @@ import * as paymentApi from '@/api/paymentApi'
 import { QR_STATUS } from '@/api/paymentApi'
 import BaseModal from '@/components/common/BaseModal.vue'
 import { useCardImage } from '@/composables/useCardImage'
+import { useQrScanner } from '@/composables/useQrScanner'
 import { useToast } from '@/composables/useToast'
 import { useCardStore } from '@/stores/cardStore'
 import { usePaymentStore } from '@/stores/paymentStore'
@@ -85,7 +86,6 @@ const locked = ref(false)
 const phase = ref('cards')
 const pin = ref([])
 const shakePin = ref(false)
-const qrTab = ref('scan')
 const secondsLeft = ref(180)
 const paidAt = ref('')
 // PIN 입력창 아래 인라인 메시지. 검증 실패는 토스트로 띄우지 않는다 —
@@ -115,22 +115,44 @@ const paymentResult = ref(null)
 const isPaymentFailed = ref(false)
 
 /**
- * 결제 정보확인 화면에 띄울 값. 가맹점이 QR 을 스캔한 뒤, 결제를 마치기 전에 보여준다.
+ * 결제 정보확인 화면에 띄울 값. **매장 QR 을 스캔(MPM)했을 때만 쓴다** (#130).
  *
- * ⚠️ **백엔드가 아직 이 값을 주지 않는다.** `markSessionProcessing` 이 store_id 와 amount 를
- * DB 에는 쓰지만, PROCESSING 응답에는 `paymentId` 와 `status` 만 담아 보낸다
- * (`DefaultPaymentService:132`). `storeName` · `amount` 는 COMPLETED 응답에만 채워진다.
+ * 내 QR 을 보여주는 결제(CPM)에는 확인 단계가 없다. 가맹점 단말이 금액을 이미 갖고 있고,
+ * 백엔드도 PROCESSING 응답에 `storeName` · `amount` 를 안 실어줘서
+ * (`DefaultPaymentService:132`) 두 칸이 `-` 로 뜨는 화면이었다. 확인할 것이 없는 확인이다.
  *
- * 그래서 지금은 **두 칸이 `-` 로 뜬다.** 그래도 화면을 켜 두기로 했다 — 흐름을 미리 확인할 수
- * 있고, 백엔드가 빌더에 두 줄만 채워주면 프론트 수정 없이 값이 들어온다.
+ * ⚠️ **지금은 아무도 이 값을 채우지 않는다.** `POST /payment/qr/scan` 이 붙으면 그 응답이
+ * `storeName` 과 `amount` 를 실제로 주므로(`StoreQrScanResponse`) 그때 채운다.
  * **금액을 화면에서 지어내지 않는다.** 확인 화면에 가짜 금액을 적으면 확인이 아니게 된다.
  */
 const confirmInfo = ref(null)
+
+/**
+ * 매장 QR 스캔(MPM) 단계 (#130).
+ *
+ * ⚠️ **여기 오려면 PIN 을 한 번 더 받아야 한다.** `POST /payment/qr` 와
+ * `POST /payment/qr/scan` 이 `users.pin_auth_id` **컬럼 하나**를 함께 쓰는데,
+ * QR 화면에 들어온 순간 CPM 세션이 그 표를 태워버렸기 때문이다.
+ * 백엔드가 표를 나눠주면 이 재입력은 사라진다.
+ */
+const scannedToken = ref('')
+const scanAmount = ref('')
+const scanMessage = ref('')
+const videoRef = ref(null)
+
+const { error: scannerError, start: startScanner, stop: stopScanner } = useQrScanner()
+
+/** PIN 시트를 왜 띄웠는지. 같은 시트를 CPM 개시와 스캔 재인증이 함께 쓴다. */
+const pinPurpose = ref('qr')
 
 let countdownTimer
 let phaseTimer
 let pollTimer
 let resultTimer
+
+/** 결제 중 화면을 최소 이만큼은 보여준다. 백엔드가 PROCESSING 을 붙잡는 시간과 맞췄다. */
+const PROCESSING_MIN_MS = 2000
+let processingStartedAt = 0
 
 const activeCard = computed(() => cards.value[activeIndex.value])
 
@@ -196,7 +218,14 @@ function resetPointer() {
   pointerStartY.value = null
 }
 
-function openPin() {
+/**
+ * PIN 시트를 연다.
+ *
+ * @param purpose `'qr'` 이면 검증 뒤 CPM 세션을 만들고, `'scan'` 이면 매장 QR 스캔으로 간다.
+ *   같은 시트를 둘이 함께 쓰므로 어느 쪽인지 남겨둬야 `confirmPin` 이 갈래를 고를 수 있다.
+ */
+function openPin(purpose = 'qr') {
+  pinPurpose.value = purpose
   pin.value = []
   pinMessage.value = ''
   phase.value = 'pin'
@@ -212,11 +241,23 @@ function confirmPayment() {
   phase.value = 'processing'
 }
 
+/** PIN 검증과 QR 생성은 한 동작이다. 둘 중 하나라도 돌고 있으면 키패드를 막는다. */
+const isSubmittingPin = computed(() => paymentStore.isVerifyingPin || paymentStore.isCreatingQr)
+
+/**
+ * 6자리를 채우면 **자동으로 검증이 나간다** (#130).
+ *
+ * 6자리는 그 자체로 입력 완료 신호다. `완료` 를 한 번 더 누를 이유가 없어 버튼을 뺐다.
+ */
 function addDigit(digit) {
-  if (pin.value.length < 6) pin.value.push(digit)
+  if (isSubmittingPin.value || pin.value.length >= 6) return
+
+  pin.value.push(digit)
+  if (pin.value.length === 6) confirmPin()
 }
 
 function deleteDigit() {
+  if (isSubmittingPin.value) return
   pin.value.pop()
 }
 
@@ -237,16 +278,110 @@ async function confirmPin() {
   }
   // 목록이 아직 안 왔으면 고른 카드가 없다. 보낼 userCardId 가 없으니 진행하지 않는다.
   if (!activeCard.value) return
-  if (paymentStore.isVerifyingPin || paymentStore.isCreatingQr) return
+  if (isSubmittingPin.value) return
 
   const userCardId = activeCard.value.id
   pinMessage.value = ''
   try {
     await paymentStore.verifyPin({ userCardId, paymentPin: pin.value.join('') })
+
+    // 스캔하려고 다시 받은 PIN 이면 QR 을 만들지 않는다. 만들면 방금 받은 표를 또 태운다.
+    if (pinPurpose.value === 'scan') {
+      phase.value = 'scan'
+      return
+    }
     await startQrSession(userCardId)
   } catch (error) {
     handlePinError(error)
   }
+}
+
+/**
+ * `QR Scan` 탭을 눌렀다. 매장 QR 을 찍는 흐름으로 갈아탄다.
+ *
+ * CPM 세션은 여기서 버린다. 만료되게 두면 그만이고, 되돌아오려면 어차피 새로 만들어야 한다.
+ */
+function startScanFlow() {
+  clearFlowTimers()
+  scannedToken.value = ''
+  scanAmount.value = ''
+  scanMessage.value = ''
+  openPin('scan')
+}
+
+/** 스캔 화면에서 뒤로. 카메라를 반드시 끄고 나간다. */
+function cancelScan() {
+  stopScanner()
+  scannedToken.value = ''
+  scanAmount.value = ''
+  scanMessage.value = ''
+  phase.value = 'cards'
+}
+
+/**
+ * 매장 QR 을 읽었다. 금액을 받기 위해 카메라를 멈추고 입력으로 넘어간다.
+ *
+ * ⚠️ **금액은 QR 에 없다.** 매장 QR 토큰은 `FITWALLET-QR-#####` 뿐이고 백엔드도
+ * 금액을 모른다(`StoreQrScanRequest.amount` 가 필수다). 그래서 사용자에게 받는다.
+ * 화면이 임의 금액을 지어내면 뒤이어 나오는 "결제 정보를 확인하세요" 가 거짓말이 된다.
+ */
+function handleScanned(value) {
+  scannedToken.value = value.trim()
+  scanMessage.value = ''
+}
+
+/** 금액을 확정하고 스캔 결제를 개시한다. 성공하면 정보확인 화면으로 넘어간다. */
+async function submitScan() {
+  const amount = Number(scanAmount.value)
+  if (!Number.isFinite(amount) || amount <= 0) {
+    scanMessage.value = '결제 금액을 입력해 주세요.'
+    return
+  }
+  if (paymentStore.isScanningStoreQr) return
+
+  try {
+    const result = await paymentStore.scanStoreQr({
+      storeQrToken: scannedToken.value,
+      userCardId: activeCard.value?.id ?? merchantCardId,
+      amount,
+    })
+
+    // 결과 폴링의 열쇠다. CPM 은 QR 상태 조회가 주지만 MPM 은 이 응답이 준다.
+    paymentId.value = result.paymentId
+    // **이 화면이 처음으로 진짜 값을 받는다.** 가맹점명은 백엔드가 QR 토큰으로 조회한 것이다.
+    confirmInfo.value = { storeName: result.storeName, amount: result.amount }
+    phase.value = 'confirm'
+  } catch (error) {
+    handleScanError(error)
+  }
+}
+
+/**
+ * 카메라를 다시 켠다.
+ *
+ * `useQrScanner` 는 QR 을 하나 읽으면 스스로 멈춘다(같은 QR 로 결제가 두 번 나가면 안 된다).
+ * 그래서 입력 화면에서 스캐너로 되돌아올 때는 **직접 다시 켜야 한다.**
+ */
+async function rescan() {
+  scannedToken.value = ''
+  scanAmount.value = ''
+  await nextTick()
+  if (videoRef.value) startScanner(videoRef.value, handleScanned)
+}
+
+function handleScanError(error) {
+  if (error.code === 'QR_TOKEN_INVALID' || error.code === 'STORE_NOT_FOUND') {
+    // 다른 QR 을 찍었다. 카메라를 다시 켜서 찍게 한다.
+    rescan()
+    scanMessage.value = '피그 가맹점 QR 이 아니에요. 다시 찍어 주세요.'
+    return
+  }
+  if (error.code === 'PIN_AUTH_ID_INVALID') {
+    openPin('scan')
+    pinMessage.value = '인증 시간이 지났어요. 비밀번호를 다시 입력해 주세요.'
+    return
+  }
+  showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
 }
 
 /**
@@ -262,7 +397,6 @@ async function startQrSession(userCardId) {
     // 새 결제다. 지난 결제의 확인 내용이 남아 있으면 정보확인 화면을 건너뛴다.
     confirmInfo.value = null
     paymentResult.value = null
-    qrTab.value = 'scan'
     // 만료 시간은 백엔드가 정한다. 화면에 180 을 박아두면 정책이 바뀔 때 어긋난다.
     secondsLeft.value = session.expiresIn
     phase.value = 'qr'
@@ -386,33 +520,32 @@ async function pollPaymentResult() {
       paymentResult.value = result
       // 서버가 준 시각을 쓴다. 없으면 그때만 화면 시계로 떨어진다.
       paidAt.value = result.paidAt ? formatDateTime(result.paidAt) : formatNow()
-      phase.value = 'done'
 
       // 방금 결제로 카드 잔액·실적이 달라졌다. 다음 화면이 옛 값을 보지 않게 새로 받는다.
       cardStore.fetchCards().catch(() => {})
-      return
-    }
 
-    // 가맹점이 스캔해서 금액이 확정됐고 아직 확인을 안 받았으면 정보확인 화면을 띄운다.
-    // 둘 다 와야 한다 — 하나만 오면 나머지 칸이 비어 보인다.
-    // 가맹점이 스캔해 결제가 시작됐다. 마치기 전에 정보확인을 한 번 거친다.
-    // storeName 이 아직 안 오므로, 가맹점을 거쳐 들어온 결제면 그때 들고 온 이름이라도 쓴다.
-    if (result.status === QR_STATUS.PROCESSING && !confirmInfo.value) {
-      confirmInfo.value = {
-        storeName: result.storeName ?? merchantName ?? null,
-        amount: result.amount ?? null,
-      }
-      phase.value = 'confirm'
+      finishProcessing(() => {
+        phase.value = 'done'
+      })
       return
     }
 
     if (result.status === QR_STATUS.FAILED) {
       // 실패한 QR 세션은 죽었다. 뒤에 결제 비밀번호 화면을 깔아두고 팝업을 띄운다.
       // 팝업을 닫으면 바로 PIN 부터 다시 받을 수 있다 — 실패한 자리에 남겨두지 않는다.
-      openPin()
-      isPaymentFailed.value = true
+      finishProcessing(() => {
+        openPin()
+        isPaymentFailed.value = true
+      })
+      return
     }
+
     // PROCESSING 이면 아직이다. 다음 차례에 다시 물어본다.
+    //
+    // **여기서 정보확인 화면으로 보내지 않는다** (#130). CPM 은 가맹점 단말이 금액을
+    // 이미 갖고 있어서 확인 단계가 없다. 게다가 백엔드가 PROCESSING 응답에
+    // `storeName` · `amount` 를 안 실어줘서 두 칸이 `-` 로 뜨던 화면이었다.
+    // 확인 화면은 매장 QR 스캔(MPM)이 붙을 때 그쪽에서만 쓴다 — 그 응답은 두 값을 준다.
   } catch (error) {
     if (error.code === 'PAYMENT_NOT_FOUND') {
       showToast('결제 정보를 찾을 수 없어요. 다시 시도해 주세요')
@@ -423,8 +556,33 @@ async function pollPaymentResult() {
   }
 }
 
-watch(phase, (nextPhase) => {
+/**
+ * 결제 중 화면을 최소 시간만큼 띄운 뒤 다음으로 넘긴다 (#130).
+ *
+ * 백엔드는 PROCESSING 을 2초 붙잡는다(`MOCK_PROCESS_DELAY_SECONDS`). 그래도 첫 폴링이
+ * 이미 그 시간을 넘긴 세션을 만나면 COMPLETED 가 즉시 와서 화면이 깜빡이고 만다.
+ * 결과가 언제 오든 사용자는 "결제 중" 을 이 시간만큼은 본다.
+ *
+ * 결과가 나왔으니 폴링은 여기서 세운다. 안 세우면 대기하는 동안 한 번 더 물어본다.
+ */
+function finishProcessing(next) {
+  window.clearInterval(resultTimer)
+
+  const elapsed = Date.now() - processingStartedAt
+  phaseTimer = window.setTimeout(next, Math.max(0, PROCESSING_MIN_MS - elapsed))
+}
+
+watch(phase, async (nextPhase, previousPhase) => {
   clearFlowTimers()
+
+  // 스캔 화면을 떠나면 무조건 카메라를 끈다. 켜둔 채 나가면 캠 불이 남는다.
+  if (previousPhase === 'scan' && nextPhase !== 'scan') stopScanner()
+
+  if (nextPhase === 'scan') {
+    // `<video>` 가 DOM 에 붙은 뒤에 잡아야 한다.
+    await nextTick()
+    if (videoRef.value) startScanner(videoRef.value, handleScanned)
+  }
 
   if (nextPhase === 'qr') {
     countdownTimer = window.setInterval(() => {
@@ -435,6 +593,9 @@ watch(phase, (nextPhase) => {
   }
 
   if (nextPhase === 'processing') {
+    // 최소 노출 시간의 기준점. 결과가 언제 오든 여기서부터 잰다 (#130).
+    processingStartedAt = Date.now()
+
     // 결과 조회가 상태를 전진시킨다. 백엔드가 PROCESSING 을 2초 붙잡아 두므로
     // QR 폴링과 같은 1초 간격이면 두세 번 안에 결론이 난다 (#122).
     pollPaymentResult()
@@ -468,7 +629,11 @@ onMounted(() => {
   }
 })
 
-onBeforeUnmount(clearFlowTimers)
+onBeforeUnmount(() => {
+  clearFlowTimers()
+  // 화면을 벗어나도 카메라는 살아 있다. 여기서 끄지 않으면 캠 불이 계속 켜져 있다.
+  stopScanner()
+})
 </script>
 
 <template>
@@ -639,14 +804,13 @@ onBeforeUnmount(clearFlowTimers)
               </svg>
             </button>
             <button type="button" @click="addDigit(0)">0</button>
-            <button
-              class="payment-pin-confirm"
-              type="button"
-              :disabled="paymentStore.isVerifyingPin || paymentStore.isCreatingQr"
-              @click="confirmPin"
-            >
-              {{ paymentStore.isVerifyingPin || paymentStore.isCreatingQr ? '확인 중' : '완료' }}
-            </button>
+            <!--
+              `완료` 버튼을 뺐다 (#130). 6자리를 채우면 자동으로 검증이 나간다.
+              칸은 남긴다 — 3×4 격자라 없애면 `0` 이 가운데에서 밀린다.
+            -->
+            <span class="payment-pin-confirm grid place-items-center" aria-live="polite">
+              {{ isSubmittingPin ? '확인 중' : '' }}
+            </span>
           </div>
         </section>
       </div>
@@ -674,15 +838,7 @@ onBeforeUnmount(clearFlowTimers)
 
       <div class="payment-qr-view">
         <div class="payment-qr-frame">
-          <div v-if="qrTab === 'scan'" class="payment-scanner">
-            <i class="corner top-left"></i>
-            <i class="corner top-right"></i>
-            <i class="corner bottom-left"></i>
-            <i class="corner bottom-right"></i>
-            <span class="payment-scan-line"></span>
-          </div>
-
-          <svg v-else class="payment-qr-code" viewBox="0 0 192 192" aria-label="결제 QR 코드">
+          <svg class="payment-qr-code" viewBox="0 0 192 192" aria-label="결제 QR 코드">
             <rect width="192" height="192" rx="10" fill="#fff" />
             <g fill="#1a1a1a">
               <path
@@ -699,21 +855,105 @@ onBeforeUnmount(clearFlowTimers)
         </div>
       </div>
 
+      <!--
+        `QR Scan` 은 탭 전환이 아니라 **다른 결제 방식으로 갈아타는 버튼**이다 (#130).
+        매장 QR 을 찍는 것은 별도 API(`POST /payment/qr/scan`)이고, 그 API 가
+        지금 세션이 이미 태워버린 인증표를 다시 요구하기 때문에 PIN 부터 다시 받는다.
+      -->
       <div class="payment-qr-tabs" role="tablist" aria-label="QR 결제 방식">
-        <button type="button" :class="{ active: qrTab === 'scan' }" @click="qrTab = 'scan'">
-          QR Scan
+        <button type="button" @click="startScanFlow">QR Scan</button>
+        <button type="button" class="active">QR Code</button>
+      </div>
+      <p class="payment-qr-guide">매장에서 QR 코드를 스캔해 주세요</p>
+    </section>
+
+    <!-- 매장 QR 스캔 (MPM). 카메라로 실제 QR 을 읽는다 (#130). -->
+    <section v-else-if="phase === 'scan'" class="payment-qr-screen">
+      <header>
+        <button type="button" aria-label="이전으로 돌아가기" @click="cancelScan">
+          <svg width="19" height="19" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+            <path
+              d="M11 4L6 9L11 14"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
         </button>
-        <button type="button" :class="{ active: qrTab === 'code' }" @click="qrTab = 'code'">
-          QR Code
+      </header>
+
+      <div class="payment-qr-status">
+        <strong>결제 요청 중...</strong>
+      </div>
+
+      <div class="payment-qr-view">
+        <div class="payment-qr-frame">
+          <!-- 카메라 미리보기. 프레임을 꽉 채우고 스캐너 장식을 그 위에 얹는다. -->
+          <video
+            v-show="!scannedToken"
+            ref="videoRef"
+            class="h-full w-full rounded-[18px] object-cover"
+            muted
+            playsinline
+          ></video>
+
+          <div v-if="!scannedToken" class="payment-scanner">
+            <i class="corner top-left"></i>
+            <i class="corner top-right"></i>
+            <i class="corner bottom-left"></i>
+            <i class="corner bottom-right"></i>
+            <span class="payment-scan-line"></span>
+          </div>
+
+          <!--
+            QR 을 읽었다. **금액은 QR 에 없어서** 여기서 받는다 —
+            매장 QR 토큰에도 백엔드에도 금액이 없다 (paymentApi.postQrScan 주석).
+          -->
+          <div v-else class="flex h-full w-full flex-col justify-center gap-3 px-5">
+            <p class="text-center text-xs text-sub">QR 을 읽었어요</p>
+            <div class="flex items-baseline justify-between">
+              <label class="text-[13px] font-semibold text-ink" for="scan-amount">결제 금액</label>
+              <button
+                type="button"
+                class="bg-transparent text-xs text-sub underline"
+                @click="rescan"
+              >
+                다시 찍기
+              </button>
+            </div>
+            <input
+              id="scan-amount"
+              v-model="scanAmount"
+              class="w-full rounded-xl border border-line bg-white px-3 py-2 text-right text-lg text-ink"
+              type="number"
+              inputmode="numeric"
+              min="1"
+              placeholder="0"
+              @keyup.enter="submitScan"
+            />
+          </div>
+        </div>
+      </div>
+
+      <p v-if="scannerError" class="px-6 text-center text-[13px] text-danger" role="alert">
+        {{ scannerError }}
+      </p>
+      <p v-else-if="scanMessage" class="px-6 text-center text-[13px] text-danger" role="alert">
+        {{ scanMessage }}
+      </p>
+
+      <p v-if="!scannedToken" class="payment-qr-guide">매장 QR 코드를 화면 안에 맞춰 주세요</p>
+      <div v-else class="px-6 pb-6">
+        <button
+          class="primary-button w-full"
+          type="button"
+          :disabled="paymentStore.isScanningStoreQr"
+          @click="submitScan"
+        >
+          {{ paymentStore.isScanningStoreQr ? '확인 중' : '결제 정보 확인하기' }}
         </button>
       </div>
-      <p class="payment-qr-guide">
-        {{
-          qrTab === 'scan'
-            ? '매장 QR 코드를 화면 안에 맞춰 주세요'
-            : '매장에서 QR 코드를 스캔해 주세요'
-        }}
-      </p>
     </section>
 
     <section v-else-if="phase === 'processing'" class="payment-processing-screen">
@@ -723,8 +963,12 @@ onBeforeUnmount(clearFlowTimers)
     </section>
 
     <!--
-      결제 정보확인. 가맹점이 QR 을 스캔해 금액이 확정된 뒤, 결제를 마치기 전에 한 번 보여준다.
-      백엔드가 storeName·amount 를 줄 때만 이 단계가 생긴다 (confirmInfo 주석 참고).
+      결제 정보확인. **매장 QR 을 스캔(MPM)했을 때만 거치는 단계다** (#130).
+      내 QR 을 보여주는 결제(CPM)는 여기로 오지 않는다 — confirmInfo 주석 참고.
+
+      `POST /payment/qr/scan` 이 붙기 전까지는 아무도 이 화면에 들어오지 않는다.
+      마크업을 지우지 않는 이유는 그 연동이 바로 다음 순서이고,
+      그때 이 화면이 처음으로 진짜 가맹점명과 금액을 받기 때문이다.
     -->
     <section v-else-if="phase === 'confirm'" class="payment-done-screen">
       <div class="payment-done-scroll">
