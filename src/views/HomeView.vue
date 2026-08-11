@@ -11,7 +11,7 @@ let locationConsented = false
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ChevronDown, Info, Menu, X } from 'lucide-vue-next'
+import { Info, Menu, X } from 'lucide-vue-next'
 import iconSearch from '@/assets/icons/search.svg'
 import iconHomeActive from '@/assets/icons/click-home.svg'
 import iconHome from '@/assets/icons/home.svg'
@@ -299,9 +299,6 @@ const brandBenefits = computed(() =>
   ),
 )
 
-/** 브랜드 혜택은 접어 둔다. 카드에 따라 행이 길어진다. */
-const brandsOpen = ref(false)
-
 /**
  * 시트 상단 요약. **디자인의 진행바는 실적이 아니라 잠재 혜택이다.**
  *
@@ -411,7 +408,6 @@ async function confirmLocation() {
  */
 async function openBenefit(card) {
   benefitCard.value = card
-  brandsOpen.value = false
   try {
     await fetchMonthlyBenefit(card.id)
   } catch (error) {
@@ -670,9 +666,13 @@ function selectTab(index, label) {
                 </span>
               </p>
 
+              <!--
+                두 목록 모두 테두리 있는 상자다. `.benefit-list` 는 배경과 모서리만 잡고
+                테두리·좌우 여백이 없어서 유틸리티로 채운다. 토큰(`border-line`)을 쓴다.
+              -->
               <template v-if="categoryBenefits.length">
                 <h3>카테고리별 혜택</h3>
-                <div class="benefit-list">
+                <div class="benefit-list border border-line px-4">
                   <div v-for="item in categoryBenefits" :key="item.key" class="benefit-row">
                     <span class="mini-icon">
                       <img
@@ -708,54 +708,46 @@ function selectTab(index, label) {
                 </div>
               </template>
 
-              <button class="brand-toggle" @click="brandsOpen = !brandsOpen">
-                <strong>브랜드별 혜택</strong>
-                <ChevronDown :size="18" :class="{ rotated: brandsOpen }" />
-              </button>
-              <Transition name="expand">
-                <div v-if="brandsOpen" class="benefit-list brand-list">
-                  <template v-if="brandBenefits.length">
-                    <div v-for="item in brandBenefits" :key="item.key" class="benefit-row">
-                      <span class="brand-avatar">
-                        <img
-                          v-if="item.imageUrl"
-                          :src="item.imageUrl"
-                          alt=""
-                          width="16"
-                          height="16"
-                        />
-                        <template v-else>{{ item.name.slice(0, 1) }}</template>
-                      </span>
-                      <div class="benefit-body">
-                        <div class="row-title">
-                          <strong>{{ item.name }}</strong>
-                          <span v-if="item.exhausted" class="exhausted">한도 소진</span>
-                          <small v-if="item.perTransactionLimit">
-                            {{ item.perTransactionLimit }}
-                          </small>
-                        </div>
-                        <div class="row-discount">
-                          <span>{{ item.value }}</span>
-                          <strong v-if="item.remainingLabel">
-                            <em :class="{ muted: item.exhausted }">{{ item.remainingLabel }}</em>
-                            / {{ item.totalLimitLabel }}
-                          </strong>
-                        </div>
-                        <div class="row-total">
-                          <span>
-                            총 {{ item.transactionCount }}건 ·
-                            {{ won(item.totalPaymentAmount) }} 결제
-                          </span>
-                          <strong>{{ item.received }}</strong>
-                        </div>
+              <!-- 여백은 래퍼에 준다. `.sheet-scroll h3` 가 레이어 밖 규칙이라 `mt-*` 를 이긴다. -->
+              <div v-if="brandBenefits.length" class="mt-6">
+                <h3>브랜드별 혜택</h3>
+                <div class="benefit-list border border-line px-4">
+                  <div v-for="item in brandBenefits" :key="item.key" class="benefit-row">
+                    <span class="brand-avatar">
+                      <img
+                        v-if="item.imageUrl"
+                        :src="item.imageUrl"
+                        alt=""
+                        width="16"
+                        height="16"
+                      />
+                      <template v-else>{{ item.name.slice(0, 1) }}</template>
+                    </span>
+                    <div class="benefit-body">
+                      <div class="row-title">
+                        <strong>{{ item.name }}</strong>
+                        <span v-if="item.exhausted" class="exhausted">한도 소진</span>
+                        <small v-if="item.perTransactionLimit">
+                          {{ item.perTransactionLimit }}
+                        </small>
+                      </div>
+                      <div class="row-discount">
+                        <span>{{ item.value }}</span>
+                        <strong v-if="item.remainingLabel">
+                          <em :class="{ muted: item.exhausted }">{{ item.remainingLabel }}</em>
+                          / {{ item.totalLimitLabel }}
+                        </strong>
+                      </div>
+                      <div class="row-total">
+                        <span>
+                          총 {{ item.transactionCount }}건 · {{ won(item.totalPaymentAmount) }} 결제
+                        </span>
+                        <strong>{{ item.received }}</strong>
                       </div>
                     </div>
-                  </template>
-                  <div v-else class="empty-brand">
-                    <strong>0</strong><span>등록된 브랜드 혜택이 없어요</span>
                   </div>
                 </div>
-              </Transition>
+              </div>
             </template>
 
             <!-- 월 한도가 걸린 혜택이 하나도 없는 카드. 두 배열이 함께 빈다. -->
