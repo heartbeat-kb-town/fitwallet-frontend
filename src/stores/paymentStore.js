@@ -54,6 +54,10 @@ export const usePaymentStore = defineStore('payment', () => {
     execute: runCreateQr,
   } = useAsyncState(paymentApi.postQr)
 
+  const { isLoading: isScanningStoreQr, execute: runScanStoreQr } = useAsyncState(
+    paymentApi.postQrScan,
+  )
+
   /**
    * 결제 비밀번호 검증. 성공하면 `pinAuthId` 를 채운다.
    *
@@ -76,6 +80,26 @@ export const usePaymentStore = defineStore('payment', () => {
     // 백엔드가 used 로 찍었으니 이 표는 더 못 쓴다. 남겨두면 다음 결제에서 재사용하려다 400 이 난다.
     pinAuthId.value = ''
     return session
+  }
+
+  /**
+   * 매장 QR 스캔(MPM). `createQr` 과 **같은 인증표를 소모한다.**
+   *
+   * `users.pin_auth_id` 가 컬럼 하나라 사용자당 표가 하나뿐이다. 그래서 CPM 으로 QR 을
+   * 이미 만들었다면 이 호출 전에 PIN 을 한 번 더 받아 표를 새로 발급해야 한다.
+   *
+   * @returns `{ paymentId, storeId, storeName, amount }`
+   */
+  async function scanStoreQr({ storeQrToken, userCardId, amount }) {
+    const result = await runScanStoreQr({
+      storeQrToken,
+      pinAuthId: pinAuthId.value,
+      userCardId,
+      amount,
+    })
+    // 백엔드가 used 로 찍었다. 남겨두면 다음 결제에서 재사용하려다 400 이 난다.
+    pinAuthId.value = ''
+    return result
   }
 
   // 가맹점에서 카드를 고르고 비밀번호까지 입력한 경우 — QR 단계부터 시작한다.
@@ -104,10 +128,12 @@ export const usePaymentStore = defineStore('payment', () => {
     qrSession,
     isVerifyingPin,
     isCreatingQr,
+    isScanningStoreQr,
     pinError,
     qrError,
     verifyPin,
     createQr,
+    scanStoreQr,
     startFromMerchant,
     reset,
   }
