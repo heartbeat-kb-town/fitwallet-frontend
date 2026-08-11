@@ -53,6 +53,33 @@ export const getCardTransactions = (cardId, params) =>
 export const getCardUsage = (cardId, params) => client.get(`/card/${cardId}/usage`, { params })
 
 /**
+ * 카드별 월간 혜택 현황.
+ *
+ * 이용 실적(`getCardUsage`)이 "얼마 썼나" 라면 이쪽은 "무엇으로 얼마 받았고 한도가 얼마 남았나" 다.
+ * **둘은 겹치지 않는다.** 실적 진행률(`tierProgressRate`)과 구간 정보는 여기 없으므로
+ * 실적 진행바가 필요한 화면은 `getCardUsage` 를 계속 함께 부른다.
+ *
+ * KST 이번 달 1일부터 **오늘 00:00 직전까지** 집계한다. 오늘 결제는 안 잡히고,
+ * 그래서 `asOfDate` 가 오늘이 아니라 전날이다.
+ *
+ * @returns `{ card, yearMonth, asOfDate, monthlySummary, performance, categoryBenefits, brandBenefits }`
+ *
+ *   - `categoryBenefits` · `brandBenefits` 는 **백엔드가 소진된 혜택을 배열 하단으로 정렬해서 준다.**
+ *     화면이 다시 정렬하지 않는다. 적용 가능한 월 한도 혜택이 없으면 둘 다 빈 배열이다
+ *   - `valueLabel` · `receivedBenefitLabel` · `perTransactionLimitLabel` · `limitLabel` 은
+ *     **표시용 문자열이 그대로 온다.** 화면에서 숫자를 다시 포맷하지 않는다
+ *   - `itemLimitStatus` 는 `AVAILABLE` / `LIMIT_EXHAUSTED` 다. 한 혜택에 월 한도가 여럿 걸릴 수
+ *     있어서(`monthlyLimits`), 그중 하나라도 소진되면 `LIMIT_EXHAUSTED` 가 된다
+ *   - `monthlySummary.potentialBenefitRate` 는 전체 한도 대비 **남은** 혜택 비율이다.
+ *     쓴 비율이 아니다. 전체 한도가 없거나 0 이면 null 이라 화면에서 분기한다
+ *   - 금액은 `BigDecimal` 이라 JSON 숫자로 온다
+ *
+ *   - 404 CARD_NOT_FOUND : 내 카드가 아니거나 없는 카드
+ *   - 500 INVALID_CARD_MONTHLY_BENEFIT_DATA : 카드 혜택 데이터가 깨져 있다
+ */
+export const getCardMonthlyBenefit = (cardId) => client.get(`/card/${cardId}/benefit`)
+
+/**
  * 카드에 걸린 이벤트.
  *
  * 카드 상품 전용(`CARD_PRODUCT`)과 카드사 전체(`ISSUER`) 가 함께 온다.
