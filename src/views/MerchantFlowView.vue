@@ -138,7 +138,7 @@ const stores = computed(() => searchResult.value?.stores ?? [])
  *
  * 응답이 더 오래 걸리면 그만큼 더 보여준다. 최소치이지 고정 지연이 아니다.
  */
-const SEARCH_LOADER_MIN_MS = 2000
+const SEARCH_LOADER_MIN_MS = 1000
 const isSearching = ref(false)
 let searchLoaderTimer
 let searchStartedAt = 0
