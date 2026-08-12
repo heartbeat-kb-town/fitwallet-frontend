@@ -1,7 +1,15 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Menu, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Minus } from 'lucide-vue-next'
+import {
+  Menu,
+  ChevronDown,
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  Minus,
+  Info,
+} from 'lucide-vue-next'
 import iconHome from '@/assets/icons/home.svg'
 import iconPayment from '@/assets/icons/payment.svg'
 import iconMycard from '@/assets/icons/mycard.svg'
@@ -54,6 +62,9 @@ const missedTab = ref('app')
 const expanded = ref(new Set())
 const selectedCard = ref(0)
 const missedCount = ref(0)
+
+/** 받은 혜택 설명을 펼쳤나. 이 화면 안에서만 쓰는 상태라 store 로 올리지 않는다. */
+const isBenefitInfoOpen = ref(false)
 const toast = ref('')
 let animationFrame = 0
 let toastTimer
@@ -734,7 +745,18 @@ onBeforeUnmount(() => {
       <template v-else>
         <section class="report-panel">
           <div class="flex items-center justify-between gap-2">
-            <h2>카테고리별 받은 혜택</h2>
+            <div class="flex min-w-0 items-center gap-1.5">
+              <h2>카테고리별 받은 혜택</h2>
+              <button
+                type="button"
+                class="flex shrink-0 items-center bg-transparent text-muted"
+                :aria-expanded="isBenefitInfoOpen"
+                aria-label="받은 혜택 설명"
+                @click="isBenefitInfoOpen = !isBenefitInfoOpen"
+              >
+                <Info :size="15" />
+              </button>
+            </div>
             <button
               type="button"
               class="flex shrink-0 items-center gap-0.5 bg-transparent !text-[13px] !font-bold text-primary-dark"
@@ -743,6 +765,18 @@ onBeforeUnmount(() => {
               자세히보기 <ChevronRight :size="14" />
             </button>
           </div>
+
+          <!--
+            받은 혜택이 캐시백과 포인트를 합친 값이라는 사실은 숫자만 봐서는 드러나지 않는다.
+            늘 띄워두면 도넛을 밀어내므로 물어본 사람에게만 보여준다.
+          -->
+          <p
+            v-if="isBenefitInfoOpen"
+            class="mt-2.5 rounded-xl bg-icon-bg px-3.5 py-2.5 text-[12px] leading-[1.7] text-sub"
+          >
+            캐시백·포인트를 원화로 환산해 더한 금액입니다.
+          </p>
+
           <div class="report-donut-wrap">
             <div class="report-donut" :style="{ background: chartBackground }">
               <div>
