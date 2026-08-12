@@ -1,11 +1,12 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Menu } from 'lucide-vue-next'
 import { categories } from '@/data'
 import * as benefitApi from '@/api/benefitApi'
 import { CARD_BENEFIT_STATUS } from '@/api/benefitApi'
 import * as storeApi from '@/api/storeApi'
+import BaseSpinner from '@/components/common/BaseSpinner.vue'
 import { useAsyncState } from '@/composables/useAsyncState'
 import { CARD_RATIO, useCardImage } from '@/composables/useCardImage'
 import { useToast } from '@/composables/useToast'
@@ -103,14 +104,45 @@ const category = computed(
 )
 const isSearch = computed(() => Boolean(request.value.query))
 
-const {
-  data: searchResult,
-  isLoading: isStoresLoading,
-  execute: fetchStores,
-} = useAsyncState(storeApi.getStoreSearch)
+// 로딩 표시는 `isLoading` 이 아니라 아래 `isSearching` 이 맡는다 (최소 노출 시간 때문).
+const { data: searchResult, execute: fetchStores } = useAsyncState(storeApi.getStoreSearch)
 
 // 거리순 상위 5건 고정이다. 백엔드에 페이징이 없다.
 const stores = computed(() => searchResult.value?.stores ?? [])
+
+/**
+ * 목록을 채우는 동안 화면 가운데에 띄우는 로더.
+ *
+ * `isStoresLoading` 을 그대로 쓰지 않는 이유는 **응답이 너무 빨라서**다. 시드가 광진구
+ * 일대뿐이고 상위 5건 고정이라 조회가 순식간에 끝나는데, 그러면 안내가 한 프레임 깜빡이고
+ * 목록이 튀어나와 화면이 덜컥거린다. 최소 시간을 두면 "찾는 중 → 결과" 로 읽힌다.
+ *
+ * 응답이 더 오래 걸리면 그만큼 더 보여준다. 최소치이지 고정 지연이 아니다.
+ */
+const SEARCH_LOADER_MIN_MS = 2000
+const isSearching = ref(false)
+let searchLoaderTimer
+let searchStartedAt = 0
+
+function startSearchLoader() {
+  window.clearTimeout(searchLoaderTimer)
+  searchStartedAt = Date.now()
+  isSearching.value = true
+}
+
+function endSearchLoader() {
+  const remaining = SEARCH_LOADER_MIN_MS - (Date.now() - searchStartedAt)
+  window.clearTimeout(searchLoaderTimer)
+  searchLoaderTimer = window.setTimeout(
+    () => {
+      isSearching.value = false
+    },
+    Math.max(0, remaining),
+  )
+}
+
+// 로더가 남은 시간을 세는 도중에 화면을 떠날 수 있다.
+onBeforeUnmount(() => window.clearTimeout(searchLoaderTimer))
 
 /**
  * 가맹점을 조회한다.
@@ -125,6 +157,9 @@ async function loadStores() {
   const categoryId = BACKEND_CATEGORY_IDS[category.value.id]
   if (!keyword && !categoryId) return
 
+  // 좌표를 구하는 동안에도 기다리는 것은 마찬가지다. 로더를 그 전에 켠다.
+  startSearchLoader()
+
   // 좌표는 필수다. 못 구하면 유틸이 시연용 기본 좌표를 준다 (실패하지 않는다).
   const { latitude, longitude } = await getCurrentCoordinates()
 
@@ -138,6 +173,8 @@ async function loadStores() {
       return
     }
     showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
+  } finally {
+    endSearchLoader()
   }
 }
 
@@ -354,13 +391,22 @@ async function confirmPin() {
       </header>
 
       <div class="merchant-divider"></div>
-      <p v-if="isStoresLoading" class="py-8 text-center text-[13px] text-sub">
-        주변 가맹점을 찾고 있어요
-      </p>
+      <!--
+        `.merchant-flow` 가 flex column 이라 `flex-1` 로 남은 높이를 통째로 받는다.
+        그래야 목록이 있을 자리 한가운데에 놓인다.
+      -->
+      <div
+        v-if="isSearching"
+        class="flex flex-1 flex-col items-center justify-center gap-3 text-sub"
+      >
+        <BaseSpinner size="lg" label="주변 가맹점을 찾는 중" />
+        <p class="text-[13px]">주변 가맹점을 찾고 있어요</p>
+      </div>
+
       <p v-else-if="!stores.length" class="py-8 text-center text-[13px] text-sub">
         근처에 조건에 맞는 가맹점이 없어요
       </p>
-      <div class="merchant-list">
+      <div v-else class="merchant-list">
         <button
           v-for="store in stores"
           :key="store.storeId"
