@@ -151,10 +151,10 @@ const receiptAmount = computed(() => confirmInfo.value?.amount ?? paymentResult.
 /**
  * 매장 QR 스캔(MPM) 단계 (#130).
  *
- * ⚠️ **여기 오려면 PIN 을 한 번 더 받아야 한다.** `POST /payment/qr` 와
- * `POST /payment/qr/scan` 이 `users.pin_auth_id` **컬럼 하나**를 함께 쓰는데,
- * QR 화면에 들어온 순간 CPM 세션이 그 표를 태워버렸기 때문이다.
- * 백엔드가 표를 나눠주면 이 재입력은 사라진다.
+ * `POST /payment/qr` 와 `POST /payment/qr/scan` 은 `users.pin_auth_id` **컬럼 하나**를
+ * 함께 쓴다. 예전에는 QR 화면에 들어온 순간 그 표가 타버려서 여기 오려면 PIN 을 한 번 더
+ * 받아야 했지만, 백엔드가 소비 시점을 결제 완료로 옮겨(backend#185) 재입력이 사라졌다.
+ * 이제 두 결제수단을 탭으로 오갈 수 있다.
  */
 const scannedToken = ref('')
 const scanAmount = ref('')
