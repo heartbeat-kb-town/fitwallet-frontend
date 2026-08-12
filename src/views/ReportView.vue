@@ -20,6 +20,8 @@ import iconMart from '@/assets/icons/category-mart.svg'
 import iconShopping from '@/assets/icons/category-shopping.svg'
 import iconRefuel from '@/assets/icons/category-refuel.svg'
 import iconTransport from '@/assets/icons/potentialbenefit-transportation.svg'
+// 포인트 적립임을 알리는 Ⓟ 배지. 원화 금액과 한눈에 갈리게 숫자 앞에 붙인다.
+import iconPointBadge from '@/assets/icons/point-badge.svg'
 
 import BaseSpinner from '@/components/common/BaseSpinner.vue'
 import { useCardImage } from '@/composables/useCardImage'
@@ -609,7 +611,9 @@ watch(
   receivedCards,
   (list) => {
     if (!initialCardId || !list.length) return
-    const index = list.findIndex((card) => card.id === initialCardId)
+    // 쿼리는 언제나 문자열이고 `card.id` 는 백엔드가 준 숫자다. `===` 로 대면 늘 어긋나
+    // 0번 카드가 열린다 (목데이터 시절에는 양쪽 다 문자열이라 드러나지 않았다).
+    const index = list.findIndex((card) => String(card.id) === initialCardId)
     if (index >= 0) selectedCard.value = index
   },
   { immediate: true },
@@ -898,10 +902,12 @@ onBeforeUnmount(() => {
               <b
                 v-for="amount in categoryAmounts(category)"
                 :key="amount.label"
-                class="received !ml-0 text-[15px]"
+                class="received !ml-0 flex items-center gap-1 text-[15px]"
                 :class="{ 'text-primary-dark': amount.isPoint }"
-                >{{ amount.label }}</b
               >
+                <img v-if="amount.isPoint" :src="iconPointBadge" alt="" width="15" height="15" />
+                {{ amount.label }}
+              </b>
             </span>
             <ChevronUp v-if="expanded.has(category.categoryId)" :size="17" />
             <ChevronDown v-else :size="17" />
@@ -915,7 +921,14 @@ onBeforeUnmount(() => {
                 <span>{{ transactionDate(item.approvedAt) }}</span>
                 <p>
                   <strong>{{ item.storeName ?? '가맹점 미확인' }}</strong
-                  ><small>
+                  ><small class="flex items-center gap-1">
+                    <img
+                      v-if="isPointBenefit(item)"
+                      :src="iconPointBadge"
+                      alt=""
+                      width="14"
+                      height="14"
+                    />
                     <b :class="{ 'text-primary-dark': isPointBenefit(item) }">{{
                       benefitKindLabel(item)
                     }}</b>
