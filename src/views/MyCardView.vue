@@ -223,7 +223,17 @@ async function loadMoreTransactions() {
   }
 }
 
-// 카드를 바꾸면 그 카드의 실적·내역을 다시 받는다. 월 선택과 구간 선택도 처음으로 돌린다.
+/**
+ * 카드를 바꾸면 그 카드의 실적·내역을 다시 받는다. 월 선택과 구간 선택도 처음으로 돌린다.
+ *
+ * **`immediate` 가 반드시 필요하다.** `cardStore` 는 목록을 캐시하므로(`ensureCards`),
+ * 다른 화면이 먼저 받아둔 뒤 이 화면에 들어오면 `activeCard.id` 가 setup 시점에 이미
+ * 채워져 있다. 그러면 값이 "변하지" 않아 watcher 가 안 돌고 첫 진입이 빈 화면이 된다.
+ * 목록을 여기서 처음 받는 경로에서는 `'' → id` 로 바뀌어 우연히 동작했다 (#140).
+ *
+ * 첫 실행에서 목록이 아직 없으면 `cardId` 가 빈 문자열이라 아래 가드에 걸려 그냥 나가고,
+ * 목록이 도착할 때 다시 돈다.
+ */
 watch(
   () => activeCard.value.id,
   (cardId) => {
@@ -232,6 +242,7 @@ watch(
     selectedTier.value = 0
     loadCardDetail()
   },
+  { immediate: true },
 )
 
 watch(monthIndex, loadCardDetail)
@@ -535,7 +546,7 @@ function dateLabel(date) {
                 <strong>{{ transaction.merchant }}</strong>
                 <span>{{ transaction.date }}</span>
               </div>
-              <b>- {{ won(transaction.amount) }}</b>
+              <b>{{ won(transaction.amount) }}</b>
             </div>
           </section>
 
