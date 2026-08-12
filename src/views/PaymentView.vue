@@ -129,6 +129,26 @@ const isPaymentFailed = ref(false)
 const confirmInfo = ref(null)
 
 /**
+ * 영수증에 적을 매장·금액. **스캔한 값이 있으면 결과 응답보다 그것을 앞세운다** (#136).
+ *
+ * 백엔드가 결제를 굴리는 첫 걸음에서 세션의 매장·금액을 CPM 용 목값(스타벅스 세종대점 /
+ * 4,500원)으로 덮어쓴다(`DefaultPaymentService:136` → `PaymentMapper.xml:83`).
+ * MPM 세션은 이미 진짜 값을 갖고 있는데도 덮인다. 그대로 그리면 **바로 앞에서 확인한 금액과
+ * 완료 화면이 어긋난다** — 확인의 의미가 사라진다.
+ *
+ * `confirmInfo` 는 매장 QR 스캔에서만 채워진다. CPM 은 `null` 이라 결과 응답으로 떨어지고,
+ * 그쪽은 목값이 정상 동작이다(가맹점 단말이 없어 백엔드가 지어내는 값이다).
+ *
+ * ⚠️ **이것으로 다 해결되지 않는다.** 백엔드는 덮어쓴 금액으로 혜택과 `payment_transaction`
+ * 을 만들기 때문에(`completeAndBuildResponse`), 아래 `receivedBenefit` 과 결제 내역·리포트는
+ * 여전히 4,500원 기준이다. 완전한 해결은 백엔드 수정이다.
+ */
+const receiptStoreName = computed(
+  () => confirmInfo.value?.storeName ?? paymentResult.value?.storeName ?? merchantName ?? '-',
+)
+const receiptAmount = computed(() => confirmInfo.value?.amount ?? paymentResult.value?.amount)
+
+/**
  * 매장 QR 스캔(MPM) 단계 (#130).
  *
  * ⚠️ **여기 오려면 PIN 을 한 번 더 받아야 한다.** `POST /payment/qr` 와
@@ -1042,10 +1062,13 @@ onBeforeUnmount(() => {
         <h2>결제가 완료되었습니다</h2>
 
         <dl class="payment-receipt">
-          <!-- 영수증은 전부 결제 결과 응답에서 온다. 지어낸 값을 적지 않는다 (#122). -->
+          <!--
+            영수증에 지어낸 값을 적지 않는다 (#122). 매장·금액은 스캔한 값을 앞세운다 —
+            결과 응답의 그 두 칸이 목값으로 덮여 오기 때문이다 (#136, receiptStoreName 주석).
+          -->
           <div>
             <dt>가맹점명</dt>
-            <dd>{{ paymentResult?.storeName ?? merchantName ?? '-' }}</dd>
+            <dd>{{ receiptStoreName }}</dd>
           </div>
           <div>
             <dt>결제 수단</dt>
@@ -1059,7 +1082,7 @@ onBeforeUnmount(() => {
           </div>
           <div>
             <dt>결제 금액</dt>
-            <dd>{{ won(paymentResult?.amount) }}</dd>
+            <dd>{{ won(receiptAmount) }}</dd>
           </div>
           <!-- 혜택이 없는 결제도 있다. 0원을 "받은 혜택" 으로 적기보다 줄을 빼는 편이 정확하다. -->
           <div v-if="receivedBenefit > 0">
