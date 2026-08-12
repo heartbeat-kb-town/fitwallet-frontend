@@ -24,11 +24,13 @@ import iconTransport from '@/assets/icons/potentialbenefit-transportation.svg'
 import BaseSpinner from '@/components/common/BaseSpinner.vue'
 import { useCardImage } from '@/composables/useCardImage'
 import { useToast } from '@/composables/useToast'
+import { useCardStore } from '@/stores/cardStore'
 import { usePaymentStore } from '@/stores/paymentStore'
 import { useReportStore } from '@/stores/reportStore'
 
 const route = useRoute()
 const router = useRouter()
+const cardStore = useCardStore()
 const paymentStore = usePaymentStore()
 const reportStore = useReportStore()
 const { showToast } = useToast()
@@ -187,205 +189,131 @@ function recommendationImageStyle(card) {
   return cardImageStyle(card.cardImageUrl, RECOMMENDATION_VISUAL_RATIO)
 }
 
-/* ─── 받은 혜택 상세 · 놓친 혜택 상세 (목데이터) ─────────────────────────── */
+/* ─── 받은 혜택 상세 (API) ──────────────────────────────────────────────── */
 
-// TODO(mock): 백엔드 미구현. 카드별 상세는 응답 DTO(CardBenefitDetailResponse)만 추가돼 있고
-// (backend#116) 컨트롤러·서비스·매퍼가 없다. 엔드포인트가 생기면 reportApi 에 함수를 추가한다.
-const receivedCards = [
-  {
-    id: 'kb',
-    name: 'KB Gold & More',
-    last4: '1234',
-    gradient: 'linear-gradient(135deg, #ffcc00 0%, #ffb300 60%, #e69a00 100%)',
-    color: '#3a2200',
-    subColor: '#7a5900',
-    totalBenefit: 12500,
-    totalSpend: 950000,
-    categories: [
-      {
-        id: 'food',
-        name: '외식',
-        icon: iconFood,
-        count: 24,
-        amount: 12000,
-        items: [
-          {
-            date: '07.15',
-            merchant: '배달의민족',
-            benefit: '7% 할인',
-            payment: 32000,
-            amount: 2240,
-          },
-          {
-            date: '07.11',
-            merchant: '스시조 강남점',
-            benefit: '7% 할인',
-            payment: 65000,
-            amount: 4550,
-          },
-          { date: '07.08', merchant: '맥도날드', benefit: '7% 할인', payment: 12500, amount: 875 },
-          { date: '07.03', merchant: '교촌치킨', benefit: '7% 할인', payment: 21000, amount: 1470 },
-        ],
-      },
-      {
-        id: 'mart',
-        name: '마트',
-        icon: iconMart,
-        count: 8,
-        amount: 6500,
-        items: [
-          {
-            date: '07.20',
-            merchant: '이마트 역삼점',
-            benefit: '5% 할인',
-            payment: 58000,
-            amount: 2900,
-          },
-          { date: '07.12', merchant: '홈플러스', benefit: '5% 할인', payment: 43000, amount: 2150 },
-          { date: '07.06', merchant: 'GS25', benefit: '5% 할인', payment: 9000, amount: 450 },
-        ],
-      },
-      {
-        id: 'cafe',
-        name: '카페',
-        icon: iconCafe,
-        count: 15,
-        amount: 4000,
-        items: [
-          { date: '07.18', merchant: '스타벅스', benefit: '10% 할인', payment: 6500, amount: 650 },
-          { date: '07.14', merchant: '블루보틀', benefit: '10% 할인', payment: 8500, amount: 850 },
-          { date: '07.09', merchant: '폴바셋', benefit: '10% 할인', payment: 7200, amount: 720 },
-        ],
-      },
-      {
-        id: 'transport',
-        name: '교통',
-        icon: iconTransport,
-        count: 12,
-        amount: 2000,
-        items: [
-          {
-            date: '07.19',
-            merchant: '서울지하철',
-            benefit: '교통 할인',
-            payment: 1400,
-            amount: 500,
-          },
-          {
-            date: '07.10',
-            merchant: '카카오T택시',
-            benefit: '교통 할인',
-            payment: 12000,
-            amount: 800,
-          },
-          { date: '07.04', merchant: '광역버스', benefit: '교통 할인', payment: 2800, amount: 700 },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'shinhan',
-    name: '신한 Deep Dream',
-    last4: '5678',
-    gradient: 'linear-gradient(135deg, #1e5fbb 0%, #0d47a1 60%, #082474 100%)',
-    color: '#fff',
-    subColor: 'rgba(255,255,255,.72)',
-    totalBenefit: 8200,
-    totalSpend: 620000,
-    categories: [
-      {
-        id: 'cafe',
-        name: '카페',
-        icon: iconCafe,
-        count: 10,
-        amount: 3500,
-        items: [
-          { date: '07.21', merchant: '스타벅스', benefit: '10% 할인', payment: 6500, amount: 650 },
-          {
-            date: '07.16',
-            merchant: '투썸플레이스',
-            benefit: '10% 할인',
-            payment: 7800,
-            amount: 780,
-          },
-          { date: '07.11', merchant: '이디야', benefit: '10% 할인', payment: 4500, amount: 450 },
-        ],
-      },
-      {
-        id: 'shopping',
-        name: '쇼핑',
-        icon: iconShopping,
-        count: 5,
-        amount: 2800,
-        items: [
-          { date: '07.19', merchant: '무신사', benefit: '5% 할인', payment: 79000, amount: 3950 },
-          { date: '07.07', merchant: '올리브영', benefit: '5% 할인', payment: 38000, amount: 1900 },
-        ],
-      },
-      {
-        id: 'food',
-        name: '외식',
-        icon: iconFood,
-        count: 6,
-        amount: 1900,
-        items: [
-          { date: '07.13', merchant: '굽네치킨', benefit: '3% 할인', payment: 22000, amount: 660 },
-          { date: '07.05', merchant: 'CU편의점', benefit: '3% 할인', payment: 8500, amount: 255 },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'hyundai',
-    name: '현대카드 ZERO',
-    last4: '9012',
-    gradient: 'linear-gradient(135deg, #37474f 0%, #263238 60%, #1a1a2e 100%)',
-    color: '#fff',
-    subColor: 'rgba(255,255,255,.68)',
-    totalBenefit: 5800,
-    totalSpend: 430000,
-    categories: [
-      {
-        id: 'shopping',
-        name: '쇼핑',
-        icon: iconShopping,
-        count: 7,
-        amount: 3200,
-        items: [
-          { date: '07.22', merchant: '쿠팡', benefit: '6% 할인', payment: 52000, amount: 3120 },
-          { date: '07.14', merchant: 'G마켓', benefit: '6% 할인', payment: 35000, amount: 2100 },
-        ],
-      },
-      {
-        id: 'transport',
-        name: '교통',
-        icon: iconTransport,
-        count: 9,
-        amount: 1500,
-        items: [
-          { date: '07.17', merchant: '카카오T', benefit: '5% 할인', payment: 15000, amount: 750 },
-          { date: '07.09', merchant: '서울버스', benefit: '5% 할인', payment: 1500, amount: 75 },
-        ],
-      },
-      {
-        id: 'telecom',
-        name: '통신',
-        icon: '',
-        count: 1,
-        amount: 1100,
-        items: [
-          {
-            date: '07.01',
-            merchant: 'SKT 월정액',
-            benefit: '2% 할인',
-            payment: 55000,
-            amount: 1100,
-          },
-        ],
-      },
-    ],
-  },
-]
+/**
+ * 캐러셀에 세울 카드. **보유 카드는 `cardStore` 하나에서만 나온다** (#76).
+ * 이 화면이 자체 배열을 두지 않는다.
+ */
+const receivedCards = computed(() => cardStore.cards)
+
+/** 지금 보고 있는 카드 한 장의 상세. 카드나 월이 바뀔 때마다 다시 받는다. */
+const cardDetail = computed(() => reportStore.cardDetail)
+
+/**
+ * 카드 그림 칸(`.received-card-visual`)의 비율. `style.css` 의 85.6/53.98 을 그대로 옮겼다.
+ * 세로 이미지를 눕힐 때 쓰는 값이라 칸의 비율이지 카드의 비율이 아니다.
+ */
+const RECEIVED_VISUAL_RATIO = 85.6 / 53.98
+
+/**
+ * 카드 그림 칸을 이미지에 맞게 손본다. `style.css` 가 동결이라 인라인으로 덮는다.
+ *
+ * - `position: relative` 가 **반드시 필요하다.** `cardImageStyle` 이 `position: absolute` 를
+ *   주므로, 칸이 기준이 아니면 이미지가 화면 전체로 퍼진다.
+ * - `padding` 은 카드명을 적으려고 24px 가 잡혀 있다. 두면 이미지가 안쪽으로 밀려 모서리에
+ *   배경이 비친다.
+ */
+const RECEIVED_VISUAL_IMAGE_STYLE = {
+  position: 'relative',
+  padding: '0',
+  overflow: 'hidden',
+}
+
+function receivedImageStyle(card) {
+  return cardImageStyle(card?.cardImageUrl, RECEIVED_VISUAL_RATIO)
+}
+
+/**
+ * 이 화면의 금액 표기는 `₩12,500` 이다. 리포트 메인의 `12,500원` 과 다르다 —
+ * 피그마 `받은 혜택 리포트` 가 원화 기호를 쓰고, 옆에 붙는 포인트(`4,000P`)와
+ * 단위가 한눈에 갈려야 하기 때문이다.
+ */
+function currency(value) {
+  return `₩${Math.round(Number(value)).toLocaleString('ko-KR')}`
+}
+
+function points(value) {
+  return `${Math.round(Number(value)).toLocaleString('ko-KR')}P`
+}
+
+/** `2026-07-15T21:16:30` → `07.15`. 줄이 좁아 연도는 적지 않는다. */
+function transactionDate(approvedAt) {
+  const [date = ''] = String(approvedAt ?? '').split('T')
+  const [, month = '', day = ''] = date.split('-')
+  return month && day ? `${month}.${day}` : ''
+}
+
+/** 포인트 적립인가. 단위를 지어내지 않고 백엔드 `BenefitType` 으로 가른다. */
+function isPointBenefit(item) {
+  return item.benefitType === 'ACCUMULATE'
+}
+
+/**
+ * 거래 한 건의 혜택 설명. `7% 할인` · `3% 포인트 적립` 처럼 만든다.
+ *
+ * **`benefitRate` 는 정액(FIXED) 혜택이면 null 이다.** 0 으로 눌러 `0% 할인` 으로 적으면
+ * 혜택을 못 받은 것처럼 보이므로, 그때는 비율을 빼고 종류만 적는다.
+ */
+function benefitKindLabel(item) {
+  const kind = isPointBenefit(item) ? '포인트 적립' : '할인'
+  return item.benefitRate == null ? kind : `${item.benefitRate}% ${kind}`
+}
+
+/**
+ * 카테고리 줄의 오른쪽 숫자.
+ *
+ * 원화와 포인트를 **합치지 않는다.** 단위가 다르다. 둘 다 받은 카테고리는 두 줄로 적는다.
+ */
+function categoryAmounts(category) {
+  const amounts = []
+  if (category.discountAmount)
+    amounts.push({ isPoint: false, label: currency(category.discountAmount) })
+  if (category.pointAmount) amounts.push({ isPoint: true, label: points(category.pointAmount) })
+  // 매퍼가 혜택 받은 결제만 주므로 보통 하나는 찬다. 비면 0 원으로 둔다.
+  return amounts.length ? amounts : [{ isPoint: false, label: currency(0) }]
+}
+
+/**
+ * 카테고리명 → 아이콘.
+ *
+ * 백엔드가 카테고리 이미지 URL 을 주지 않는 응답이라 이름으로 찾는다.
+ * 모르는 카테고리는 빈 원으로 두고 아이콘을 지어내지 않는다 (`MyCardView` 와 같은 방침).
+ */
+const CATEGORY_ICONS = {
+  '카페/디저트': iconCafe,
+  '편의점/마트': iconMart,
+  쇼핑: iconShopping,
+  푸드: iconFood,
+  주유: iconRefuel,
+  교통: iconTransport,
+  외식: iconFood,
+  마트: iconMart,
+  카페: iconCafe,
+}
+
+function categoryIcon(categoryName) {
+  return CATEGORY_ICONS[categoryName] ?? ''
+}
+
+/** 지금 고른 카드. 목록이 아직 안 왔으면 없다. */
+const currentUserCardId = computed(() => receivedCards.value[selectedCard.value]?.id ?? '')
+
+async function loadCardDetail() {
+  const userCardId = currentUserCardId.value
+  if (!userCardId) return
+  try {
+    await reportStore.fetchCardDetail(userCardId, yearMonth.value)
+  } catch (error) {
+    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
+  }
+}
+
+// 카드를 바꾸거나 달을 옮기면 다시 받는다. 상세를 열어둔 채 달을 바꿔도 따라오고,
+// 목록이 도착해 카드가 처음 정해지는 순간에도 여기서 돈다.
+watch([currentUserCardId, yearMonth], loadCardDetail, { immediate: true })
+
+/* ─── 놓친 혜택 상세 (목데이터) ─────────────────────────────────────────── */
 
 // TODO(mock): 백엔드 미구현. 요약 API 는 놓친 혜택을 `totalMissedBenefit` **총액 하나**로만 준다.
 // "앱 미사용 / 카드 선택 손실" 분해와 거래 목록의 출처가 없다.
@@ -601,7 +529,6 @@ const missedData = {
   },
 }
 
-const currentCard = computed(() => receivedCards[selectedCard.value])
 const currentMissed = computed(() => missedData[missedTab.value])
 
 // 도넛 가운데 숫자. 조각의 합(slicesTotal)이 아니라 진짜 총액이다.
@@ -623,8 +550,9 @@ function backToMain() {
 }
 
 function selectCard(index) {
-  if (index < 0 || index >= receivedCards.length) return
+  if (index < 0 || index >= receivedCards.value.length) return
   selectedCard.value = index
+  // 카드를 바꾸면 펼쳐둔 카테고리는 다른 카드의 것이다. 접어둔다.
   expanded.value = new Set()
 }
 
@@ -667,11 +595,25 @@ function animateCounts() {
 watch(summary, animateCounts)
 
 onMounted(() => {
-  if (initialCardId) {
-    const index = receivedCards.findIndex((card) => card.id === initialCardId)
-    selectedCard.value = index >= 0 ? index : 0
-  }
+  // 보유 카드가 없으면 캐러셀도 상세도 그릴 수 없다. 다른 화면과 같은 store 라 대개 이미 차 있다.
+  cardStore.ensureCardsWithImages()
 })
+
+/**
+ * URL 이 카드를 지정했으면 그 카드를 펼친다 (#59).
+ *
+ * 목록이 API 로 오므로 **도착한 뒤에** 맞춘다. `onMounted` 에서 한 번 찾으면 그때는 빈 배열이라
+ * 언제나 0번 카드가 열린다.
+ */
+watch(
+  receivedCards,
+  (list) => {
+    if (!initialCardId || !list.length) return
+    const index = list.findIndex((card) => card.id === initialCardId)
+    if (index >= 0) selectedCard.value = index
+  },
+  { immediate: true },
+)
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(animationFrame)
@@ -862,16 +804,28 @@ onBeforeUnmount(() => {
 
     <div v-else-if="page === 'received'" class="report-scroll report-detail-scroll">
       <div class="received-card-wrap">
-        <article
-          class="received-card-visual"
-          :style="{ background: currentCard.gradient, color: currentCard.color }"
-        >
-          <strong>{{ currentCard.name }}</strong>
-          <span :style="{ color: currentCard.subColor }">**** {{ currentCard.last4 }}</span>
+        <!--
+          카드 그림은 실제 카드 이미지다 (#97). 세로 이미지(현대)를 눕히는 처리는
+          `useCardImage` 하나에 있고, 이 화면은 칸의 비율만 넘긴다.
+        -->
+        <article class="received-card-visual" :style="RECEIVED_VISUAL_IMAGE_STYLE">
+          <img
+            v-if="cardDetail.cardImageUrl"
+            :src="cardDetail.cardImageUrl"
+            alt=""
+            :style="receivedImageStyle(cardDetail)"
+            @load="markCardImageOrientation"
+          />
+          <!-- 이미지를 못 받은 카드는 이름과 뒷자리로 대신한다. 그림을 지어내지 않는다. -->
+          <template v-else>
+            <strong>{{ cardDetail.cardName }}</strong>
+            <span>{{ cardDetail.maskedCardNumber }}</span>
+          </template>
         </article>
-        <div class="received-card-controls">
+        <div v-if="receivedCards.length > 1" class="received-card-controls">
           <button
             type="button"
+            aria-label="이전 카드"
             :disabled="selectedCard === 0"
             @click="selectCard(selectedCard - 1)"
           >
@@ -885,6 +839,7 @@ onBeforeUnmount(() => {
           ></span>
           <button
             type="button"
+            aria-label="다음 카드"
             :disabled="selectedCard === receivedCards.length - 1"
             @click="selectCard(selectedCard + 1)"
           >
@@ -893,45 +848,85 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
+      <!--
+        총액이 셋이다. 할인(원화)과 포인트는 단위가 달라 합칠 수 없어 나란히 두고,
+        사용 금액은 성격이 달라 아래 줄을 통째로 쓴다. `.received-total` 이 2열 그리드다.
+      -->
       <div class="received-total">
         <div>
-          <span>총 할인 금액</span><strong>{{ won(currentCard.totalBenefit) }}</strong>
+          <span>총 할인 금액</span><strong>{{ currency(cardDetail.totalDiscount) }}</strong>
         </div>
         <div>
-          <span>총 사용 금액</span><strong>{{ won(currentCard.totalSpend) }}</strong>
+          <span>총 포인트</span
+          ><strong class="text-primary-dark">{{ points(cardDetail.totalPoint) }}</strong>
+        </div>
+        <div class="col-span-2 !flex-row items-center justify-between border-t border-line">
+          <span>총 사용 금액</span><strong>{{ currency(cardDetail.totalSpend) }}</strong>
         </div>
       </div>
 
       <section class="report-category-section">
         <h2>카테고리별 전체 혜택</h2>
+
+        <div v-if="reportStore.isCardDetailLoading" class="flex justify-center py-16 text-sub">
+          <BaseSpinner size="lg" label="카드 혜택을 불러오는 중" />
+        </div>
+
+        <p v-else-if="!cardDetail.categories.length" class="py-10 text-center text-[13px] text-sub">
+          이 달에는 이 카드로 받은 혜택이 없어요
+        </p>
+
         <article
-          v-for="category in currentCard.categories"
-          :key="category.id"
+          v-for="category in cardDetail.categories"
+          :key="category.categoryId"
           class="report-category-card"
         >
-          <button class="report-category-head" type="button" @click="toggle(category.id)">
+          <button class="report-category-head" type="button" @click="toggle(category.categoryId)">
             <span class="report-category-icon">
-              <img v-if="category.icon" :src="category.icon" alt="" />
+              <img
+                v-if="categoryIcon(category.categoryName)"
+                :src="categoryIcon(category.categoryName)"
+                alt=""
+              />
             </span>
             <span class="report-category-name"
-              ><strong>{{ category.name }}</strong
-              ><small>{{ category.count }}건 이용</small></span
+              ><strong>{{ category.categoryName }}</strong
+              ><small>{{ category.usageCount }}건 이용</small></span
             >
-            <b class="received">+{{ won(category.amount) }}</b>
-            <ChevronUp v-if="expanded.has(category.id)" :size="17" />
+            <!-- 원화와 포인트를 둘 다 받은 카테고리는 두 줄로 적는다. 단위가 달라 못 합친다. -->
+            <span class="ml-auto flex flex-col items-end gap-0.5">
+              <b
+                v-for="amount in categoryAmounts(category)"
+                :key="amount.label"
+                class="received !ml-0 text-[15px]"
+                :class="{ 'text-primary-dark': amount.isPoint }"
+                >{{ amount.label }}</b
+              >
+            </span>
+            <ChevronUp v-if="expanded.has(category.categoryId)" :size="17" />
             <ChevronDown v-else :size="17" />
           </button>
           <Transition name="report-expand">
-            <div v-if="expanded.has(category.id)" class="report-transactions">
-              <div v-for="item in category.items" :key="`${item.date}-${item.merchant}`">
-                <span>{{ item.date }}</span>
+            <div v-if="expanded.has(category.categoryId)" class="report-transactions">
+              <div
+                v-for="(item, index) in category.transactions"
+                :key="`${item.approvedAt}-${item.storeName}-${index}`"
+              >
+                <span>{{ transactionDate(item.approvedAt) }}</span>
                 <p>
-                  <strong>{{ item.merchant }}</strong
-                  ><small
-                    ><b>{{ item.benefit }}</b> · 결제 {{ won(item.payment) }}</small
+                  <strong>{{ item.storeName ?? '가맹점 미확인' }}</strong
+                  ><small>
+                    <b :class="{ 'text-primary-dark': isPointBenefit(item) }">{{
+                      benefitKindLabel(item)
+                    }}</b>
+                    · 결제 {{ currency(item.paidAmount) }}</small
                   >
                 </p>
-                <em>+{{ won(item.amount) }}</em>
+                <em :class="{ 'text-primary-dark': isPointBenefit(item) }"
+                  >+{{
+                    isPointBenefit(item) ? points(item.benefitAmount) : currency(item.benefitAmount)
+                  }}</em
+                >
               </div>
             </div>
           </Transition>

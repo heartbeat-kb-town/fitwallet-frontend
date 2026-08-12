@@ -3,11 +3,11 @@ import client from './client'
 /**
  * 리포트 도메인 API.
  *
- * 백엔드 `BenefitReportController` 기준이며, 지금 구현된 엔드포인트는 요약 하나뿐이다.
- * 리포트 화면의 "받은 혜택 상세(카드별)" 와 "놓친 혜택 상세" 는 아직 백엔드가 없다.
- *   - 카드별 상세: 응답 DTO(`CardBenefitDetailResponse`)만 추가돼 있고(backend#116)
- *     컨트롤러·서비스·매퍼가 없다. 여기에 함수를 미리 만들어 두지 않는다.
- *   - 놓친 혜택 상세: 총액(`totalMissedBenefit`)만 있고 분해·거래 목록의 출처가 없다.
+ * 백엔드 `BenefitReportController` · `CardBenefitController` 기준이다.
+ *
+ * **아직 없는 것은 놓친 혜택 상세 하나다.** 응답 DTO(`MissedCategoryDetailResponse`)만
+ * 추가돼 있고(backend#149) 컨트롤러·서비스·매퍼가 없다. 여기에 함수를 미리 만들어 두지 않는다.
+ * 요약이 주는 것은 총액(`totalMissedBenefit`) 하나뿐이다.
  */
 
 /**
@@ -29,3 +29,25 @@ import client from './client'
  */
 export const getBenefitSummary = (yearMonth) =>
   client.get('/report/benefit/summary', { params: { yearMonth } })
+
+/**
+ * 카드 한 장의 받은 혜택 상세 (#152).
+ *
+ * @param userCardId **`user_card_id`** 다. `card_product_id` 가 아니다 —
+ *   보유 카드를 가리키는 키라 `cardStore` 의 `card.id` 를 그대로 넘기면 된다.
+ * @param yearMonth `YYYY-MM`. 요약과 같은 이유로 두 자리로 맞춰 보낸다.
+ *
+ * @returns `{ cardName, cardImageUrl, maskedCardNumber, totalDiscount, totalPoint, totalSpend, categories }`
+ *
+ *   **원화 할인과 포인트 적립이 나뉘어 온다.** 둘은 단위가 달라 합칠 수 없다.
+ *   - `totalDiscount` 는 원(CASHBACK 합), `totalPoint` 는 포인트(ACCUMULATE 합)다.
+ *   - `categories[].discountAmount` · `pointAmount` 도 같은 갈래다. 한쪽만 있는 카테고리가 흔하다.
+ *   - `transactions[].benefitType` 이 `CASHBACK` 이면 `benefitAmount` 의 단위가 원,
+ *     `ACCUMULATE` 면 포인트다. **화면이 단위를 지어내지 않고 이 값으로 가른다.**
+ *   - `transactions[].benefitRate` 는 정률 혜택의 % 값이고, **정액(FIXED) 혜택이면 null 이다.**
+ *     null 을 0% 로 그리면 할인이 없었던 것처럼 보인다.
+ *
+ *   혜택을 실제로 받은 결제만 온다. 매퍼가 `benefit_service` 를 INNER JOIN 하기 때문이다.
+ */
+export const getReceivedCardBenefit = (userCardId, yearMonth) =>
+  client.get(`/report/benefit/received/cards/${userCardId}`, { params: { yearMonth } })

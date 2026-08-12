@@ -44,6 +44,57 @@ function toSummary(response) {
 
 const loadSummary = async (yearMonth) => toSummary(await reportApi.getBenefitSummary(yearMonth))
 
+/** 카드를 아직 못 받았을 때 그릴 바닥값. `v-for` 가 터지지 않게 배열을 비워 둔다. */
+const EMPTY_CARD_DETAIL = {
+  cardName: '',
+  cardImageUrl: null,
+  maskedCardNumber: '',
+  totalDiscount: 0,
+  totalPoint: 0,
+  totalSpend: 0,
+  categories: [],
+}
+
+/**
+ * 카드별 받은 혜택 상세를 화면이 쓸 모양으로 다듬는다 (#152).
+ *
+ * **원화와 포인트를 합치지 않는다.** 단위가 달라 더할 수 없는 값이고,
+ * 백엔드가 굳이 나눠서 주는 이유가 그것이다.
+ *
+ * `benefitRate` 만 `Number` 로 누르지 않고 null 을 지킨다 — 정액(FIXED) 혜택은 % 가 없는데
+ * 0 으로 바꾸면 "0% 할인" 이 되어 혜택을 못 받은 것처럼 보인다.
+ */
+function toCardDetail(response) {
+  if (!response) return EMPTY_CARD_DETAIL
+
+  return {
+    cardName: response.cardName ?? '',
+    cardImageUrl: response.cardImageUrl ?? null,
+    maskedCardNumber: response.maskedCardNumber ?? '',
+    totalDiscount: Number(response.totalDiscount) || 0,
+    totalPoint: Number(response.totalPoint) || 0,
+    totalSpend: Number(response.totalSpend) || 0,
+    categories: (response.categories ?? []).map((category) => ({
+      categoryId: category.categoryId,
+      categoryName: category.categoryName,
+      usageCount: Number(category.usageCount) || 0,
+      discountAmount: Number(category.discountAmount) || 0,
+      pointAmount: Number(category.pointAmount) || 0,
+      transactions: (category.transactions ?? []).map((item) => ({
+        approvedAt: item.approvedAt,
+        storeName: item.storeName,
+        benefitType: item.benefitType,
+        benefitRate: item.benefitRate == null ? null : Number(item.benefitRate),
+        paidAmount: Number(item.paidAmount) || 0,
+        benefitAmount: Number(item.benefitAmount) || 0,
+      })),
+    })),
+  }
+}
+
+const loadCardDetail = async (userCardId, yearMonth) =>
+  toCardDetail(await reportApi.getReceivedCardBenefit(userCardId, yearMonth))
+
 /**
  * 월간 혜택 리포트.
  *
@@ -59,5 +110,22 @@ export const useReportStore = defineStore('report', () => {
     execute: fetchSummary,
   } = useAsyncState(loadSummary, EMPTY_SUMMARY)
 
-  return { summary, isLoading, error, fetchSummary }
+  // 카드별 받은 혜택 상세. 요약과 조회 시점이 달라(카드를 고를 때마다) 상태를 따로 둔다.
+  const {
+    data: cardDetail,
+    isLoading: isCardDetailLoading,
+    error: cardDetailError,
+    execute: fetchCardDetail,
+  } = useAsyncState(loadCardDetail, EMPTY_CARD_DETAIL)
+
+  return {
+    summary,
+    isLoading,
+    error,
+    fetchSummary,
+    cardDetail,
+    isCardDetailLoading,
+    cardDetailError,
+    fetchCardDetail,
+  }
 })
