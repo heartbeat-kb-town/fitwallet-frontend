@@ -19,6 +19,7 @@ import { useQrScanner } from '@/composables/useQrScanner'
 import { useToast } from '@/composables/useToast'
 import { useCardStore } from '@/stores/cardStore'
 import { usePaymentStore } from '@/stores/paymentStore'
+import { parseStoreQr } from '@/utils/storeQr'
 
 // QR 만료가 180초인데 그 안에 스캔을 놓치면 안 된다. 백엔드가 3초 뒤 스캔된 척 바꿔주므로
 // 1초면 충분히 잡히고, 세션당 최대 180번이라 부담도 크지 않다.
@@ -121,11 +122,31 @@ const isPaymentFailed = ref(false)
  * 백엔드도 PROCESSING 응답에 `storeName` · `amount` 를 안 실어줘서
  * (`DefaultPaymentService:132`) 두 칸이 `-` 로 뜨는 화면이었다. 확인할 것이 없는 확인이다.
  *
- * ⚠️ **지금은 아무도 이 값을 채우지 않는다.** `POST /payment/qr/scan` 이 붙으면 그 응답이
- * `storeName` 과 `amount` 를 실제로 주므로(`StoreQrScanResponse`) 그때 채운다.
+ * 채우는 곳은 `submitScan` 하나다. `POST /payment/qr/scan` 응답이 `storeName` 과 `amount` 를
+ * 실제로 준다(`StoreQrScanResponse`).
  * **금액을 화면에서 지어내지 않는다.** 확인 화면에 가짜 금액을 적으면 확인이 아니게 된다.
  */
 const confirmInfo = ref(null)
+
+/**
+ * 영수증에 적을 매장·금액. **스캔한 값이 있으면 결과 응답보다 그것을 앞세운다** (#136).
+ *
+ * 백엔드가 결제를 굴리는 첫 걸음에서 세션의 매장·금액을 CPM 용 목값(스타벅스 세종대점 /
+ * 4,500원)으로 덮어쓴다(`DefaultPaymentService:136` → `PaymentMapper.xml:83`).
+ * MPM 세션은 이미 진짜 값을 갖고 있는데도 덮인다. 그대로 그리면 **바로 앞에서 확인한 금액과
+ * 완료 화면이 어긋난다** — 확인의 의미가 사라진다.
+ *
+ * `confirmInfo` 는 매장 QR 스캔에서만 채워진다. CPM 은 `null` 이라 결과 응답으로 떨어지고,
+ * 그쪽은 목값이 정상 동작이다(가맹점 단말이 없어 백엔드가 지어내는 값이다).
+ *
+ * ⚠️ **이것으로 다 해결되지 않는다.** 백엔드는 덮어쓴 금액으로 혜택과 `payment_transaction`
+ * 을 만들기 때문에(`completeAndBuildResponse`), 아래 `receivedBenefit` 과 결제 내역·리포트는
+ * 여전히 4,500원 기준이다. 완전한 해결은 백엔드 수정이다.
+ */
+const receiptStoreName = computed(
+  () => confirmInfo.value?.storeName ?? paymentResult.value?.storeName ?? merchantName ?? '-',
+)
+const receiptAmount = computed(() => confirmInfo.value?.amount ?? paymentResult.value?.amount)
 
 /**
  * 매장 QR 스캔(MPM) 단계 (#130).
@@ -138,6 +159,14 @@ const confirmInfo = ref(null)
 const scannedToken = ref('')
 const scanAmount = ref('')
 const scanMessage = ref('')
+
+/**
+ * 금액 입력창을 띄워야 하나. **QR 에 금액이 없을 때만 true 다** (#134).
+ *
+ * `scannedToken` 만으로는 못 가른다 — 금액이 실린 QR 도 토큰을 채우기 때문에,
+ * 그것만 보면 곧장 결제가 나가는 동안 입력창이 한 번 번쩍인다.
+ */
+const needsAmountInput = ref(false)
 const videoRef = ref(null)
 
 const { error: scannerError, start: startScanner, stop: stopScanner } = useQrScanner()
@@ -306,6 +335,7 @@ function startScanFlow() {
   scannedToken.value = ''
   scanAmount.value = ''
   scanMessage.value = ''
+  needsAmountInput.value = false
   openPin('scan')
 }
 
@@ -315,24 +345,43 @@ function cancelScan() {
   scannedToken.value = ''
   scanAmount.value = ''
   scanMessage.value = ''
+  needsAmountInput.value = false
   phase.value = 'cards'
 }
 
 /**
- * 매장 QR 을 읽었다. 금액을 받기 위해 카메라를 멈추고 입력으로 넘어간다.
+ * 매장 QR 을 읽었다.
  *
- * ⚠️ **금액은 QR 에 없다.** 매장 QR 토큰은 `FITWALLET-QR-#####` 뿐이고 백엔드도
- * 금액을 모른다(`StoreQrScanRequest.amount` 가 필수다). 그래서 사용자에게 받는다.
- * 화면이 임의 금액을 지어내면 뒤이어 나오는 "결제 정보를 확인하세요" 가 거짓말이 된다.
+ * **금액이 QR 에 실려 있으면 사용자에게 묻지 않고 곧장 결제를 개시한다** (#134).
+ * 매장이 요청한 금액을 사용자가 고쳐 칠 수 있으면 안 되고, 데모에서도 군더더기다.
+ * 확인은 다음 단계인 "결제 정보를 확인하세요" 가 맡는다 — 여기서 결제가 끝나지 않는다.
+ *
+ * 금액이 없는 옛 평문 QR(`FITWALLET-QR-#####`)만 입력 화면으로 떨어진다.
  */
 function handleScanned(value) {
-  scannedToken.value = value.trim()
+  const { storeQrToken, amount } = parseStoreQr(value)
+
+  // 토큰이 없으면 우리 QR 이 아니다. 금액만 있어도 결제할 수 없으니 바로 다시 찍게 한다.
+  if (!storeQrToken) {
+    rescan()
+    scanMessage.value = '피그 가맹점 QR 이 아니에요. 다시 찍어 주세요.'
+    return
+  }
+
+  scannedToken.value = storeQrToken
   scanMessage.value = ''
+  needsAmountInput.value = amount === null
+
+  if (amount !== null) submitScan(amount)
 }
 
-/** 금액을 확정하고 스캔 결제를 개시한다. 성공하면 정보확인 화면으로 넘어간다. */
-async function submitScan() {
-  const amount = Number(scanAmount.value)
+/**
+ * 스캔 결제를 개시한다. 성공하면 정보확인 화면으로 넘어간다.
+ *
+ * @param scannedAmount QR 이 실어 온 금액. 없으면 입력창 값을 쓴다.
+ */
+async function submitScan(scannedAmount = null) {
+  const amount = scannedAmount ?? Number(scanAmount.value)
   if (!Number.isFinite(amount) || amount <= 0) {
     scanMessage.value = '결제 금액을 입력해 주세요.'
     return
@@ -365,6 +414,7 @@ async function submitScan() {
 async function rescan() {
   scannedToken.value = ''
   scanAmount.value = ''
+  needsAmountInput.value = false
   await nextTick()
   if (videoRef.value) startScanner(videoRef.value, handleScanned)
 }
@@ -907,10 +957,13 @@ onBeforeUnmount(() => {
           </div>
 
           <!--
-            QR 을 읽었다. **금액은 QR 에 없어서** 여기서 받는다 —
-            매장 QR 토큰에도 백엔드에도 금액이 없다 (paymentApi.postQrScan 주석).
+            금액이 빠진 옛 평문 QR 을 읽었다. 그때만 금액을 받는다 (#134).
+            지금 매장 QR 은 금액을 싣고 오므로 이 칸을 거치지 않고 곧장 확인 화면으로 간다.
           -->
-          <div v-else class="flex h-full w-full flex-col justify-center gap-3 px-5">
+          <div
+            v-else-if="needsAmountInput"
+            class="flex h-full w-full flex-col justify-center gap-3 px-5"
+          >
             <p class="text-center text-xs text-sub">QR 을 읽었어요</p>
             <div class="flex items-baseline justify-between">
               <label class="text-[13px] font-semibold text-ink" for="scan-amount">결제 금액</label>
@@ -930,8 +983,14 @@ onBeforeUnmount(() => {
               inputmode="numeric"
               min="1"
               placeholder="0"
-              @keyup.enter="submitScan"
+              @keyup.enter="submitScan()"
             />
+          </div>
+
+          <!-- 금액까지 실린 QR 이다. 물어볼 것이 없어 그대로 결제 정보를 확인하러 간다. -->
+          <div v-else class="flex h-full w-full flex-col items-center justify-center gap-2 px-5">
+            <p class="text-[13px] font-semibold text-ink">QR 을 읽었어요</p>
+            <p class="text-xs text-sub">결제 정보를 확인하고 있어요</p>
           </div>
         </div>
       </div>
@@ -944,12 +1003,13 @@ onBeforeUnmount(() => {
       </p>
 
       <p v-if="!scannedToken" class="payment-qr-guide">매장 QR 코드를 화면 안에 맞춰 주세요</p>
-      <div v-else class="px-6 pb-6">
+      <!-- 금액을 물어본 경우에만 확인 버튼이 필요하다. 금액이 실린 QR 은 이미 요청이 나갔다. -->
+      <div v-else-if="needsAmountInput" class="px-6 pb-6">
         <button
           class="primary-button w-full"
           type="button"
           :disabled="paymentStore.isScanningStoreQr"
-          @click="submitScan"
+          @click="submitScan()"
         >
           {{ paymentStore.isScanningStoreQr ? '확인 중' : '결제 정보 확인하기' }}
         </button>
@@ -1002,10 +1062,13 @@ onBeforeUnmount(() => {
         <h2>결제가 완료되었습니다</h2>
 
         <dl class="payment-receipt">
-          <!-- 영수증은 전부 결제 결과 응답에서 온다. 지어낸 값을 적지 않는다 (#122). -->
+          <!--
+            영수증에 지어낸 값을 적지 않는다 (#122). 매장·금액은 스캔한 값을 앞세운다 —
+            결과 응답의 그 두 칸이 목값으로 덮여 오기 때문이다 (#136, receiptStoreName 주석).
+          -->
           <div>
             <dt>가맹점명</dt>
-            <dd>{{ paymentResult?.storeName ?? merchantName ?? '-' }}</dd>
+            <dd>{{ receiptStoreName }}</dd>
           </div>
           <div>
             <dt>결제 수단</dt>
@@ -1019,7 +1082,7 @@ onBeforeUnmount(() => {
           </div>
           <div>
             <dt>결제 금액</dt>
-            <dd>{{ won(paymentResult?.amount) }}</dd>
+            <dd>{{ won(receiptAmount) }}</dd>
           </div>
           <!-- 혜택이 없는 결제도 있다. 0원을 "받은 혜택" 으로 적기보다 줄을 빼는 편이 정확하다. -->
           <div v-if="receivedBenefit > 0">
