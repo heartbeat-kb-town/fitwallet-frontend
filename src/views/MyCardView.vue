@@ -810,6 +810,16 @@ function dateLabel(date) {
           </div>
         </section>
 
+        <!--
+          조회 범위 안내. **목록 위에 둔다** (#137). 예전에는 목록 맨 아래에 있었는데,
+          "왜 더 예전 게 없지" 를 궁금해하는 시점은 목록을 다 읽은 뒤가 아니라 읽기 시작할 때다.
+          내역이 많으면 끝까지 내려야 보여서 사실상 안 보였다.
+
+          목록 끝 표시가 아니라 이 화면이 무엇을 보여주는지에 대한 안내라서,
+          불러오는 중이든 내역이 없든 조건 없이 보여준다.
+        -->
+        <p class="mycard-history-notice">최근 3개월 내역을 제공합니다.</p>
+
         <p v-if="isTransactionsLoading" class="py-6 text-center text-[13px] text-sub">
           불러오는 중이에요
         </p>
@@ -851,10 +861,6 @@ function dateLabel(date) {
         >
           {{ isLoadingMore ? '더 불러오는 중이에요' : '더 보기' }}
         </button>
-
-        <p v-if="!isTransactionsLoading && !hasNextTransactions" class="mycard-history-notice">
-          최근 3개월 내역을 제공합니다.
-        </p>
       </div>
     </template>
   </section>
