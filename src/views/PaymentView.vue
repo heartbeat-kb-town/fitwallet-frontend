@@ -151,10 +151,10 @@ const receiptAmount = computed(() => confirmInfo.value?.amount ?? paymentResult.
 /**
  * 매장 QR 스캔(MPM) 단계 (#130).
  *
- * ⚠️ **여기 오려면 PIN 을 한 번 더 받아야 한다.** `POST /payment/qr` 와
- * `POST /payment/qr/scan` 이 `users.pin_auth_id` **컬럼 하나**를 함께 쓰는데,
- * QR 화면에 들어온 순간 CPM 세션이 그 표를 태워버렸기 때문이다.
- * 백엔드가 표를 나눠주면 이 재입력은 사라진다.
+ * `POST /payment/qr` 와 `POST /payment/qr/scan` 은 `users.pin_auth_id` **컬럼 하나**를
+ * 함께 쓴다. 예전에는 QR 화면에 들어온 순간 그 표가 타버려서 여기 오려면 PIN 을 한 번 더
+ * 받아야 했지만, 백엔드가 소비 시점을 결제 완료로 옮겨(backend#185) 재입력이 사라졌다.
+ * 이제 두 결제수단을 탭으로 오갈 수 있다.
  */
 const scannedToken = ref('')
 const scanAmount = ref('')
@@ -260,9 +260,14 @@ function openPin(purpose = 'qr') {
   phase.value = 'pin'
 }
 
-/** 실패 팝업의 "뒤로 가기". 닫으면 뒤에 이미 깔려 있는 결제 비밀번호 화면이 드러난다. */
+/**
+ * 실패 팝업의 "뒤로 가기". 팝업을 닫고 **그때** 결제 비밀번호부터 다시 받는다.
+ *
+ * 표는 실패 시점에 이미 버렸으므로(`pollPaymentResult` 의 FAILED 분기) 새로 받아야 한다.
+ */
 function closePaymentFailure() {
   isPaymentFailed.value = false
+  openPin()
 }
 
 /** 정보확인 화면의 "결제 하러가기". 결과 폴링을 다시 돌려 결제를 마무리한다. */
@@ -332,11 +337,53 @@ async function confirmPin() {
  */
 function startScanFlow() {
   clearFlowTimers()
+  clearScanState()
+
+  // 인증표가 살아 있으면 그대로 쓴다. 백엔드가 CPM QR 을 만든 시점에 표를 소모하지 않으므로
+  // (backend#185) 여기서 PIN 을 다시 받을 이유가 없다.
+  //
+  // 결제 탭에 들어오자마자 이 탭을 누르면 표가 아직 없다. 그때는 한 번 받아야 한다.
+  if (paymentStore.pinAuthId) {
+    // 표가 도중에 만료돼 PIN 을 다시 받게 되면 그 뒤로 스캔이 이어져야 한다.
+    pinPurpose.value = 'scan'
+    phase.value = 'scan'
+    return
+  }
+  openPin('scan')
+}
+
+/**
+ * `QR Code` 탭. 매장 QR 스캔에서 내 QR 을 보여주는 결제(CPM)로 되돌아간다.
+ *
+ * **세션을 새로 만든다.** 스캔으로 갈아타는 동안 카운트다운이 멈춰 있어 남은 시간을 믿을 수
+ * 없고, 백엔드 세션은 그동안에도 만료를 향해 간다. 멈춘 숫자를 그대로 이어 붙이면 화면은
+ * 아직 여유가 있다고 말하는데 실제로는 죽은 QR 을 보여주게 된다.
+ *
+ * 인증표는 결제 완료 전까지 살아 있으므로(backend#185) PIN 을 다시 받지 않는다.
+ * 만료됐다면 `startQrSession` 이 `PIN_AUTH_ID_INVALID` 를 받아 PIN 부터 다시 받는다.
+ */
+async function startQrCodeFlow() {
+  clearFlowTimers()
+  stopScanner()
+  clearScanState()
+
+  // 표가 만료돼 PIN 을 다시 받는 경우, 그 뒤로 QR 생성이 이어져야 한다.
+  pinPurpose.value = 'qr'
+
+  const userCardId = activeCard.value?.id ?? merchantCardId
+  if (!userCardId) {
+    phase.value = 'cards'
+    return
+  }
+  await startQrSession(userCardId)
+}
+
+/** 두 탭을 오갈 때마다 스캔 흔적을 지운다. 남겨두면 카메라 대신 지난 결과가 뜬다. */
+function clearScanState() {
   scannedToken.value = ''
   scanAmount.value = ''
   scanMessage.value = ''
   needsAmountInput.value = false
-  openPin('scan')
 }
 
 /** 스캔 화면에서 뒤로. 카메라를 반드시 끄고 나간다. */
@@ -571,6 +618,10 @@ async function pollPaymentResult() {
       // 서버가 준 시각을 쓴다. 없으면 그때만 화면 시계로 떨어진다.
       paidAt.value = result.paidAt ? formatDateTime(result.paidAt) : formatNow()
 
+      // 백엔드가 결제 완료 시점에 인증표를 used 로 찍는다 (backend#185).
+      // 들고 있으면 다음 결제에서 재사용하려다 PIN_AUTH_ID_INVALID 가 난다.
+      paymentStore.clearPinAuth()
+
       // 방금 결제로 카드 잔액·실적이 달라졌다. 다음 화면이 옛 값을 보지 않게 새로 받는다.
       cardStore.fetchCards().catch(() => {})
 
@@ -583,8 +634,19 @@ async function pollPaymentResult() {
     if (result.status === QR_STATUS.FAILED) {
       // 실패한 QR 세션은 죽었다. 뒤에 결제 비밀번호 화면을 깔아두고 팝업을 띄운다.
       // 팝업을 닫으면 바로 PIN 부터 다시 받을 수 있다 — 실패한 자리에 남겨두지 않는다.
+      //
+      // 인증표도 함께 버린다. 백엔드는 실패에서 표를 소모하지 않지만(backend#185 는 완료
+      // 시점에만 찍는다), **실패하면 PIN 부터 다시 받는다는 것이 이 화면의 정책**이다.
+      // 들고 있으면 `QR Scan` 탭이 표가 살아 있다고 보고 PIN 을 건너뛰어 정책이 깨진다.
+      paymentStore.clearPinAuth()
       finishProcessing(() => {
-        openPin()
+        // **팝업만 먼저 띄운다.** PIN 시트는 팝업을 닫은 뒤에 연다 (`closePaymentFailure`).
+        // 예전에는 여기서 함께 열어 뒤에 깔아뒀는데, 팝업 너머로 키패드가 비쳐서
+        // 실패를 알리기도 전에 비밀번호를 묻는 것처럼 보였다.
+        //
+        // 뒤에는 카드 선택 화면을 둔다. 'processing' 그대로 두면 "결제 중입니다" 가
+        // 실패 팝업 뒤에 남아 서로 어긋난다.
+        phase.value = 'cards'
         isPaymentFailed.value = true
       })
       return
@@ -906,9 +968,8 @@ onBeforeUnmount(() => {
       </div>
 
       <!--
-        `QR Scan` 은 탭 전환이 아니라 **다른 결제 방식으로 갈아타는 버튼**이다 (#130).
-        매장 QR 을 찍는 것은 별도 API(`POST /payment/qr/scan`)이고, 그 API 가
-        지금 세션이 이미 태워버린 인증표를 다시 요구하기 때문에 PIN 부터 다시 받는다.
+        두 결제 방식을 자유롭게 오간다. 백엔드가 인증표를 결제 완료 시점에 소모하게 바뀌어
+        (backend#185) 갈아탈 때마다 PIN 을 다시 받지 않아도 된다.
       -->
       <div class="payment-qr-tabs" role="tablist" aria-label="QR 결제 방식">
         <button type="button" @click="startScanFlow">QR Scan</button>
@@ -1001,6 +1062,18 @@ onBeforeUnmount(() => {
       <p v-else-if="scanMessage" class="px-6 text-center text-[13px] text-danger" role="alert">
         {{ scanMessage }}
       </p>
+
+      <!--
+        QR 화면과 같은 탭을 둔다. 예전에는 이쪽에 탭이 없어서 뒤로가기로 카드 선택까지
+        나갔다가 다시 들어와야 했다.
+
+        **QR 을 이미 읽은 뒤에는 감춘다.** 그때는 결제 요청이 이미 나가 있어서, 갈아타면
+        진행 중인 결제를 두고 나가는 꼴이 된다.
+      -->
+      <div v-if="!scannedToken" class="payment-qr-tabs" role="tablist" aria-label="QR 결제 방식">
+        <button type="button" class="active">QR Scan</button>
+        <button type="button" @click="startQrCodeFlow">QR Code</button>
+      </div>
 
       <p v-if="!scannedToken" class="payment-qr-guide">매장 QR 코드를 화면 안에 맞춰 주세요</p>
       <!-- 금액을 물어본 경우에만 확인 버튼이 필요하다. 금액이 실린 QR 은 이미 요청이 나갔다. -->
