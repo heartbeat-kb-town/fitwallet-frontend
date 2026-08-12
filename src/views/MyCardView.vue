@@ -258,6 +258,9 @@ const tiers = computed(() => usage.value?.tiers ?? [])
 
 const achievementTitle = computed(() => {
   if (isSingleTier.value) return isAchieved.value ? '전월 실적 달성!' : '실적이 조금 부족해요'
+  // 구간이 여럿인데 아직 첫 구간도 못 넘었다. **"0구간 실적 달성!" 은 달성한 것이 없다는 뜻**이라
+  // 축하하는 문구가 될 수 없다. 기준이 하나인 카드가 못 채웠을 때와 같은 말을 쓴다.
+  if (currentTier.value === 0) return '실적이 조금 부족해요'
   return `${currentTier.value}구간 실적 달성!`
 })
 
@@ -727,6 +730,7 @@ function dateLabel(date) {
               ※ 실적 인정 금액은 전표 접수 시간에 따라 바뀔 수 있으며, 할인된 등록 혜택은 이용
               실적에서 제외될 수 있습니다.
             </p>
+            <p class="mycard-notice">※ 최근 3개월 실적만 보여집니다.</p>
           </section>
 
           <section class="mycard-panel benefit-tier-panel">
