@@ -55,6 +55,19 @@ const request = computed(() => ({
 // 결제에서 뒤로 왔을 때 그 가게 화면으로 복원하기 위한 값 (기존 merchantReturnStore)
 const initialStoreName = computed(() => str(route.query.store))
 
+/**
+ * 금액 입력 화면(#144)에서 넘어온 값.
+ *
+ * `storeId` 가 함께 오면 목록을 기다리지 않고 바로 PICK 을 그린다. 금액을 묻는 화면을
+ * 거치면서 이 화면이 다시 마운트되는데, 목록 조회가 끝날 때까지 PICK 을 못 그리면
+ * 가맹점을 고른 뒤 "찾는 중" 로더를 한 번 더 보게 된다.
+ *
+ * `amount` 는 없을 수도 있다 — 금액 입력 화면에서 `아니요` 를 고른 경우다.
+ * 그때는 `getExpectedBenefits` 가 쿼리에서 통째로 뺀다.
+ */
+const initialStoreId = computed(() => str(route.query.storeId))
+const requestedAmount = computed(() => str(route.query.amount))
+
 // 검색에서 들어왔으면 뒤로가기가 검색으로 간다. 아니면 홈(셸 기본 화면).
 function goBack() {
   if (route.query.from === 'search') router.push({ name: 'search' })
@@ -91,7 +104,13 @@ function payWith({ userCardId, store }) {
   router.push({ name: 'payment' })
 }
 
-const selectedStore = ref(null)
+// 금액 입력 화면에서 돌아왔으면 쿼리만으로 PICK 을 복원한다. PICK 이 쓰는 값은
+// `storeId` 와 `storeName` 둘뿐이라 목록의 원본 객체를 기다릴 이유가 없다.
+const selectedStore = ref(
+  initialStoreId.value && initialStoreName.value
+    ? { storeId: initialStoreId.value, storeName: initialStoreName.value }
+    : null,
+)
 const showPin = ref(false)
 const pendingPick = ref(null)
 const pin = ref([])
@@ -274,14 +293,50 @@ const cardPicks = computed(() =>
 const hasNoCard = computed(() => expectedBenefits.value?.hasCard === false)
 
 // 가맹점을 고르면 그 가맹점 기준으로 보유 카드를 판정받는다. 가맹점을 바꾸면 다시 받는다.
-watch(selectedStore, async (store) => {
-  if (!store) return
-  try {
-    await fetchExpectedBenefits(store.storeId)
-  } catch (error) {
-    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
-  }
-})
+// 쿼리로 복원된 경우에도 그려지자마자 판정을 받아야 하므로 immediate 다.
+watch(
+  selectedStore,
+  async (store) => {
+    if (!store) return
+    try {
+      await fetchExpectedBenefits(store.storeId, requestedAmount.value)
+    } catch (error) {
+      showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
+    }
+  },
+  { immediate: true },
+)
+
+/**
+ * 가맹점을 고르면 금액을 먼저 묻는다 (#144).
+ *
+ * 돌아올 주소를 통째로 넘긴다 — 화면 이름만으로는 카테고리·검색어를 복원할 수 없다.
+ */
+function selectStore(store) {
+  router.push({
+    name: 'pick-amount',
+    query: {
+      storeId: String(store.storeId),
+      store: store.storeName,
+      returnTo: route.fullPath,
+    },
+  })
+}
+
+/**
+ * PICK 에서 목록으로 돌아간다.
+ *
+ * `selectedStore` 만 비우면 안 된다. 쿼리에 `store` 가 남아 있으면 아래 `watch(stores)`
+ * 가 곧바로 다시 채워 PICK 으로 되튕긴다. 복원용 쿼리를 걷어내고 목록 주소로 바꾼다.
+ */
+function backToList() {
+  selectedStore.value = null
+  const { store, storeId, amount, ...rest } = route.query
+  void store
+  void storeId
+  void amount
+  router.replace({ path: route.path, query: rest })
+}
 
 function formatDistance(distance) {
   return distance >= 1000 ? `${(distance / 1000).toFixed(1)}km` : `${distance}m`
@@ -412,7 +467,7 @@ async function confirmPin() {
           :key="store.storeId"
           class="merchant-card"
           type="button"
-          @click="selectedStore = store"
+          @click="selectStore(store)"
         >
           <span class="merchant-store-icon">
             <img :src="isSearch ? storeSearchIcon : category.icon" alt="" />
@@ -434,7 +489,7 @@ async function confirmPin() {
 
     <template v-else>
       <header class="pick-header">
-        <button type="button" aria-label="가맹점 목록으로" @click="selectedStore = null">
+        <button type="button" aria-label="가맹점 목록으로" @click="backToList()">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
         </button>
         <h1>피그의 PICK</h1>
