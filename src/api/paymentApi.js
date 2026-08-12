@@ -45,8 +45,13 @@ export const postQr = ({ userCardId, pinAuthId }) =>
  * @param payload `{ storeQrToken, pinAuthId, userCardId, amount }`
  *
  *   - `storeQrToken` 은 `FITWALLET-QR-#####` 형식이다. 백엔드가 정규식으로 막는다
- *   - ⚠️ **`amount` 를 프론트가 보낸다.** 매장 QR 에는 금액이 실려 있지 않고, 백엔드도
- *     응답의 `amount` 에 **보낸 값을 그대로 돌려준다.** 사용자에게 받아야 하는 값이다
+ *   - ⚠️ **`amount` 를 프론트가 보낸다.** 백엔드는 응답의 `amount` 에 **보낸 값을 그대로
+ *     돌려준다.** 검증하지도, 조회하지도 않는다.
+ *     이 값은 **매장 QR 이 싣고 온 금액**이다 — QR 페이로드가
+ *     `{"storeQrToken":"FITWALLET-QR-00020","amount":4500}` 형태다 (`utils/storeQr.js`).
+ *     금액이 빠진 옛 평문 QR 을 만났을 때만 사용자에게 받는다.
+ *     ⚠️ 그래서 **QR 을 위조하면 결제 금액을 바꿀 수 있다.** 백엔드가 토큰으로 결제 요청
+ *     금액을 조회해야 맞지만 지금 계약에는 그 경로가 없다
  *   - ⚠️ **`pinAuthId` 를 소모한다.** `postQr` 과 **같은 표를 태운다**
  *     (`users.pin_auth_id` 컬럼 하나다). 둘 중 하나만 쓸 수 있다
  *
