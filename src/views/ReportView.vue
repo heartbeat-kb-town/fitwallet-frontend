@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Menu, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { Menu, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Minus } from 'lucide-vue-next'
 import iconHome from '@/assets/icons/home.svg'
 import iconPayment from '@/assets/icons/payment.svg'
 import iconMycard from '@/assets/icons/mycard.svg'
@@ -53,7 +53,6 @@ const page = ref(initialCardId ? 'received' : 'main')
 const missedTab = ref('app')
 const expanded = ref(new Set())
 const selectedCard = ref(0)
-const receivedCount = ref(0)
 const missedCount = ref(0)
 const toast = ref('')
 let animationFrame = 0
@@ -631,18 +630,21 @@ function selectMissedTab(tab) {
   expanded.value = new Set(['food'])
 }
 
-/** 요약 카드 두 장의 숫자를 0 부터 굴린다. 목표값은 부를 때마다 응답에서 다시 읽는다. */
+/**
+ * 놓친 혜택 총액을 0 부터 굴린다. 목표값은 부를 때마다 응답에서 다시 읽는다.
+ *
+ * 받은 혜택 총액은 도넛 가운데(`totalBenefit`)가 그대로 보여준다. 예전에는 요약 카드
+ * 두 장이 각각 굴렸는데, 피그마 구성에서 그 두 장이 빠지면서 놓친 혜택만 남았다.
+ */
 function animateCounts() {
   cancelAnimationFrame(animationFrame)
 
-  const receivedTarget = summary.value.totalReceivedBenefit
   const missedTarget = summary.value.totalMissedBenefit
   const start = performance.now()
   const duration = 900
   const tick = (now) => {
     const progress = Math.min(1, (now - start) / duration)
     const eased = 1 - Math.pow(1 - progress, 3)
-    receivedCount.value = Math.round(receivedTarget * eased)
     missedCount.value = Math.round(missedTarget * eased)
     if (progress < 1) animationFrame = requestAnimationFrame(tick)
   }
@@ -730,23 +732,17 @@ onBeforeUnmount(() => {
       </div>
 
       <template v-else>
-        <div class="report-summary-grid">
-          <button class="report-summary-card" type="button" @click="openPage('received')">
-            <span class="report-summary-icon">🎁</span>
-            <span>받은 혜택</span>
-            <small>총금액</small>
-            <strong class="received">{{ won(receivedCount) }}</strong>
-          </button>
-          <button class="report-summary-card" type="button" @click="openPage('missed')">
-            <span class="report-summary-icon">↘</span>
-            <span>놓친 혜택</span>
-            <small>총금액</small>
-            <strong class="missed">{{ won(missedCount) }}</strong>
-          </button>
-        </div>
-
         <section class="report-panel">
-          <h2>카테고리별 받은 혜택</h2>
+          <div class="flex items-center justify-between gap-2">
+            <h2>카테고리별 받은 혜택</h2>
+            <button
+              type="button"
+              class="flex shrink-0 items-center gap-0.5 bg-transparent !text-[13px] !font-bold text-primary-dark"
+              @click="openPage('received')"
+            >
+              자세히보기 <ChevronRight :size="14" />
+            </button>
+          </div>
           <div class="report-donut-wrap">
             <div class="report-donut" :style="{ background: chartBackground }">
               <div>
@@ -771,6 +767,26 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div v-else class="py-6 text-center text-xs text-sub">이 달에는 받은 혜택이 없어요</div>
+        </section>
+
+        <!-- 놓친 혜택은 요약 API 가 총액 하나만 준다. 분해와 거래 목록은 상세 화면이 맡는다. -->
+        <section class="report-panel">
+          <div class="flex items-center justify-between gap-2">
+            <h2 class="!text-[15px]">이번 달 놓친 혜택</h2>
+            <button
+              type="button"
+              class="flex shrink-0 items-center gap-0.5 bg-transparent !text-[13px] !font-bold text-primary-dark"
+              @click="openPage('missed')"
+            >
+              자세히보기 <ChevronRight :size="14" />
+            </button>
+          </div>
+          <div class="mt-3 flex items-center gap-3">
+            <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-icon-bg">
+              <Minus :size="18" :stroke-width="4" class="text-primary-dark" />
+            </span>
+            <strong class="text-[26px] font-bold text-ink">{{ won(missedCount) }}</strong>
+          </div>
         </section>
 
         <section class="report-panel recommendation-panel">
