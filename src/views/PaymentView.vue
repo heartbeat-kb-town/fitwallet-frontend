@@ -260,9 +260,14 @@ function openPin(purpose = 'qr') {
   phase.value = 'pin'
 }
 
-/** 실패 팝업의 "뒤로 가기". 닫으면 뒤에 이미 깔려 있는 결제 비밀번호 화면이 드러난다. */
+/**
+ * 실패 팝업의 "뒤로 가기". 팝업을 닫고 **그때** 결제 비밀번호부터 다시 받는다.
+ *
+ * 표는 실패 시점에 이미 버렸으므로(`pollPaymentResult` 의 FAILED 분기) 새로 받아야 한다.
+ */
 function closePaymentFailure() {
   isPaymentFailed.value = false
+  openPin()
 }
 
 /** 정보확인 화면의 "결제 하러가기". 결과 폴링을 다시 돌려 결제를 마무리한다. */
@@ -635,7 +640,13 @@ async function pollPaymentResult() {
       // 들고 있으면 `QR Scan` 탭이 표가 살아 있다고 보고 PIN 을 건너뛰어 정책이 깨진다.
       paymentStore.clearPinAuth()
       finishProcessing(() => {
-        openPin()
+        // **팝업만 먼저 띄운다.** PIN 시트는 팝업을 닫은 뒤에 연다 (`closePaymentFailure`).
+        // 예전에는 여기서 함께 열어 뒤에 깔아뒀는데, 팝업 너머로 키패드가 비쳐서
+        // 실패를 알리기도 전에 비밀번호를 묻는 것처럼 보였다.
+        //
+        // 뒤에는 카드 선택 화면을 둔다. 'processing' 그대로 두면 "결제 중입니다" 가
+        // 실패 팝업 뒤에 남아 서로 어긋난다.
+        phase.value = 'cards'
         isPaymentFailed.value = true
       })
       return
