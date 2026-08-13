@@ -22,6 +22,8 @@ import iconRefuel from '@/assets/icons/category-refuel.svg'
 import iconTransport from '@/assets/icons/potentialbenefit-transportation.svg'
 // 포인트 적립임을 알리는 Ⓟ 배지. 원화 금액과 한눈에 갈리게 숫자 앞에 붙인다.
 import iconPointBadge from '@/assets/icons/point-badge.svg'
+// 놓친 혜택 히어로에 걸터앉는 픽피. 우는 얼굴은 `pig-cry` 와 같고 앞발이 더 붙어 있다.
+import pigCryPeek from '@/assets/icons/pig-cry-peek.svg'
 
 import BaseSpinner from '@/components/common/BaseSpinner.vue'
 import { useCardImage } from '@/composables/useCardImage'
@@ -339,48 +341,45 @@ const LOSS_TYPES = {
 const missedDetail = computed(() => reportStore.missedDetail)
 
 /**
- * 히어로 배경에 깔 카드.
+ * 히어로 바탕색.
  *
- * **대표 카드**(`cardStore` 순서의 첫 장)를 쓴다. 히어로는 카드 한 장이 아니라 이번 달
- * 전체 합계라 "이 카드" 라고 할 대상이 원래 없다. 순서는 사용자가 카드관리에서 정한 것이고,
- * 놓친 혜택이 0원인 달에도 그림이 남는다.
+ * 기존 금색 그라데이션(`#ffcc00 → #ffe999`)을 걷어내고 옅은 크림 단색으로 둔다.
+ * 그라데이션 위에 무엇을 얹어도 금색으로 물들어 바꾼 티가 나지 않았다.
  *
- * 상세 응답의 `alternativeCardName` 으로 고르는 방법도 있지만 그 API 는 **이름만** 주고
- * id 도 이미지도 주지 않는다. 이름으로 맞춰야 하는 데다 대안 카드를 보유하지 않았으면
- * 매칭이 실패한다.
+ * **값을 적지 않고 토큰을 참조한다**(`--color-icon-bg` = `#fff8e5`).
+ * 인라인 style 이라 유틸리티 클래스를 못 쓰지만 `var()` 는 그대로 해석된다.
+ *
+ * 글씨 대비는 넉넉하다 — `style.css` 의 라벨 `#7a4800` 이 7.2:1,
+ * 총액 `#3a2200` 이 14.2:1 이라 색을 덮을 필요가 없다.
  */
-const heroCard = computed(() => cardStore.cards[0] ?? null)
+const MISSED_HERO_BACKGROUND = 'var(--color-icon-bg)'
 
 /**
- * 히어로 칸의 비율. `style.css` 값에서 계산했다 —
- * 가로는 `.phone` 390 에서 `.report-scroll` 좌우 패딩 16씩을 뺀 358,
- * 세로는 패딩 40 에 내용 높이를 더한 약 166 이다.
+ * "카드 선택 손실" 칸에 걸터앉은 픽피.
  *
- * **칸의 비율이지 카드의 비율이 아니다.** 세로 이미지를 눕힐 때만 쓰인다 (`useCardImage`).
- */
-const MISSED_HERO_RATIO = 358 / 166
-
-/**
- * 배경 이미지 불투명도.
+ * 이 그림은 앞발이 아래쪽에 따로 그려져 있어서, 무언가의 **윗변에 걸친** 모습으로
+ * 쓰라고 만들어진 에셋이다. 그래서 아래 칸 위에 얹는다.
  *
- * 히어로 글씨는 노란 배경 위의 진한 갈색(`#3a2200`)이다. 카드 그림은 남색·검정이 흔해서
- * 그대로 깔면 글씨가 묻힌다. 노란 그라데이션을 바닥에 두고 그 위에 **옅게** 얹어
- * 배경이 밝게 유지되도록 한다.
+ * 위치는 `.missed-hero` 의 `style.css` 값에서 계산했다.
+ *   패딩 20 + 라벨 14 + h2(마진 4 + 34 + 15) = 87 → 아래 칸의 윗변
+ *   히어로 높이 ≈ 166 이므로 아래에서 79px 지점이다
+ * `bottom: 69px` 은 그 윗변보다 10px 아래, 즉 칸에 **10px 걸치게** 한다.
+ * 위가 아니라 아래를 기준으로 잡아야 칸 높이가 흔들려도 걸친 정도가 유지된다.
  *
- * 0.22 는 가장 어두운 카드(거의 검정)를 가정해도 대비가 약 6.4:1 로,
- * WCAG AA 기준(4.5:1)을 넘는 값으로 잡은 것이다. 더 올리면 이 여유가 사라진다.
+ * `zIndex` 가 글씨(`relative`)보다 위다. 뒤에 두면 앞발이 칸 밑으로 숨어
+ * "얹은" 것이 아니라 잘린 것처럼 보인다. 10px 은 칸의 위쪽 패딩(11px) 안이라
+ * 글자를 가리지 않는다.
+ *
+ * 장식이므로 `aria-hidden` 이고, 칸을 넘치는 만큼은 `overflow: hidden` 이 잘라낸다.
  */
-const MISSED_HERO_IMAGE_OPACITY = 0.22
-
-/**
- * 그림은 배경이라 `z-index: 0` 으로 깔고, 글씨 쪽은 템플릿에서 `relative` 를 받는다.
- * 절대 배치된 형제가 뒤에 오는 일반 흐름 요소보다 위에 그려지기 때문이다.
- */
-const missedHeroImageStyle = computed(() => ({
-  ...cardImageStyle(heroCard.value?.cardImageUrl, MISSED_HERO_RATIO),
-  opacity: MISSED_HERO_IMAGE_OPACITY,
-  zIndex: 0,
-}))
+const MISSED_HERO_PIG_STYLE = {
+  position: 'absolute',
+  bottom: '69px',
+  right: '36px',
+  width: '77px', // 원본 406×465 비율 유지
+  height: '88px',
+  zIndex: 2,
+}
 
 /** 안내 문구는 서버가 주지 않는다. 손실 유형을 설명하는 고정 카피라 화면이 들고 있다. */
 const missedInfo = computed(() => LOSS_TYPES[missedTab.value]?.info ?? '')
@@ -845,15 +844,11 @@ onBeforeUnmount(() => {
       <!-- 히어로 세 숫자는 탭과 무관하게 늘 같다. 백엔드가 두 손실을 항상 함께 준다.
            배경의 카드 그림은 장식이라 스크린리더에서 뺀다. `style.css` 가 동결이라
            position·overflow 는 인라인으로 얹는다 (받은 혜택 카드 칸과 같은 방식). -->
-      <section class="missed-hero" style="position: relative; overflow: hidden">
-        <img
-          v-if="heroCard?.cardImageUrl"
-          :src="heroCard.cardImageUrl"
-          alt=""
-          aria-hidden="true"
-          :style="missedHeroImageStyle"
-          @load="markCardImageOrientation"
-        />
+      <section
+        class="missed-hero"
+        :style="{ position: 'relative', overflow: 'hidden', background: MISSED_HERO_BACKGROUND }"
+      >
+        <img :src="pigCryPeek" alt="" aria-hidden="true" :style="MISSED_HERO_PIG_STYLE" />
         <p class="relative">이번 달 총 놓친 혜택</p>
         <h2 class="relative">{{ currency(missedDetail.totalMissedBenefit) }}</h2>
         <div class="relative">
