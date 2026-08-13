@@ -338,6 +338,50 @@ const LOSS_TYPES = {
 
 const missedDetail = computed(() => reportStore.missedDetail)
 
+/**
+ * 히어로 배경에 깔 카드.
+ *
+ * **대표 카드**(`cardStore` 순서의 첫 장)를 쓴다. 히어로는 카드 한 장이 아니라 이번 달
+ * 전체 합계라 "이 카드" 라고 할 대상이 원래 없다. 순서는 사용자가 카드관리에서 정한 것이고,
+ * 놓친 혜택이 0원인 달에도 그림이 남는다.
+ *
+ * 상세 응답의 `alternativeCardName` 으로 고르는 방법도 있지만 그 API 는 **이름만** 주고
+ * id 도 이미지도 주지 않는다. 이름으로 맞춰야 하는 데다 대안 카드를 보유하지 않았으면
+ * 매칭이 실패한다.
+ */
+const heroCard = computed(() => cardStore.cards[0] ?? null)
+
+/**
+ * 히어로 칸의 비율. `style.css` 값에서 계산했다 —
+ * 가로는 `.phone` 390 에서 `.report-scroll` 좌우 패딩 16씩을 뺀 358,
+ * 세로는 패딩 40 에 내용 높이를 더한 약 166 이다.
+ *
+ * **칸의 비율이지 카드의 비율이 아니다.** 세로 이미지를 눕힐 때만 쓰인다 (`useCardImage`).
+ */
+const MISSED_HERO_RATIO = 358 / 166
+
+/**
+ * 배경 이미지 불투명도.
+ *
+ * 히어로 글씨는 노란 배경 위의 진한 갈색(`#3a2200`)이다. 카드 그림은 남색·검정이 흔해서
+ * 그대로 깔면 글씨가 묻힌다. 노란 그라데이션을 바닥에 두고 그 위에 **옅게** 얹어
+ * 배경이 밝게 유지되도록 한다.
+ *
+ * 0.22 는 가장 어두운 카드(거의 검정)를 가정해도 대비가 약 6.4:1 로,
+ * WCAG AA 기준(4.5:1)을 넘는 값으로 잡은 것이다. 더 올리면 이 여유가 사라진다.
+ */
+const MISSED_HERO_IMAGE_OPACITY = 0.22
+
+/**
+ * 그림은 배경이라 `z-index: 0` 으로 깔고, 글씨 쪽은 템플릿에서 `relative` 를 받는다.
+ * 절대 배치된 형제가 뒤에 오는 일반 흐름 요소보다 위에 그려지기 때문이다.
+ */
+const missedHeroImageStyle = computed(() => ({
+  ...cardImageStyle(heroCard.value?.cardImageUrl, MISSED_HERO_RATIO),
+  opacity: MISSED_HERO_IMAGE_OPACITY,
+  zIndex: 0,
+}))
+
 /** 안내 문구는 서버가 주지 않는다. 손실 유형을 설명하는 고정 카피라 화면이 들고 있다. */
 const missedInfo = computed(() => LOSS_TYPES[missedTab.value]?.info ?? '')
 
@@ -798,11 +842,21 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-else class="report-scroll report-detail-scroll">
-      <!-- 히어로 세 숫자는 탭과 무관하게 늘 같다. 백엔드가 두 손실을 항상 함께 준다. -->
-      <section class="missed-hero">
-        <p>이번 달 총 놓친 혜택</p>
-        <h2>{{ currency(missedDetail.totalMissedBenefit) }}</h2>
-        <div>
+      <!-- 히어로 세 숫자는 탭과 무관하게 늘 같다. 백엔드가 두 손실을 항상 함께 준다.
+           배경의 카드 그림은 장식이라 스크린리더에서 뺀다. `style.css` 가 동결이라
+           position·overflow 는 인라인으로 얹는다 (받은 혜택 카드 칸과 같은 방식). -->
+      <section class="missed-hero" style="position: relative; overflow: hidden">
+        <img
+          v-if="heroCard?.cardImageUrl"
+          :src="heroCard.cardImageUrl"
+          alt=""
+          aria-hidden="true"
+          :style="missedHeroImageStyle"
+          @load="markCardImageOrientation"
+        />
+        <p class="relative">이번 달 총 놓친 혜택</p>
+        <h2 class="relative">{{ currency(missedDetail.totalMissedBenefit) }}</h2>
+        <div class="relative">
           <span
             ><small>▣ 앱 미사용</small
             ><strong>{{ currency(missedDetail.appUnusedAmount) }}</strong></span
