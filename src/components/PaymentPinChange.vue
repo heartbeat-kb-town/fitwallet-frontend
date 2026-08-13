@@ -16,7 +16,6 @@ const PIN_LENGTH = 6
 //
 // 1단계를 넘어갈 때 현재 PIN 이 맞는지 **그 자리에서** 서버에 확인한다
 // (`userApi.verifyCurrentPaymentPin`). 그래야 틀린 것을 새 PIN 을 치기 전에 알려준다.
-// 그 함수가 왜 변경 API 를 빌려 쓰는지는 userApi.js 주석에 적어 뒀다.
 const PHASES = ['current', 'new', 'confirm']
 
 const TITLES = {
