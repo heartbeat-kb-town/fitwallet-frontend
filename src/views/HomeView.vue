@@ -13,6 +13,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Info, Menu, X } from 'lucide-vue-next'
 import iconSearch from '@/assets/icons/search.svg'
+import iconPigPeek from '@/assets/icons/pig-peek.svg'
 import iconHomeActive from '@/assets/icons/click-home.svg'
 import iconHome from '@/assets/icons/home.svg'
 import iconPayment from '@/assets/icons/payment.svg'
@@ -469,9 +470,28 @@ function selectTab(index, label) {
 
   <div class="scroll-content">
     <div class="search-wrap">
+      <!--
+        픽피가 검색창에 걸쳐 있는 모양 (#156).
+
+        `pig-peek.svg` 는 얼굴 + 앞발 두 개짜리 포즈라, 앞발이 검색창 테두리를 붙잡은 것처럼
+        아래로 겹쳐야 의도대로 보인다. 겹치는 만큼 `-mb-2` 로 다음 형제를 끌어올리고,
+        `relative z-10` 으로 검색창 위에 얹는다 (검색창은 배경색이 있어 그냥 두면 픽피를 덮는다).
+
+        style.css 는 동결이라 새 마크업은 Tailwind 로 짠다 (CLAUDE.md "스타일").
+      -->
+      <div class="relative z-10 flex items-end gap-1.5">
+        <img :src="iconPigPeek" alt="" width="55" height="60" class="-mb-2 shrink-0" />
+        <!-- 말풍선 꼬리는 왼쪽 아래 모서리를 각지게 만들어 픽피 쪽을 가리키게 한다. -->
+        <p
+          class="mb-3 rounded-2xl rounded-bl-none bg-primary px-3 py-1.5 text-xs font-bold text-ink"
+        >
+          최대 혜택으로 빠르게
+        </p>
+      </div>
+
       <button class="search-bar" @click="openSearch()">
         <img :src="iconSearch" alt="" width="19" height="19" />
-        <span>어떤 혜택을 찾으시나요?</span>
+        <span>매장명을 검색하고 최적의 카드로 혜택을 받으세요</span>
       </button>
     </div>
 
@@ -484,7 +504,7 @@ function selectTab(index, label) {
         @click="chooseCategory(category)"
       >
         <span class="category-icon">
-          <img :src="category.icon" :alt="category.name" width="26" height="26" />
+          <img :src="category.icon" :alt="category.name" width="21" height="21" />
         </span>
         <span>{{ category.name }}</span>
       </button>
