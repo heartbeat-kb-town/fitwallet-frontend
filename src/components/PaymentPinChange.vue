@@ -14,9 +14,16 @@ const PIN_LENGTH = 6
 
 // 입력 순서다. 되돌릴 때 "여기부터 뒤" 를 지우는 기준으로도 쓴다.
 //
-// 현재 PIN 을 먼저 받는 이유는 백엔드가 요구해서다 — `PATCH /user/payment-pin` 은
-// currentPin 으로 본인 확인을 대신한다. 새 PIN 만 받아서는 요청을 만들 수 없다.
-const PHASES = ['current', 'new', 'confirm']
+// **현재 PIN 을 마지막에 받는다.** 통상적인 순서와 반대인데 이유가 있다.
+// `PATCH /user/payment-pin` 은 세 값을 한 번에 받아 그때 현재 PIN 을 대조한다.
+// 즉 서버가 "현재 PIN 이 틀렸다" 를 알려줄 수 있는 시점은 **마지막 입력 직후뿐**이다.
+// 현재 PIN 을 먼저 받으면 새 PIN 을 두 번 다 친 뒤에야 "아까 그거 틀렸다" 가 뜬다.
+//
+// 현재 PIN 만 따로 검증할 방법이 없어서 이렇게 뒀다. `POST /payment/pin/verify` 는
+// 쓸 수 없다 — userCardId 가 필수고, 틀리면 결제 PIN 잠금 횟수를 깎으며,
+// 맞으면 요청하지도 않은 결제 인증 세션(pinAuthId)을 발급한다.
+// 부작용 없는 검증 엔드포인트가 생기면 통상적인 순서로 되돌린다.
+const PHASES = ['new', 'confirm', 'current']
 
 const TITLES = {
   current: '현재 결제 비밀번호 6자리를 입력해주세요',
@@ -24,7 +31,7 @@ const TITLES = {
   confirm: '새 결제 비밀번호 6자리를 확인해주세요',
 }
 
-const phase = ref('current')
+const phase = ref('new')
 const pins = reactive({ current: '', new: '', confirm: '' })
 const isMounted = ref(false)
 const errorMessage = ref('')
@@ -74,11 +81,17 @@ async function submit() {
     // 틀린 값을 받은 단계로 되돌린다. 문구는 백엔드 message 를 그대로 쓴다.
     // 이 화면의 입력창은 키패드 하나뿐이라, 검증 실패를 토스트로 띄우면
     // 사용자가 어느 단계를 다시 눌러야 하는지 알 수 없다.
+    //
+    // 현재 PIN 이 마지막 단계라, 이 분기는 방금 친 그 화면에 그대로 머문다.
+    // 새 PIN 은 지우지 않는다 — 잘못 친 것은 현재 PIN 뿐인데 셋 다 다시 받으면
+    // 사용자가 멀쩡한 값을 두 번 더 쳐야 한다.
     if (error.code === 'INVALID_CURRENT_PAYMENT_PIN') {
       resetTo('current', error.message)
       return
     }
 
+    // 이쪽은 새 PIN 쌍이 문제이므로 처음부터 다시 받는다.
+    // 화면에서 먼저 걸러내므로 여기까지 오는 것은 프론트 검사가 샜을 때뿐이다.
     if (error.code === 'NEW_PAYMENT_PIN_CONFIRM_MISMATCH') {
       resetTo('new', error.message)
       return
@@ -87,38 +100,38 @@ async function submit() {
     // 여기 401 은 전부 세션 만료다. 변경 API 에는 비즈니스 401 이 없다.
     // 인터셉터가 이미 토큰을 비웠으므로 PIN 을 다시 받아도 소용이 없다.
     if (error.status === 401) {
-      resetTo('current')
+      resetTo('new')
       showToast('로그인이 만료됐어요. 다시 로그인해 주세요.')
       router.replace({ name: 'login' })
       return
     }
 
-    const isUnexpected = !error.code || error.status >= 500
-    if (isUnexpected) {
+    // 500·네트워크는 입력이 잘못된 게 아니다. 마지막 단계만 다시 받아 재시도하게 둔다.
+    if (!error.code || error.status >= 500) {
       resetTo('current')
       showToast('일시적인 오류가 발생했어요')
       return
     }
 
-    resetTo('current', error.message)
+    // 무엇이 문제인지 모르는 4xx 다. 안전하게 처음부터 다시 받는다.
+    resetTo('new', error.message)
   }
 }
 
 async function completePhase() {
   if (enteredPin.value.length !== PIN_LENGTH) return
 
-  if (phase.value === 'current') {
-    resetTo('new')
-    return
-  }
-
   if (phase.value === 'new') {
     resetTo('confirm')
     return
   }
 
-  if (pins.new !== pins.confirm) {
-    resetTo('confirm', '비밀번호가 일치하지 않습니다. 다시 입력해 주세요.')
+  if (phase.value === 'confirm') {
+    if (pins.new !== pins.confirm) {
+      resetTo('confirm', '비밀번호가 일치하지 않습니다. 다시 입력해 주세요.')
+      return
+    }
+    resetTo('current')
     return
   }
 
