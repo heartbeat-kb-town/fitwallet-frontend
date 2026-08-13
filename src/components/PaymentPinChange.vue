@@ -14,16 +14,18 @@ const PIN_LENGTH = 6
 
 // 입력 순서다. 되돌릴 때 "여기부터 뒤" 를 지우는 기준으로도 쓴다.
 //
-// **현재 PIN 을 마지막에 받는다.** 통상적인 순서와 반대인데 이유가 있다.
-// `PATCH /user/payment-pin` 은 세 값을 한 번에 받아 그때 현재 PIN 을 대조한다.
-// 즉 서버가 "현재 PIN 이 틀렸다" 를 알려줄 수 있는 시점은 **마지막 입력 직후뿐**이다.
-// 현재 PIN 을 먼저 받으면 새 PIN 을 두 번 다 친 뒤에야 "아까 그거 틀렸다" 가 뜬다.
+// 현재 PIN 을 먼저 받는다. 다만 **그 자리에서 맞는지 확인해 줄 수는 없다.**
+// `PATCH /user/payment-pin` 은 세 값을 한 번에 받아 그때 현재 PIN 을 대조하므로,
+// 서버에 물어볼 수 있는 시점이 마지막 입력 직후뿐이다.
 //
-// 현재 PIN 만 따로 검증할 방법이 없어서 이렇게 뒀다. `POST /payment/pin/verify` 는
-// 쓸 수 없다 — userCardId 가 필수고, 틀리면 결제 PIN 잠금 횟수를 깎으며,
-// 맞으면 요청하지도 않은 결제 인증 세션(pinAuthId)을 발급한다.
-// 부작용 없는 검증 엔드포인트가 생기면 통상적인 순서로 되돌린다.
-const PHASES = ['new', 'confirm', 'current']
+// 1단계에서 바로 검증하려면 부작용 없는 검증 엔드포인트가 필요하다.
+// `POST /payment/pin/verify` 로는 안 된다 — userCardId 가 필수고, 틀리면 결제 PIN
+// 잠금 횟수를 깎으며, 맞으면 요청하지도 않은 결제 인증 세션(pinAuthId)을 발급한다.
+// 그 API 가 생기면 `completePhase` 의 'current' 분기에서 부른다.
+//
+// 그때까지의 완화책은 아래 `retryCurrent` 다. 현재 PIN 만 틀렸을 때 새 PIN 을
+// 살려둬서, 사용자가 6자리만 다시 치면 바로 재전송되게 한다.
+const PHASES = ['current', 'new', 'confirm']
 
 const TITLES = {
   current: '현재 결제 비밀번호 6자리를 입력해주세요',
@@ -31,7 +33,7 @@ const TITLES = {
   confirm: '새 결제 비밀번호 6자리를 확인해주세요',
 }
 
-const phase = ref('new')
+const phase = ref('current')
 const pins = reactive({ current: '', new: '', confirm: '' })
 const isMounted = ref(false)
 const errorMessage = ref('')
@@ -64,6 +66,21 @@ function resetTo(target, message = '') {
 }
 
 /**
+ * 현재 PIN 만 다시 받는다. **새 PIN 은 남겨둔다.**
+ *
+ * `resetTo('current')` 를 쓰면 현재 PIN 이 첫 단계라 뒤의 새 PIN 까지 전부 지워진다.
+ * 잘못 친 것은 현재 PIN 뿐인데 멀쩡한 값을 두 번 더 치게 하는 셈이다.
+ *
+ * 여기서 되돌아오면 `completePhase` 가 새 PIN 이 이미 채워진 것을 보고
+ * 새 PIN 단계를 건너뛰어 바로 전송한다.
+ */
+function retryCurrent(message = '') {
+  pins.current = ''
+  phase.value = 'current'
+  errorMessage.value = message
+}
+
+/**
  * 세 값을 함께 보낸다.
  *
  * 백엔드도 새 PIN 과 확인값의 일치를 검사하지만(NEW_PAYMENT_PIN_CONFIRM_MISMATCH),
@@ -82,11 +99,9 @@ async function submit() {
     // 이 화면의 입력창은 키패드 하나뿐이라, 검증 실패를 토스트로 띄우면
     // 사용자가 어느 단계를 다시 눌러야 하는지 알 수 없다.
     //
-    // 현재 PIN 이 마지막 단계라, 이 분기는 방금 친 그 화면에 그대로 머문다.
-    // 새 PIN 은 지우지 않는다 — 잘못 친 것은 현재 PIN 뿐인데 셋 다 다시 받으면
-    // 사용자가 멀쩡한 값을 두 번 더 쳐야 한다.
+    // 현재 PIN 만 다시 받는다. 새 PIN 을 지우지 않으므로 6자리만 다시 치면 재전송된다.
     if (error.code === 'INVALID_CURRENT_PAYMENT_PIN') {
-      resetTo('current', error.message)
+      retryCurrent(error.message)
       return
     }
 
@@ -100,7 +115,7 @@ async function submit() {
     // 여기 401 은 전부 세션 만료다. 변경 API 에는 비즈니스 401 이 없다.
     // 인터셉터가 이미 토큰을 비웠으므로 PIN 을 다시 받아도 소용이 없다.
     if (error.status === 401) {
-      resetTo('new')
+      resetTo('current')
       showToast('로그인이 만료됐어요. 다시 로그인해 주세요.')
       router.replace({ name: 'login' })
       return
@@ -108,30 +123,41 @@ async function submit() {
 
     // 500·네트워크는 입력이 잘못된 게 아니다. 마지막 단계만 다시 받아 재시도하게 둔다.
     if (!error.code || error.status >= 500) {
-      resetTo('current')
+      resetTo('confirm')
       showToast('일시적인 오류가 발생했어요')
       return
     }
 
     // 무엇이 문제인지 모르는 4xx 다. 안전하게 처음부터 다시 받는다.
-    resetTo('new', error.message)
+    resetTo('current', error.message)
   }
 }
 
 async function completePhase() {
   if (enteredPin.value.length !== PIN_LENGTH) return
 
+  if (phase.value === 'current') {
+    // 현재 PIN 만 다시 받은 경우다(`retryCurrent`). 새 PIN 이 이미 멀쩡히 채워져
+    // 있으면 다시 묻지 않고 바로 보낸다.
+    //
+    // TODO: 부작용 없는 현재 PIN 검증 API 가 생기면 여기서 부른다.
+    //       그래야 새 PIN 을 치기 전에 틀린 것을 알려줄 수 있다.
+    if (pins.new.length === PIN_LENGTH && pins.new === pins.confirm) {
+      await submit()
+      return
+    }
+
+    resetTo('new')
+    return
+  }
+
   if (phase.value === 'new') {
     resetTo('confirm')
     return
   }
 
-  if (phase.value === 'confirm') {
-    if (pins.new !== pins.confirm) {
-      resetTo('confirm', '비밀번호가 일치하지 않습니다. 다시 입력해 주세요.')
-      return
-    }
-    resetTo('current')
+  if (pins.new !== pins.confirm) {
+    resetTo('confirm', '비밀번호가 일치하지 않습니다. 다시 입력해 주세요.')
     return
   }
 
