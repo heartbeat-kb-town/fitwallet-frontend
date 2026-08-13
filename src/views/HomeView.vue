@@ -13,6 +13,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Info, Menu, X } from 'lucide-vue-next'
 import iconSearch from '@/assets/icons/search.svg'
+import iconPigPeek from '@/assets/icons/pig-peek.svg'
+import iconSpeechBubble from '@/assets/icons/speech-bubble.svg'
 import iconHomeActive from '@/assets/icons/click-home.svg'
 import iconHome from '@/assets/icons/home.svg'
 import iconPayment from '@/assets/icons/payment.svg'
@@ -23,6 +25,7 @@ import iconReport from '@/assets/icons/report.svg'
 import iconReportActive from '@/assets/icons/report-selected.svg'
 import iconLocation from '@/assets/icons/location.svg'
 import { categories, benefitIcons } from '@/data'
+import { CATEGORY_PHOTOS } from '@/constants/categoryPhotos'
 import * as cardApi from '@/api/cardApi'
 import * as userApi from '@/api/userApi'
 import BaseSpinner from '@/components/common/BaseSpinner.vue'
@@ -77,9 +80,21 @@ const places = computed(() =>
       category: place.categoryName,
       categoryId: category?.id,
       icon: category?.icon,
+      // 그 가게의 사진이 아니라 카테고리 대표 사진이다. `constants/categoryPhotos` 주석 참고.
+      photo: CATEGORY_PHOTOS[place.categoryName],
     }
   }),
 )
+
+/**
+ * 로드에 실패한 사진 주소. 카테고리 사진은 외부(Unsplash)에서 받아오므로 오프라인이거나
+ * 주소가 죽으면 깨진 이미지가 남는다. 실패한 것만 기억해 두고 카테고리 아이콘으로 되돌린다.
+ */
+const brokenPhotos = ref(new Set())
+
+function markPhotoBroken(url) {
+  brokenPhotos.value = new Set(brokenPhotos.value).add(url)
+}
 
 onMounted(() => {
   cardStore.ensureCardsWithImages()
@@ -455,14 +470,39 @@ function selectTab(index, label) {
 
 <template>
   <header class="header">
-    <div class="profile">
-      <img src="/pickpig-face.png" alt="" class="pig-face" />
-      <div>
-        <p>안녕하세요</p>
-        <strong>김지연님</strong>
+    <!--
+      디자인상 이 자리에 인사말("안녕하세요 김지연님") 대신 픽피와 말풍선이 들어간다.
+
+      픽피는 헤더 아래 검색창에 걸쳐야 한다. 헤더는 80px 고정 밴드이고 검색창은 그 아래
+      스크롤 영역의 첫 요소라, 픽피를 헤더 바닥에 붙인 뒤(`self-end`) 8px 흘러나오게 한다
+      (`translate-y-2`). `translate` 는 레이아웃을 밀지 않아서 헤더 높이가 그대로 유지된다.
+      헤더가 `z-index: 2` 라 흘러나온 부분이 검색창 위에 그려진다.
+
+      8px 은 에셋 여백까지 계산한 값이다. `pig-peek.svg` 는 55×60 캔버스 안에서 그림이
+      y 15~57.3 에만 있어 **아래로 2.7px 이 비어 있다.** 캔버스를 8px 내리면 실제 그림은
+      검색창을 5px 파고든다 — 디자인의 겹침과 같다.
+    -->
+    <div class="flex translate-y-2 items-end self-end">
+      <img :src="iconPigPeek" alt="" width="55" height="60" class="-ml-2 shrink-0" />
+      <!--
+        말풍선은 디자이너가 준 도형(120×26)이고 글자가 들어 있지 않다. 이미지를 깔고 그 위에
+        실제 텍스트를 얹는다 — 글자를 이미지로 구우면 읽히지도, 확대에도 견디지 못한다.
+
+        몸통은 y 0~25 구간이고 꼬리가 26까지 내려오므로 글자는 25px 안에서 가운데 정렬한다.
+        몸통이 x=4 부터라 `pl-1` 로 그만큼 밀어 준다.
+      -->
+      <div class="relative mb-4 h-[26px] w-[120px] shrink-0">
+        <img :src="iconSpeechBubble" alt="" width="120" height="26" class="absolute inset-0" />
+        <span
+          class="absolute inset-x-0 top-0 flex h-[25px] items-center justify-center pl-1 text-[10px] font-bold"
+        >
+          <!-- 디자인의 강조색은 #E8AC04 다. 토큰 primary-dark(#E6A800) 와 육안 구분이 안 된다. -->
+          <span class="text-primary-dark">최대 혜택</span><span class="text-ink">으로 빠르게</span>
+        </span>
       </div>
     </div>
-    <button class="icon-button" aria-label="마이페이지 열기" @click="openMyPage()">
+
+    <button class="icon-button mb-1 self-end" aria-label="마이페이지 열기" @click="openMyPage()">
       <Menu :size="23" />
     </button>
   </header>
@@ -471,9 +511,16 @@ function selectTab(index, label) {
     <div class="search-wrap">
       <button class="search-bar" @click="openSearch()">
         <img :src="iconSearch" alt="" width="19" height="19" />
-        <span>어떤 혜택을 찾으시나요?</span>
+        <span>매장명을 검색하고 최적의 카드로 혜택을 받으세요</span>
       </button>
     </div>
+
+    <!--
+      디자인에 있는 섹션 제목. `.home-section h2` 를 쓰지 않는 이유는 그 규칙이 `.home-section`
+      안에서만 먹고, 카테고리 그리드는 그 래퍼 밖에 있어서다. Preflight 를 빼둔 프로젝트라
+      브라우저 기본 h2 여백·크기가 그대로 남으므로 `m-0` 과 크기를 직접 지정한다.
+    -->
+    <h2 class="m-0 mb-3 pl-5 text-base font-bold text-ink">매장 카테고리</h2>
 
     <div class="category-grid">
       <button
@@ -484,7 +531,7 @@ function selectTab(index, label) {
         @click="chooseCategory(category)"
       >
         <span class="category-icon">
-          <img :src="category.icon" :alt="category.name" width="26" height="26" />
+          <img :src="category.icon" :alt="category.name" width="22" height="22" />
         </span>
         <span>{{ category.name }}</span>
       </button>
@@ -507,15 +554,29 @@ function selectTab(index, label) {
           "
         >
           <!--
-            백엔드가 가게 사진을 주지 않아 카테고리 아이콘을 그린다.
-            목 사진을 그대로 두면 `HD현대오일뱅크직영 효진주유소` 에 블루보틀 사진이 붙는다.
+            백엔드가 가게 사진을 주지 않아 **카테고리 대표 사진**을 그린다.
+            그 가게의 사진이 아니다 — 카페면 커피 사진, 주유소면 주유소 사진이다.
+
+            예전 목 사진은 가게마다 고정이라 `HD현대오일뱅크직영 효진주유소` 에 블루보틀
+            사진이 붙었다. 카테고리로 고르면 적어도 종류는 맞는다.
+
+            사진이 없는 카테고리이거나 로드에 실패하면 카테고리 아이콘으로 되돌린다.
 
             `.place-image` 를 쓰지 않고 Tailwind 로 새로 짠다. style.css 4700줄은 레이어 밖에
             있어서 `.place-image img { object-fit: cover }` 가 유틸리티를 이긴다 —
             클래스를 그대로 두면 아이콘이 칸에 맞춰 늘어난다.
           -->
           <div class="flex h-[130px] items-center justify-center bg-icon-bg">
-            <img v-if="place.icon" :src="place.icon" alt="" class="size-12 object-contain" />
+            <img
+              v-if="place.photo && !brokenPhotos.has(place.photo)"
+              :src="place.photo"
+              alt=""
+              loading="lazy"
+              draggable="false"
+              class="size-full object-cover"
+              @error="markPhotoBroken(place.photo)"
+            />
+            <img v-else-if="place.icon" :src="place.icon" alt="" class="size-12 object-contain" />
           </div>
           <div class="place-info">
             <strong>{{ place.name }}</strong>
