@@ -14,17 +14,9 @@ const PIN_LENGTH = 6
 
 // 입력 순서다. 되돌릴 때 "여기부터 뒤" 를 지우는 기준으로도 쓴다.
 //
-// 현재 PIN 을 먼저 받는다. 다만 **그 자리에서 맞는지 확인해 줄 수는 없다.**
-// `PATCH /user/payment-pin` 은 세 값을 한 번에 받아 그때 현재 PIN 을 대조하므로,
-// 서버에 물어볼 수 있는 시점이 마지막 입력 직후뿐이다.
-//
-// 1단계에서 바로 검증하려면 부작용 없는 검증 엔드포인트가 필요하다.
-// `POST /payment/pin/verify` 로는 안 된다 — userCardId 가 필수고, 틀리면 결제 PIN
-// 잠금 횟수를 깎으며, 맞으면 요청하지도 않은 결제 인증 세션(pinAuthId)을 발급한다.
-// 그 API 가 생기면 `completePhase` 의 'current' 분기에서 부른다.
-//
-// 그때까지의 완화책은 아래 `retryCurrent` 다. 현재 PIN 만 틀렸을 때 새 PIN 을
-// 살려둬서, 사용자가 6자리만 다시 치면 바로 재전송되게 한다.
+// 1단계를 넘어갈 때 현재 PIN 이 맞는지 **그 자리에서** 서버에 확인한다
+// (`userApi.verifyCurrentPaymentPin`). 그래야 틀린 것을 새 PIN 을 치기 전에 알려준다.
+// 그 함수가 왜 변경 API 를 빌려 쓰는지는 userApi.js 주석에 적어 뒀다.
 const PHASES = ['current', 'new', 'confirm']
 
 const TITLES = {
@@ -43,7 +35,13 @@ const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '←', '0', '완료']
 // 전환 순간에도 평가되므로 빈 문자열로 떨어뜨린다.
 const enteredPin = computed(() => pins[phase.value] ?? '')
 
-const { isLoading: isSubmitting, execute: submitPinChange } = useAsyncState(userApi.patchPaymentPin)
+const { isLoading: isVerifying, execute: runVerifyCurrentPin } = useAsyncState(
+  userApi.verifyCurrentPaymentPin,
+)
+const { isLoading: isChanging, execute: submitPinChange } = useAsyncState(userApi.patchPaymentPin)
+
+// 검증이든 변경이든 서버를 기다리는 동안은 키패드를 잠근다.
+const isSubmitting = computed(() => isVerifying.value || isChanging.value)
 
 onMounted(() => {
   requestAnimationFrame(() => {
@@ -81,6 +79,52 @@ function retryCurrent(message = '') {
 }
 
 /**
+ * 검증·변경 두 호출이 공유하는 뒷정리.
+ *
+ * 화면이 알아볼 수 있는 코드(현재 PIN 불일치 등)는 부르는 쪽이 먼저 처리하고,
+ * 여기로는 남은 것만 온다. `retryPhase` 는 일시적 오류일 때 되돌아갈 단계다.
+ */
+function handleUnexpected(error, retryPhase) {
+  // 여기 401 은 전부 세션 만료다. 변경 API 에는 비즈니스 401 이 없다.
+  // 인터셉터가 이미 토큰을 비웠으므로 PIN 을 다시 받아도 소용이 없다.
+  if (error.status === 401) {
+    resetTo('current')
+    showToast('로그인이 만료됐어요. 다시 로그인해 주세요.')
+    router.replace({ name: 'login' })
+    return
+  }
+
+  // 500·네트워크는 입력이 잘못된 게 아니다. 방금 그 단계만 다시 받아 재시도하게 둔다.
+  if (!error.code || error.status >= 500) {
+    resetTo(retryPhase)
+    showToast('일시적인 오류가 발생했어요')
+    return
+  }
+
+  // 무엇이 문제인지 모르는 4xx 다. 안전하게 처음부터 다시 받는다.
+  resetTo('current', error.message)
+}
+
+/**
+ * 1단계에서 현재 PIN 이 맞는지 확인하고 넘어간다.
+ *
+ * 틀리면 **이 화면에 머문 채** 백엔드 message 를 그대로 보여준다.
+ * 새 PIN 을 치기 전에 알려주는 것이 이 단계의 존재 이유다.
+ */
+async function verifyCurrent() {
+  try {
+    await runVerifyCurrentPin({ currentPin: pins.current })
+    resetTo('new')
+  } catch (error) {
+    if (error.code === 'INVALID_CURRENT_PAYMENT_PIN') {
+      retryCurrent(error.message)
+      return
+    }
+    handleUnexpected(error, 'current')
+  }
+}
+
+/**
  * 세 값을 함께 보낸다.
  *
  * 백엔드도 새 PIN 과 확인값의 일치를 검사하지만(NEW_PAYMENT_PIN_CONFIRM_MISMATCH),
@@ -112,24 +156,7 @@ async function submit() {
       return
     }
 
-    // 여기 401 은 전부 세션 만료다. 변경 API 에는 비즈니스 401 이 없다.
-    // 인터셉터가 이미 토큰을 비웠으므로 PIN 을 다시 받아도 소용이 없다.
-    if (error.status === 401) {
-      resetTo('current')
-      showToast('로그인이 만료됐어요. 다시 로그인해 주세요.')
-      router.replace({ name: 'login' })
-      return
-    }
-
-    // 500·네트워크는 입력이 잘못된 게 아니다. 마지막 단계만 다시 받아 재시도하게 둔다.
-    if (!error.code || error.status >= 500) {
-      resetTo('confirm')
-      showToast('일시적인 오류가 발생했어요')
-      return
-    }
-
-    // 무엇이 문제인지 모르는 4xx 다. 안전하게 처음부터 다시 받는다.
-    resetTo('current', error.message)
+    handleUnexpected(error, 'confirm')
   }
 }
 
@@ -138,16 +165,13 @@ async function completePhase() {
 
   if (phase.value === 'current') {
     // 현재 PIN 만 다시 받은 경우다(`retryCurrent`). 새 PIN 이 이미 멀쩡히 채워져
-    // 있으면 다시 묻지 않고 바로 보낸다.
-    //
-    // TODO: 부작용 없는 현재 PIN 검증 API 가 생기면 여기서 부른다.
-    //       그래야 새 PIN 을 치기 전에 틀린 것을 알려줄 수 있다.
+    // 있으면 검증을 따로 하지 않고 바로 보낸다 — 전송이 같은 대조를 한다.
     if (pins.new.length === PIN_LENGTH && pins.new === pins.confirm) {
       await submit()
       return
     }
 
-    resetTo('new')
+    await verifyCurrent()
     return
   }
 
