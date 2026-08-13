@@ -3,11 +3,8 @@ import client from './client'
 /**
  * 리포트 도메인 API.
  *
- * 백엔드 `BenefitReportController` · `CardBenefitController` 기준이다.
- *
- * **아직 없는 것은 놓친 혜택 상세 하나다.** 응답 DTO(`MissedCategoryDetailResponse`)만
- * 추가돼 있고(backend#149) 컨트롤러·서비스·매퍼가 없다. 여기에 함수를 미리 만들어 두지 않는다.
- * 요약이 주는 것은 총액(`totalMissedBenefit`) 하나뿐이다.
+ * 백엔드 `BenefitReportController` · `CardBenefitController` · `MissedBenefitController` 기준이다.
+ * 셋 다 실제 엔드포인트가 있다. 이 파일에 목데이터는 없다.
  */
 
 /**
@@ -51,3 +48,39 @@ export const getBenefitSummary = (yearMonth) =>
  */
 export const getReceivedCardBenefit = (userCardId, yearMonth) =>
   client.get(`/report/benefit/received/cards/${userCardId}`, { params: { yearMonth } })
+
+/**
+ * 손실 유형별 놓친 혜택 상세 (backend #201).
+ *
+ * @param yearMonth `YYYY-MM`. 위 둘과 같은 이유로 두 자리로 맞춰 보낸다.
+ * @param lossType `APP_UNUSED` | `CARD_MISMATCH`. 백엔드 `LossType` enum 의 이름 그대로다.
+ *   소문자나 다른 문자열을 보내면 enum 변환에 실패해 400 이다.
+ *
+ *   - `APP_UNUSED` — 앱으로 결제하지 않아(`is_used_app = 0`) 놓친 건
+ *   - `CARD_MISMATCH` — 앱은 썼지만(`is_used_app = 1`) 더 나은 카드를 고르지 않아 놓친 건
+ *
+ *   둘 다 **"더 좋은 카드가 있었던 건"(`better_user_card_id IS NOT NULL`)만** 대상이다.
+ *
+ * @returns `{ totalMissedBenefit, appUnusedAmount, cardMismatchAmount, lossType, categories }`
+ *
+ *   ⚠️ **`categories` 만 `lossType` 을 탄다.** 상단 세 금액은 탭과 무관하게 늘 같은 값이다
+ *   (`totalMissedBenefit` = 두 손실의 합). 탭을 바꿔도 히어로 숫자가 안 바뀌는 게 정상이다.
+ *
+ *   - `categories` 는 `[{ categoryId, categoryName, missedCount, missedAmount, transactions }]`.
+ *     **정렬을 화면에서 하지 않는다** — 매퍼가 `ORDER BY c.category_id, pt.paid_at DESC` 로 주고
+ *     서비스가 그 순서대로 묶는다. 해당 손실이 없는 달은 빈 배열이다.
+ *   - `transactions[]` 는 `{ approvedAt, storeName, usedCardName, paidAmount,
+ *     alternativeCardName, discountRate, diffAmount }`.
+ *     `usedCardName` 은 실제 결제한 카드, `alternativeCardName` 은 더 유리했던 카드다.
+ *     `diffAmount` 가 그 건에서 놓친 금액(`missed_amount`)이다.
+ *
+ *   ⚠️ **`storeName` 은 자주 null 이다.** 매퍼가 `brand.brand_name` 을 LEFT JOIN 으로 읽는데
+ *   시드 가맹점 244곳 중 195곳에 `brand_id` 가 없다. `store.store_name` 은 NOT NULL 로 존재하지만
+ *   매퍼가 그걸 읽지 않는다. 화면에서 대체 문구를 준비해야 한다.
+ *   (`CardBenefitMapper` 도 같은 방식이라 받은 혜택 상세도 같은 상태다.)
+ *
+ *   ⚠️ **`discountRate` 도 null 일 수 있다.** `alternative_discount_amount / amount * 100` 의
+ *   반올림이라 분자가 없거나 결제금액이 0 이면 null 이 된다. 0% 로 눌러 적지 않는다.
+ */
+export const getMissedBenefitDetail = (yearMonth, lossType) =>
+  client.get('/report/benefit/missed', { params: { yearMonth, lossType } })

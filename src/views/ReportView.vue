@@ -62,7 +62,8 @@ function navigate(target) {
 }
 
 const page = ref(initialCardId ? 'received' : 'main')
-const missedTab = ref('app')
+// 백엔드 LossType enum 이름을 그대로 쓴다 (LOSS_TYPES 주석 참고).
+const missedTab = ref('APP_UNUSED')
 const expanded = ref(new Set())
 const selectedCard = ref(0)
 const missedCount = ref(0)
@@ -315,223 +316,70 @@ async function loadCardDetail() {
 // 목록이 도착해 카드가 처음 정해지는 순간에도 여기서 돈다.
 watch([currentUserCardId, yearMonth], loadCardDetail, { immediate: true })
 
-/* ─── 놓친 혜택 상세 (목데이터) ─────────────────────────────────────────── */
+/* ─── 놓친 혜택 상세 (API) ──────────────────────────────────────────────── */
 
-// TODO(mock): 백엔드 미구현. 요약 API 는 놓친 혜택을 `totalMissedBenefit` **총액 하나**로만 준다.
-// "앱 미사용 / 카드 선택 손실" 분해와 거래 목록의 출처가 없다.
-// 총액만 실연동하면 이 화면 안에서 총액 ≠ 항목 합이 되므로 아래 hero 숫자까지 통째로 목데이터다.
-const missedData = {
-  app: {
+/**
+ * 손실 유형 탭. 값이 그대로 백엔드 `LossType` enum 이름이다.
+ *
+ * 예전에는 `'app'` / `'card'` 였는데 요청 파라미터로 옮기는 자리에서 한 번 더 번역해야 했다.
+ * 어휘를 하나로 두면 그 매핑 표가 필요 없다. 백엔드는 이 문자열 그대로만 받는다 —
+ * 소문자로 보내면 enum 변환에 실패해 400 이다.
+ */
+const LOSS_TYPES = {
+  APP_UNUSED: {
+    label: '앱 미사용 손실',
     info: '앱을 사용하지 않아 놓친 혜택이에요. 앱을 통해 결제했다면 받을 수 있었던 혜택이에요. 다음부터는 앱에서 최적 카드를 확인한 후 결제해 보세요.',
-    categories: [
-      {
-        id: 'food',
-        name: '외식',
-        icon: iconFood,
-        count: 2,
-        amount: 6790,
-        items: [
-          {
-            date: '07.15',
-            merchant: '배달의민족',
-            usedCard: '카카오뱅크',
-            benefitCard: 'KB Gold & More',
-            benefit: '7% 할인',
-            payment: 32000,
-            amount: 2240,
-          },
-          {
-            date: '07.11',
-            merchant: '스시조 강남점',
-            usedCard: '카카오뱅크',
-            benefitCard: 'KB Gold & More',
-            benefit: '7% 할인',
-            payment: 65000,
-            amount: 4550,
-          },
-        ],
-      },
-      {
-        id: 'fuel',
-        name: '교통/주유',
-        icon: iconRefuel,
-        count: 1,
-        amount: 3900,
-        items: [
-          {
-            date: '07.18',
-            merchant: 'GS칼텍스',
-            usedCard: '신한카드',
-            benefitCard: '현대 오일뱅크카드',
-            benefit: '7.5% 할인',
-            payment: 52000,
-            amount: 3900,
-          },
-        ],
-      },
-      {
-        id: 'cafe',
-        name: '카페',
-        icon: iconCafe,
-        count: 3,
-        amount: 1665,
-        items: [
-          {
-            date: '07.13',
-            merchant: '스타벅스',
-            usedCard: '카카오뱅크',
-            benefitCard: '카페 라이프 카드',
-            benefit: '10% 할인',
-            payment: 6500,
-            amount: 650,
-          },
-          {
-            date: '07.09',
-            merchant: '블루보틀 강남',
-            usedCard: '카카오뱅크',
-            benefitCard: '카페 라이프 카드',
-            benefit: '10% 할인',
-            payment: 8500,
-            amount: 850,
-          },
-          {
-            date: '07.03',
-            merchant: '폴바셋',
-            usedCard: '카카오뱅크',
-            benefitCard: '카페 라이프 카드',
-            benefit: '10% 할인',
-            payment: 1650,
-            amount: 165,
-          },
-        ],
-      },
-      {
-        id: 'shopping',
-        name: '쇼핑',
-        icon: iconShopping,
-        count: 1,
-        amount: 1957,
-        items: [
-          {
-            date: '07.07',
-            merchant: '올리브영',
-            usedCard: 'KB국민카드',
-            benefitCard: '삼성 쇼핑카드',
-            benefit: '5% 할인',
-            payment: 39000,
-            amount: 1957,
-          },
-        ],
-      },
-    ],
   },
-  card: {
+  CARD_MISMATCH: {
+    label: '카드 선택 손실',
     info: '다른 카드를 선택해서 놓친 혜택이에요. 앱을 이용했지만 더 나은 혜택 카드를 선택하지 않아 놓쳤어요. 결제 전 추천 카드를 꼭 확인해 보세요.',
-    categories: [
-      {
-        id: 'food',
-        name: '외식',
-        icon: iconFood,
-        count: 2,
-        amount: 6790,
-        items: [
-          {
-            date: '07.15',
-            merchant: '배달의민족',
-            usedCard: '카카오뱅크',
-            benefitCard: 'KB Gold & More',
-            benefit: '7% 할인',
-            payment: 32000,
-            amount: 2240,
-          },
-          {
-            date: '07.11',
-            merchant: '스시조 강남점',
-            usedCard: '카카오뱅크',
-            benefitCard: 'KB Gold & More',
-            benefit: '7% 할인',
-            payment: 65000,
-            amount: 4550,
-          },
-        ],
-      },
-      {
-        id: 'shopping',
-        name: '쇼핑',
-        icon: iconShopping,
-        count: 1,
-        amount: 4740,
-        items: [
-          {
-            date: '07.20',
-            merchant: '무신사',
-            usedCard: '노스뱅크',
-            benefitCard: '현대카드 ZERO',
-            benefit: '6% 할인',
-            payment: 79000,
-            amount: 4740,
-          },
-        ],
-      },
-      {
-        id: 'fuel',
-        name: '교통/주유',
-        icon: iconRefuel,
-        count: 2,
-        amount: 4320,
-        items: [
-          {
-            date: '07.14',
-            merchant: 'SK주유소',
-            usedCard: '신한카드',
-            benefitCard: '현대 오일뱅크카드',
-            benefit: '7.5% 할인',
-            payment: 48000,
-            amount: 3600,
-          },
-          {
-            date: '07.06',
-            merchant: '서울버스 정기권',
-            usedCard: '카카오페이',
-            benefitCard: '신한 Deep Dream',
-            benefit: '7.5% 할인',
-            payment: 9600,
-            amount: 720,
-          },
-        ],
-      },
-      {
-        id: 'cafe',
-        name: '카페',
-        icon: iconCafe,
-        count: 2,
-        amount: 4469,
-        items: [
-          {
-            date: '07.17',
-            merchant: '이디야커피',
-            usedCard: '체크카드',
-            benefitCard: '카페 라이프 카드',
-            benefit: '10% 할인',
-            payment: 5500,
-            amount: 550,
-          },
-          {
-            date: '07.02',
-            merchant: '투썸플레이스',
-            usedCard: '체크카드',
-            benefitCard: '카페 라이프 카드',
-            benefit: '10% 할인',
-            payment: 39190,
-            amount: 3919,
-          },
-        ],
-      },
-    ],
   },
 }
 
-const currentMissed = computed(() => missedData[missedTab.value])
+const missedDetail = computed(() => reportStore.missedDetail)
+
+/** 안내 문구는 서버가 주지 않는다. 손실 유형을 설명하는 고정 카피라 화면이 들고 있다. */
+const missedInfo = computed(() => LOSS_TYPES[missedTab.value]?.info ?? '')
+
+async function loadMissedDetail() {
+  try {
+    await reportStore.fetchMissedDetail(yearMonth.value, missedTab.value)
+  } catch (error) {
+    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
+  }
+}
+
+// 탭을 바꾸거나 달을 옮기면 다시 받는다.
+//
+// 놓친 혜택 화면에 들어와 있을 때만 부른다. 리포트 메인에서는 쓰지 않는 데이터라
+// 달을 넘길 때마다 미리 받아두면 안 보는 화면 때문에 요청이 나간다.
+watch([missedTab, yearMonth, page], () => {
+  if (page.value === 'missed') loadMissedDetail()
+})
+
+/**
+ * 가맹점 이름.
+ *
+ * **자주 비어 있다.** 백엔드 매퍼가 `brand.brand_name` 을 LEFT JOIN 으로 읽는데
+ * 시드 가맹점 244곳 중 195곳에 `brand_id` 가 없다. `store.store_name` 은 NOT NULL 로
+ * 있는데도 매퍼가 읽지 않는다 (`CardBenefitMapper` 도 같다).
+ *
+ * 빈 줄로 두면 결제 내역 한 줄이 통째로 비어 보이므로 모른다고 적는다.
+ * 카테고리명 같은 걸 대신 넣지 않는다 — 가게 이름인 척하게 된다.
+ */
+function storeLabel(storeName) {
+  return storeName || '가맹점 정보 없음'
+}
+
+/**
+ * "더 나았을 카드" 줄에 붙는 혜택 설명.
+ *
+ * `discountRate` 는 `alternative_discount_amount / amount` 의 반올림이라 null 이 될 수 있다.
+ * 0% 로 눌러 적으면 대안 카드가 아무 이득이 없었던 것처럼 보이므로 그때는 비율을 뺀다.
+ */
+function missedRateLabel(item) {
+  return item.discountRate == null ? '더 유리' : `${item.discountRate}% 할인`
+}
 
 // 도넛 가운데 숫자. 조각의 합(slicesTotal)이 아니라 진짜 총액이다.
 const totalBenefit = computed(() => summary.value.totalReceivedBenefit)
@@ -567,8 +415,10 @@ function notify(message) {
 }
 
 function selectMissedTab(tab) {
+  if (missedTab.value === tab) return
   missedTab.value = tab
-  expanded.value = new Set(['food'])
+  // 펼쳐둔 카테고리는 반대쪽 탭의 것이다. 카테고리 구성이 탭마다 달라 접어둔다.
+  expanded.value = new Set()
 }
 
 /**
@@ -948,67 +798,92 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-else class="report-scroll report-detail-scroll">
+      <!-- 히어로 세 숫자는 탭과 무관하게 늘 같다. 백엔드가 두 손실을 항상 함께 준다. -->
       <section class="missed-hero">
         <p>이번 달 총 놓친 혜택</p>
-        <h2>₩36,451</h2>
+        <h2>{{ currency(missedDetail.totalMissedBenefit) }}</h2>
         <div>
-          <span><small>▣ 앱 미사용</small><strong>₩16,132</strong></span>
-          <span><small>▰ 카드 선택 손실</small><strong>₩20,319</strong></span>
+          <span
+            ><small>▣ 앱 미사용</small
+            ><strong>{{ currency(missedDetail.appUnusedAmount) }}</strong></span
+          >
+          <span
+            ><small>▰ 카드 선택 손실</small
+            ><strong>{{ currency(missedDetail.cardMismatchAmount) }}</strong></span
+          >
         </div>
       </section>
 
       <div class="missed-tabs">
         <button
+          v-for="(lossType, key) in LOSS_TYPES"
+          :key="key"
           type="button"
-          :class="{ active: missedTab === 'app' }"
-          @click="selectMissedTab('app')"
+          :class="{ active: missedTab === key }"
+          @click="selectMissedTab(key)"
         >
-          앱 미사용 손실
-        </button>
-        <button
-          type="button"
-          :class="{ active: missedTab === 'card' }"
-          @click="selectMissedTab('card')"
-        >
-          카드 선택 손실
+          {{ lossType.label }}
         </button>
       </div>
 
-      <p class="missed-info">ⓘ {{ currentMissed.info }}</p>
+      <p class="missed-info">ⓘ {{ missedInfo }}</p>
 
       <section class="report-category-section missed-section">
         <h2>카테고리별 상세</h2>
-        <article
-          v-for="category in currentMissed.categories"
-          :key="category.id"
-          class="report-category-card"
-        >
-          <button class="report-category-head" type="button" @click="toggle(category.id)">
-            <span class="report-category-icon">
-              <img v-if="category.icon" :src="category.icon" alt="" />
-            </span>
-            <span class="report-category-name"
-              ><strong>{{ category.name }}</strong
-              ><small>{{ category.count }}건 미적용</small></span
-            >
-            <b class="missed">₩{{ category.amount.toLocaleString('ko-KR') }}</b>
-            <ChevronUp v-if="expanded.has(category.id)" :size="17" />
-            <ChevronDown v-else :size="17" />
-          </button>
-          <Transition name="report-expand">
-            <div v-if="expanded.has(category.id)" class="report-transactions missed-transactions">
-              <div v-for="item in category.items" :key="`${item.date}-${item.merchant}`">
-                <span>{{ item.date }}</span>
-                <p>
-                  <strong>{{ item.merchant }}</strong>
-                  <small>{{ item.usedCard }} · 결제 {{ won(item.payment) }}</small>
-                  <small><b>혜택 카드</b> {{ item.benefitCard }} · {{ item.benefit }}</small>
-                </p>
-                <em>₩{{ item.amount.toLocaleString('ko-KR') }}</em>
+
+        <BaseSpinner v-if="reportStore.isMissedDetailLoading" />
+
+        <!-- 그 달에 그 손실이 없으면 빈 배열이 온다. 실제로 흔하다 -->
+        <p v-else-if="!missedDetail.categories.length" class="missed-info">
+          이 달에는 {{ LOSS_TYPES[missedTab]?.label }}이 없어요.
+        </p>
+
+        <template v-else>
+          <article
+            v-for="category in missedDetail.categories"
+            :key="category.categoryId"
+            class="report-category-card"
+          >
+            <button class="report-category-head" type="button" @click="toggle(category.categoryId)">
+              <span class="report-category-icon">
+                <img
+                  v-if="categoryIcon(category.categoryName)"
+                  :src="categoryIcon(category.categoryName)"
+                  alt=""
+                />
+              </span>
+              <span class="report-category-name"
+                ><strong>{{ category.categoryName }}</strong
+                ><small>{{ category.missedCount }}건 미적용</small></span
+              >
+              <b class="missed">{{ currency(category.missedAmount) }}</b>
+              <ChevronUp v-if="expanded.has(category.categoryId)" :size="17" />
+              <ChevronDown v-else :size="17" />
+            </button>
+            <Transition name="report-expand">
+              <div
+                v-if="expanded.has(category.categoryId)"
+                class="report-transactions missed-transactions"
+              >
+                <div
+                  v-for="(item, index) in category.transactions"
+                  :key="`${item.approvedAt}-${index}`"
+                >
+                  <span>{{ transactionDate(item.approvedAt) }}</span>
+                  <p>
+                    <strong>{{ storeLabel(item.storeName) }}</strong>
+                    <small>{{ item.usedCardName }} · 결제 {{ won(item.paidAmount) }}</small>
+                    <small
+                      ><b>혜택 카드</b> {{ item.alternativeCardName }} ·
+                      {{ missedRateLabel(item) }}</small
+                    >
+                  </p>
+                  <em>{{ currency(item.diffAmount) }}</em>
+                </div>
               </div>
-            </div>
-          </Transition>
-        </article>
+            </Transition>
+          </article>
+        </template>
       </section>
     </div>
 
