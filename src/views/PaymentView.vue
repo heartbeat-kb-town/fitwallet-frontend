@@ -199,8 +199,22 @@ const countdownText = computed(() => {
   return `${minutes}:${seconds}`
 })
 
+/**
+ * 카드 더미에서 이 카드가 앉을 자리. 0 이 맨 앞이고 숫자가 커질수록 뒤다.
+ *
+ * **`style.css` 에 `.slot-0` ~ `.slot-3` 만 있다.** 그보다 큰 자리는 규칙이 없어
+ * `.payment-card` 의 `left: 50%` 만 남고 `translateX(-50%)` 가 빠진다 —
+ * 카드가 가운데로 안 오고 오른쪽으로 삐져나온다.
+ *
+ * 보유 카드가 5장이면 직전 카드가 바로 그 자리(4)에 앉아서, 카드를 넘길 때마다
+ * 오른쪽에 살짝 걸쳐 보였다. `slot-3` 이 숨김 자리(`opacity: 0`)이므로
+ * 그보다 뒤는 전부 거기로 몰아 맨 뒤에 숨긴다.
+ */
+const LAST_SLOT = 3
+
 function cardSlot(index) {
-  return (index - activeIndex.value + cards.value.length) % cards.value.length
+  const slot = (index - activeIndex.value + cards.value.length) % cards.value.length
+  return Math.min(slot, LAST_SLOT)
 }
 
 function advanceCard() {
