@@ -135,7 +135,8 @@ async function submit() {
         <span>휴대폰 번호</span>
         <div class="input-wrap" :class="{ error: fieldErrors.phone }">
           <AppIcon name="phone" />
-          <input v-model="phone" type="tel" placeholder="010-0000-0000" />
+          <!-- 값은 하이픈 없이 받는다. 백엔드에 형식 검증이 없어 하이픈을 치면 그대로 저장된다. -->
+          <input v-model="phone" type="tel" placeholder="010-0000-0000(- 없이 입력)" />
         </div>
         <small v-if="fieldErrors.phone" class="validation error-text">{{
           fieldErrors.phone
