@@ -25,6 +25,7 @@ import iconReport from '@/assets/icons/report.svg'
 import iconReportActive from '@/assets/icons/report-selected.svg'
 import iconLocation from '@/assets/icons/location.svg'
 import { categories, benefitIcons } from '@/data'
+import { CATEGORY_PHOTOS } from '@/constants/categoryPhotos'
 import * as cardApi from '@/api/cardApi'
 import * as userApi from '@/api/userApi'
 import BaseSpinner from '@/components/common/BaseSpinner.vue'
@@ -79,9 +80,21 @@ const places = computed(() =>
       category: place.categoryName,
       categoryId: category?.id,
       icon: category?.icon,
+      // 그 가게의 사진이 아니라 카테고리 대표 사진이다. `constants/categoryPhotos` 주석 참고.
+      photo: CATEGORY_PHOTOS[place.categoryName],
     }
   }),
 )
+
+/**
+ * 로드에 실패한 사진 주소. 카테고리 사진은 외부(Unsplash)에서 받아오므로 오프라인이거나
+ * 주소가 죽으면 깨진 이미지가 남는다. 실패한 것만 기억해 두고 카테고리 아이콘으로 되돌린다.
+ */
+const brokenPhotos = ref(new Set())
+
+function markPhotoBroken(url) {
+  brokenPhotos.value = new Set(brokenPhotos.value).add(url)
+}
 
 onMounted(() => {
   cardStore.ensureCardsWithImages()
@@ -541,15 +554,29 @@ function selectTab(index, label) {
           "
         >
           <!--
-            백엔드가 가게 사진을 주지 않아 카테고리 아이콘을 그린다.
-            목 사진을 그대로 두면 `HD현대오일뱅크직영 효진주유소` 에 블루보틀 사진이 붙는다.
+            백엔드가 가게 사진을 주지 않아 **카테고리 대표 사진**을 그린다.
+            그 가게의 사진이 아니다 — 카페면 커피 사진, 주유소면 주유소 사진이다.
+
+            예전 목 사진은 가게마다 고정이라 `HD현대오일뱅크직영 효진주유소` 에 블루보틀
+            사진이 붙었다. 카테고리로 고르면 적어도 종류는 맞는다.
+
+            사진이 없는 카테고리이거나 로드에 실패하면 카테고리 아이콘으로 되돌린다.
 
             `.place-image` 를 쓰지 않고 Tailwind 로 새로 짠다. style.css 4700줄은 레이어 밖에
             있어서 `.place-image img { object-fit: cover }` 가 유틸리티를 이긴다 —
             클래스를 그대로 두면 아이콘이 칸에 맞춰 늘어난다.
           -->
           <div class="flex h-[130px] items-center justify-center bg-icon-bg">
-            <img v-if="place.icon" :src="place.icon" alt="" class="size-12 object-contain" />
+            <img
+              v-if="place.photo && !brokenPhotos.has(place.photo)"
+              :src="place.photo"
+              alt=""
+              loading="lazy"
+              draggable="false"
+              class="size-full object-cover"
+              @error="markPhotoBroken(place.photo)"
+            />
+            <img v-else-if="place.icon" :src="place.icon" alt="" class="size-12 object-contain" />
           </div>
           <div class="place-info">
             <strong>{{ place.name }}</strong>
