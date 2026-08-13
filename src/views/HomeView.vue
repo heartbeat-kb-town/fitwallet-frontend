@@ -14,6 +14,7 @@ import { useRouter } from 'vue-router'
 import { Info, Menu, X } from 'lucide-vue-next'
 import iconSearch from '@/assets/icons/search.svg'
 import iconPigPeek from '@/assets/icons/pig-peek.svg'
+import iconSpeechBubble from '@/assets/icons/speech-bubble.svg'
 import iconHomeActive from '@/assets/icons/click-home.svg'
 import iconHome from '@/assets/icons/home.svg'
 import iconPayment from '@/assets/icons/payment.svg'
@@ -479,14 +480,24 @@ function selectTab(index, label) {
 
         style.css 는 동결이라 새 마크업은 Tailwind 로 짠다 (CLAUDE.md "스타일").
       -->
-      <div class="relative z-10 flex items-end gap-1.5">
+      <div class="relative z-10 flex items-end">
         <img :src="iconPigPeek" alt="" width="55" height="60" class="-mb-2 shrink-0" />
-        <!-- 말풍선 꼬리는 왼쪽 아래 모서리를 각지게 만들어 픽피 쪽을 가리키게 한다. -->
-        <p
-          class="mb-3 rounded-2xl rounded-bl-none bg-primary px-3 py-1.5 text-xs font-bold text-ink"
-        >
-          최대 혜택으로 빠르게
-        </p>
+        <!--
+          말풍선은 디자이너가 준 도형(120×26)이고 글자는 들어 있지 않다. 이미지를 깔고
+          그 위에 실제 텍스트를 얹는다 — 글자를 이미지로 굽지 않아야 읽히고 확대에도 견딘다.
+
+          꼬리가 도형 왼쪽 아래에 달려 있어서, 말풍선을 픽피 오른쪽 위에 두면 꼬리가
+          픽피를 가리킨다. 몸통은 y 0~25 구간이라(꼬리가 26까지 내려온다) 글자는 25px 안에서
+          가운데 정렬한다. 몸통이 x=4 부터라 `pl-1` 로 그만큼 밀어 준다.
+        -->
+        <div class="relative mb-6 -ml-1 h-[26px] w-[120px] shrink-0">
+          <img :src="iconSpeechBubble" alt="" width="120" height="26" class="absolute inset-0" />
+          <span
+            class="absolute inset-x-0 top-0 flex h-[25px] items-center justify-center pl-1 text-[10px] font-bold text-ink"
+          >
+            최대 혜택으로 빠르게
+          </span>
+        </div>
       </div>
 
       <button class="search-bar" @click="openSearch()">
