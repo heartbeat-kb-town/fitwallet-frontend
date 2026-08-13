@@ -95,6 +95,54 @@ function toCardDetail(response) {
 const loadCardDetail = async (userCardId, yearMonth) =>
   toCardDetail(await reportApi.getReceivedCardBenefit(userCardId, yearMonth))
 
+/** 놓친 혜택이 없는 달의 바닥값. `categories` 는 `v-for` 가 도는 자리라 배열을 비워 둔다. */
+const EMPTY_MISSED = {
+  totalMissedBenefit: 0,
+  appUnusedAmount: 0,
+  cardMismatchAmount: 0,
+  lossType: '',
+  categories: [],
+}
+
+/**
+ * 손실 유형별 놓친 혜택 상세를 화면이 쓸 모양으로 다듬는다 (backend #201).
+ *
+ * **정렬하지 않는다.** 카테고리는 매퍼의 `ORDER BY c.category_id`, 거래는 `pt.paid_at DESC`
+ * 순서 그대로다. 여기서 다시 정렬하면 기준이 두 곳에 생긴다.
+ *
+ * `storeName` 과 `discountRate` 는 **null 을 지운다.** 둘 다 실제로 null 이 자주 오고,
+ * 각각 "가맹점을 모른다" 와 "할인율을 모른다" 를 뜻한다. 빈 문자열이나 0 으로 눌러 두면
+ * 화면이 "이름 없는 가게" 나 "0% 할인" 으로 그려 사실과 달라진다.
+ */
+function toMissedDetail(response) {
+  if (!response) return EMPTY_MISSED
+
+  return {
+    totalMissedBenefit: Number(response.totalMissedBenefit) || 0,
+    appUnusedAmount: Number(response.appUnusedAmount) || 0,
+    cardMismatchAmount: Number(response.cardMismatchAmount) || 0,
+    lossType: response.lossType ?? '',
+    categories: (response.categories ?? []).map((category) => ({
+      categoryId: category.categoryId,
+      categoryName: category.categoryName,
+      missedCount: Number(category.missedCount) || 0,
+      missedAmount: Number(category.missedAmount) || 0,
+      transactions: (category.transactions ?? []).map((item) => ({
+        approvedAt: item.approvedAt,
+        storeName: item.storeName ?? null,
+        usedCardName: item.usedCardName ?? '',
+        alternativeCardName: item.alternativeCardName ?? '',
+        paidAmount: Number(item.paidAmount) || 0,
+        discountRate: item.discountRate == null ? null : Number(item.discountRate),
+        diffAmount: Number(item.diffAmount) || 0,
+      })),
+    })),
+  }
+}
+
+const loadMissedDetail = async (yearMonth, lossType) =>
+  toMissedDetail(await reportApi.getMissedBenefitDetail(yearMonth, lossType))
+
 /**
  * 월간 혜택 리포트.
  *
@@ -118,6 +166,14 @@ export const useReportStore = defineStore('report', () => {
     execute: fetchCardDetail,
   } = useAsyncState(loadCardDetail, EMPTY_CARD_DETAIL)
 
+  // 놓친 혜택 상세. 손실 유형 탭을 바꿀 때마다 다시 받으므로 이것도 상태를 따로 둔다.
+  const {
+    data: missedDetail,
+    isLoading: isMissedDetailLoading,
+    error: missedDetailError,
+    execute: fetchMissedDetail,
+  } = useAsyncState(loadMissedDetail, EMPTY_MISSED)
+
   return {
     summary,
     isLoading,
@@ -127,5 +183,9 @@ export const useReportStore = defineStore('report', () => {
     isCardDetailLoading,
     cardDetailError,
     fetchCardDetail,
+    missedDetail,
+    isMissedDetailLoading,
+    missedDetailError,
+    fetchMissedDetail,
   }
 })

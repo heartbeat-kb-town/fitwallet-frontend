@@ -78,14 +78,18 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
   카드 추천이 `/report/benefit/summary` 하나로 그려진다. 월을 바꾸면 다시 조회한다.
   **정렬을 화면에서 하지 않는다** — 카테고리는 매퍼가 혜택 내림차순 상위 5개로,
   카드 추천은 서비스가 예상 혜택 내림차순 상위 2건으로 잘라서 준다.
-- **목데이터가 남은 곳은 둘이다.**
-  - `src/data.js` — 홈 화면이 직접 import한다
-    (`categories`는 가맹점 화면도 아이콘 때문에 쓴다).
-    카드 목록·혜택 현황·이벤트가 여기 있고, 홈에 뜨는 카드는 **실제 보유 카드가 아니다.**
-  - `ReportView.vue` 안 — **받은 혜택 상세(카드별)** 와 **놓친 혜택 상세**다.
-    둘 다 백엔드가 없다. 카드별 상세는 응답 DTO(`CardBenefitDetailResponse`)만 있고
-    컨트롤러·서비스·매퍼가 없으며(backend#116), 놓친 혜택은 요약 API가 총액 하나만 준다.
-    **총액만 실연동하지 않는다** — 그 화면 안에서 `총액 ≠ 항목 합`이 되어 더 나빠진다.
+- **목데이터가 남은 곳은 `src/data.js` 하나다.** 홈 화면이 직접 import한다
+  (`categories`는 가맹점 화면도 아이콘 때문에 쓴다).
+  카드 목록·혜택 현황·이벤트가 여기 있고, 홈에 뜨는 카드는 **실제 보유 카드가 아니다.**
+- 리포트는 세 화면이 **전부 API**다. 메인(#95), 받은 혜택 상세(카드별, #152),
+  놓친 혜택 상세(손실 유형별)까지 목데이터가 없다.
+  놓친 혜택 상세는 `GET /report/benefit/missed?yearMonth&lossType`이고
+  `lossType`은 `APP_UNUSED`(앱 미사용) / `CARD_MISMATCH`(카드 선택 손실)다.
+  **상단 총액 세 개는 탭과 무관하게 늘 같고, `categories`만 `lossType`을 탄다.**
+  - ⚠️ **거래의 `storeName`이 자주 null이다.** 백엔드 매퍼가 `brand.brand_name`을
+    LEFT JOIN으로 읽는데 시드 가맹점 244곳 중 195곳에 `brand_id`가 없다.
+    `store.store_name`은 NOT NULL로 있는데도 읽지 않는다.
+    **`CardBenefitMapper`도 같은 방식이라 받은 혜택 상세도 같은 상태다.** 화면이 대체 문구를 쓴다.
 
 **따라서**
 
