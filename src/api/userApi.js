@@ -80,3 +80,51 @@ export const postSignup = ({ loginId, password, passwordConfirm, name, phone, ma
  */
 export const postPaymentPin = ({ pin, pinConfirm }) =>
   client.post('/user/payment-pin', { pin, pinConfirm })
+
+/**
+ * 결제 PIN 변경.
+ *
+ * 등록(`postPaymentPin`)과 달리 **현재 PIN 을 함께 보내야 한다.**
+ * 백엔드가 저장된 해시와 대조해서 본인 확인을 대신한다 (`PinUpdateRequest`).
+ * 세 값 모두 숫자 6자리 문자열이고, 성공 응답의 알맹이는 비어 있다.
+ *
+ *   - 400 INVALID_INPUT_VALUE             : 6자리 숫자가 아니다
+ *   - 400 INVALID_CURRENT_PAYMENT_PIN     : 현재 PIN 이 틀렸다
+ *   - 400 NEW_PAYMENT_PIN_CONFIRM_MISMATCH: 새 PIN 과 확인값이 다르다
+ *
+ * **남은 시도 횟수는 오지 않는다.** 결제 PIN 검증(`PIN_MISMATCH`)은 실패 횟수를 세지만
+ * 변경은 세지 않는다 (백엔드 #205 에서 응답에서 제거했다). 몇 번 남았는지 표시하지 않는다.
+ *
+ * PIN 을 등록한 적이 없는 사용자도 별도 코드가 없다. 저장된 해시가 없으면 대조가 실패해
+ * INVALID_CURRENT_PAYMENT_PIN 으로 떨어진다.
+ */
+export const patchPaymentPin = ({ currentPin, newPin, newPinConfirm }) =>
+  client.patch('/user/payment-pin', { currentPin, newPin, newPinConfirm })
+
+/**
+ * 현재 결제 PIN 이 맞는지만 확인한다.
+ *
+ * ⚠️ **전용 엔드포인트가 아니다.** 백엔드에 검증 API 가 없어서, 변경 API 에
+ * `newPin = currentPin` 을 실어 "지금 PIN 을 지금 PIN 으로 바꾼다" 로 대신한다.
+ *
+ *   틀리면 → 400 INVALID_CURRENT_PAYMENT_PIN. 백엔드가 대조 실패 시 UPDATE 전에
+ *            예외를 던지므로 **DB 는 그대로다**
+ *   맞으면 → 200. 같은 PIN 이 새 해시로 다시 저장된다 (bcrypt 솔트만 바뀐다).
+ *            사용자가 입력할 값은 달라지지 않는다
+ *
+ * 2026-08-13 로컬 백엔드(develop b6ab8cc)로 세 경우 다 확인했다.
+ *
+ * 이걸 쓰는 이유는 **현재 PIN 을 입력하는 그 자리에서 불일치를 알려주기 위해서**다.
+ * 변경 API 는 세 값을 한 번에 받아 그때 대조하므로, 그대로 두면 새 PIN 을 두 번 다
+ * 친 뒤에야 "아까 그거 틀렸다" 가 뜬다.
+ *
+ * `POST /payment/pin/verify` 로는 대신할 수 없다 — userCardId 가 필수고,
+ * 틀리면 결제 PIN 잠금 횟수를 깎으며(5회면 결제가 잠긴다), 맞으면 요청하지도 않은
+ * 결제 인증 세션(pinAuthId)을 발급해 진행 중인 결제 인증을 덮어쓴다.
+ *
+ * TODO: 부작용 없는 검증 엔드포인트가 생기면 이 함수의 **속만** 갈아끼운다.
+ *       호출부가 안 바뀌도록 시그니처를 그쪽에 맞춰 뒀다.
+ *       `POST /user/payment-pin/verify { currentPin }` 을 요청해 둘 것.
+ */
+export const verifyCurrentPaymentPin = ({ currentPin }) =>
+  patchPaymentPin({ currentPin, newPin: currentPin, newPinConfirm: currentPin })
