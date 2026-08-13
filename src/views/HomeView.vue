@@ -457,54 +457,57 @@ function selectTab(index, label) {
 
 <template>
   <header class="header">
-    <div class="profile">
-      <img src="/pickpig-face.png" alt="" class="pig-face" />
-      <div>
-        <p>안녕하세요</p>
-        <strong>김지연님</strong>
+    <!--
+      디자인상 이 자리에 인사말("안녕하세요 김지연님") 대신 픽피와 말풍선이 들어간다.
+
+      픽피는 헤더 아래 검색창에 걸쳐야 한다. 헤더는 80px 고정 밴드이고 검색창은 그 아래
+      스크롤 영역의 첫 요소라, 픽피를 헤더 바닥에 붙인 뒤(`self-end`) 8px 흘러나오게 한다
+      (`translate-y-2`). `translate` 는 레이아웃을 밀지 않아서 헤더 높이가 그대로 유지된다.
+      헤더가 `z-index: 2` 라 흘러나온 부분이 검색창 위에 그려진다.
+
+      8px 은 에셋 여백까지 계산한 값이다. `pig-peek.svg` 는 55×60 캔버스 안에서 그림이
+      y 15~57.3 에만 있어 **아래로 2.7px 이 비어 있다.** 캔버스를 8px 내리면 실제 그림은
+      검색창을 5px 파고든다 — 디자인의 겹침과 같다.
+    -->
+    <div class="flex translate-y-2 items-end self-end">
+      <img :src="iconPigPeek" alt="" width="55" height="60" class="-ml-2 shrink-0" />
+      <!--
+        말풍선은 디자이너가 준 도형(120×26)이고 글자가 들어 있지 않다. 이미지를 깔고 그 위에
+        실제 텍스트를 얹는다 — 글자를 이미지로 구우면 읽히지도, 확대에도 견디지 못한다.
+
+        몸통은 y 0~25 구간이고 꼬리가 26까지 내려오므로 글자는 25px 안에서 가운데 정렬한다.
+        몸통이 x=4 부터라 `pl-1` 로 그만큼 밀어 준다.
+      -->
+      <div class="relative mb-4 h-[26px] w-[120px] shrink-0">
+        <img :src="iconSpeechBubble" alt="" width="120" height="26" class="absolute inset-0" />
+        <span
+          class="absolute inset-x-0 top-0 flex h-[25px] items-center justify-center pl-1 text-[10px] font-bold"
+        >
+          <!-- 디자인의 강조색은 #E8AC04 다. 토큰 primary-dark(#E6A800) 와 육안 구분이 안 된다. -->
+          <span class="text-primary-dark">최대 혜택</span><span class="text-ink">으로 빠르게</span>
+        </span>
       </div>
     </div>
-    <button class="icon-button" aria-label="마이페이지 열기" @click="openMyPage()">
+
+    <button class="icon-button mb-1 self-end" aria-label="마이페이지 열기" @click="openMyPage()">
       <Menu :size="23" />
     </button>
   </header>
 
   <div class="scroll-content">
     <div class="search-wrap">
-      <!--
-        픽피가 검색창에 걸쳐 있는 모양 (#156).
-
-        `pig-peek.svg` 는 얼굴 + 앞발 두 개짜리 포즈라, 앞발이 검색창 테두리를 붙잡은 것처럼
-        아래로 겹쳐야 의도대로 보인다. 겹치는 만큼 `-mb-2` 로 다음 형제를 끌어올리고,
-        `relative z-10` 으로 검색창 위에 얹는다 (검색창은 배경색이 있어 그냥 두면 픽피를 덮는다).
-
-        style.css 는 동결이라 새 마크업은 Tailwind 로 짠다 (CLAUDE.md "스타일").
-      -->
-      <div class="relative z-10 flex items-end">
-        <img :src="iconPigPeek" alt="" width="55" height="60" class="-mb-2 shrink-0" />
-        <!--
-          말풍선은 디자이너가 준 도형(120×26)이고 글자는 들어 있지 않다. 이미지를 깔고
-          그 위에 실제 텍스트를 얹는다 — 글자를 이미지로 굽지 않아야 읽히고 확대에도 견딘다.
-
-          꼬리가 도형 왼쪽 아래에 달려 있어서, 말풍선을 픽피 오른쪽 위에 두면 꼬리가
-          픽피를 가리킨다. 몸통은 y 0~25 구간이라(꼬리가 26까지 내려온다) 글자는 25px 안에서
-          가운데 정렬한다. 몸통이 x=4 부터라 `pl-1` 로 그만큼 밀어 준다.
-        -->
-        <div class="relative mb-6 -ml-1 h-[26px] w-[120px] shrink-0">
-          <img :src="iconSpeechBubble" alt="" width="120" height="26" class="absolute inset-0" />
-          <span
-            class="absolute inset-x-0 top-0 flex h-[25px] items-center justify-center pl-1 text-[10px] font-bold text-ink"
-          >
-            최대 혜택으로 빠르게
-          </span>
-        </div>
-      </div>
-
       <button class="search-bar" @click="openSearch()">
         <img :src="iconSearch" alt="" width="19" height="19" />
         <span>매장명을 검색하고 최적의 카드로 혜택을 받으세요</span>
       </button>
     </div>
+
+    <!--
+      디자인에 있는 섹션 제목. `.home-section h2` 를 쓰지 않는 이유는 그 규칙이 `.home-section`
+      안에서만 먹고, 카테고리 그리드는 그 래퍼 밖에 있어서다. Preflight 를 빼둔 프로젝트라
+      브라우저 기본 h2 여백·크기가 그대로 남으므로 `m-0` 과 크기를 직접 지정한다.
+    -->
+    <h2 class="m-0 mb-3 pl-5 text-base font-bold text-ink">매장 카테고리</h2>
 
     <div class="category-grid">
       <button
@@ -515,7 +518,7 @@ function selectTab(index, label) {
         @click="chooseCategory(category)"
       >
         <span class="category-icon">
-          <img :src="category.icon" :alt="category.name" width="21" height="21" />
+          <img :src="category.icon" :alt="category.name" width="22" height="22" />
         </span>
         <span>{{ category.name }}</span>
       </button>
