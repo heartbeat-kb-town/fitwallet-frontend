@@ -261,16 +261,25 @@ const PICK_VIEW = {
   [CARD_BENEFIT_STATUS.NO_BENEFIT]: { className: 'none', label: '혜택 없음' },
 }
 
+/** 원 단위 표기. 기대혜택액은 `BigDecimal` 이라 소수가 섞여 올 수 있다. */
+function won(value) {
+  return `${Math.round(Number(value)).toLocaleString('ko-KR')}원`
+}
+
 /**
  * 피그의 PICK 목록.
  *
  * **다시 정렬하지 않는다.** 백엔드가 AVAILABLE → CONDITION_NOT_MET → NO_BENEFIT
- * 순으로 이미 정렬해 준다. 화면이 또 정렬하면 그 기준이 두 곳에 생긴다.
+ * 순으로 이미 정렬해 준다. 금액을 보냈으면 그 안에서 기대혜택액 내림차순으로 한 번 더
+ * 정렬해서 준다. 화면이 또 정렬하면 그 기준이 두 곳에 생긴다.
  */
 const cardPicks = computed(() =>
   (expectedBenefits.value?.cards ?? []).map((card) => {
     const view = PICK_VIEW[card.status] ?? PICK_VIEW[CARD_BENEFIT_STATUS.NO_BENEFIT]
     const isAvailable = card.status === CARD_BENEFIT_STATUS.AVAILABLE
+
+    // 결제 예정 금액을 보냈을 때만 채워진다. 안 보냈으면 null 이다.
+    const expectedAmount = card.benefit?.expectedAmount
 
     return {
       // 결제로 넘길 때 이 id 를 그대로 쓴다. 추천 목록의 자리와 보유 카드의 자리는 다르다.
@@ -283,8 +292,27 @@ const cardPicks = computed(() =>
       benefit: card.benefit?.benefitName,
       // 안내 문구는 서버가 사유마다 다르게 만들어 준다. 화면이 지어내지 않는다.
       reason: card.reason?.message,
-      // 받을 수 있을 때만 금액을 보여준다. 한도가 소진된 혜택은 benefit 이 와도 0원이다.
-      expected: isAvailable ? (card.benefit?.displayText ?? '0원') : '0원',
+      /**
+       * 이득 순위. **`AVAILABLE` 일 때만 숫자고 나머지는 null 이다.**
+       * 금액을 안 보냈으면 `AVAILABLE` 이어도 null 이다 — 무엇이 더 이득인지 잴 수 없어서다.
+       * 동점은 같은 순위를 주고 다음을 건너뛴다 (`1, 1, 3`).
+       */
+      rank: card.rank ?? null,
+      /**
+       * 받을 수 있을 때만 보여준다. 한도가 소진된 혜택은 `benefit` 이 와도 0원이다.
+       *
+       * **금액을 보냈으면 기대혜택액(원)을, 아니면 혜택 설명("20% 할인")을 쓴다.**
+       * 가맹점만 고르고 금액을 건너뛴 경로가 있어서 둘 다 대비해야 한다.
+       *
+       * ⚠️ **`expectedAmount` 를 화면에서 계산하지 않는다.** 건당 캡과 결제금액 상한이
+       * 이미 반영된 값이라 `결제금액 × 할인율` 과 다르다 — 30,000원에 "20% 할인" 인데
+       * 4,000원이 온다(6,000원이 아니다). 직접 곱하면 사용자에게 못 받을 금액을 약속하게 된다.
+       */
+      expected: isAvailable
+        ? expectedAmount != null
+          ? won(expectedAmount)
+          : (card.benefit?.displayText ?? '0원')
+        : '0원',
     }
   }),
 )
@@ -531,6 +559,17 @@ async function confirmPin() {
             />
             <span class="pick-status" :class="pick.status" :style="PICK_STATUS_STYLE">
               {{ pick.statusLabel }}
+            </span>
+            <!--
+              이득 순위. 금액을 보냈고 받을 수 있는 카드에만 붙는다.
+              상태 배지를 오른쪽으로 옮겨(PICK_STATUS_STYLE) 비워둔 왼쪽 위 자리를 쓴다.
+              `style.css` 는 동결이라 새 클래스 대신 Tailwind 유틸리티로 짠다.
+            -->
+            <span
+              v-if="pick.rank"
+              class="absolute top-0 left-0 rounded-br-[11px] bg-primary px-3.5 py-2 text-[12px] font-extrabold text-ink"
+            >
+              {{ pick.rank }}위
             </span>
             <!-- 카드 이미지가 있으면 카드 앞면에 이름이 이미 찍혀 있다. 글자를 겹쳐 쓰지 않는다. -->
             <span v-if="!pick.cardImageUrl" class="pick-card-copy">
