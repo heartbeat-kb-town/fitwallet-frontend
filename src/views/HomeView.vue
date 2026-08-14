@@ -28,6 +28,7 @@ import { categories } from '@/data'
 import { CATEGORY_PHOTOS } from '@/constants/categoryPhotos'
 import { BRAND_LOGOS } from '@/constants/brandLogos'
 import { benefitCategoryIcon } from '@/constants/benefitCategoryIcons'
+import { benefitUnitValue } from '@/utils/benefitUnit'
 import * as cardApi from '@/api/cardApi'
 import * as userApi from '@/api/userApi'
 import BaseSpinner from '@/components/common/BaseSpinner.vue'
@@ -264,16 +265,6 @@ const {
 } = useAsyncState(cardApi.getCardMonthlyBenefit)
 
 /**
- * 한도 금액을 표시 단위로 적는다. 포인트 혜택은 `원` 이 아니라 `P` 다.
- *
- * 단위는 `limitUnit` 이 알려준다 (`KRW` · `POINT`). 화면이 카드 종류로 추측하지 않는다.
- */
-function limitAmount(value, unit) {
-  const amount = (Number(value) || 0).toLocaleString('ko-KR')
-  return unit === 'POINT' ? `${amount}P` : `${amount}원`
-}
-
-/**
  * 카테고리·브랜드 혜택 행을 화면이 쓰는 한 가지 모양으로 맞춘다.
  *
  * **표시 문자열은 되도록 백엔드가 만들어 준 것을 쓴다.** `valueLabel` ·
@@ -295,8 +286,8 @@ function toBenefitRow(item, key) {
     imageUrl: item.categoryImageUrl ?? item.brandImageUrl ?? null,
     value: item.valueLabel,
     perTransactionLimit: item.perTransactionLimitLabel,
-    remainingLabel: limit ? limitAmount(limit.remainingValue, limit.limitUnit) : null,
-    totalLimitLabel: limit ? limitAmount(limit.limitValue, limit.limitUnit) : null,
+    remainingLabel: limit ? benefitUnitValue(limit.remainingValue, limit.limitUnit) : null,
+    totalLimitLabel: limit ? benefitUnitValue(limit.limitValue, limit.limitUnit) : null,
     received: item.receivedBenefitLabel,
     transactionCount: item.transactionCount,
     totalPaymentAmount: Number(item.totalPaymentAmount) || 0,

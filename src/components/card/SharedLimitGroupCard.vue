@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { LayoutGrid } from 'lucide-vue-next'
 import { BRAND_LOGOS } from '@/constants/brandLogos'
 import { benefitCategoryIcon } from '@/constants/benefitCategoryIcons'
+import { benefitUnitValue } from '@/utils/benefitUnit'
 
 /**
  * 통합 한도(공동 월 한도) 그룹 카드.
@@ -51,13 +52,6 @@ const title = computed(() =>
   (props.group.categories ?? []).map((category) => category.categoryName).join(' · '),
 )
 
-function unitValue(value, unit) {
-  const amount = (Number(value) || 0).toLocaleString('ko-KR')
-  if (unit === 'POINT') return `${amount}P`
-  if (unit === 'COUNT') return `${amount}회`
-  return `${amount}원`
-}
-
 /**
  * 가맹점(대상)마다 색 하나.
  *
@@ -100,7 +94,7 @@ function serviceLimitLabel(service) {
   const limit = service.serviceMonthlyLimits?.[0]
   if (!limit) return null
   if (limit.limitUnit === 'COUNT') {
-    return `월 ${unitValue(limit.limitValue, 'COUNT')} 중 ${unitValue(limit.usedValue, 'COUNT')} 소진`
+    return `월 ${benefitUnitValue(limit.limitValue, 'COUNT')} 중 ${benefitUnitValue(limit.usedValue, 'COUNT')} 소진`
   }
   return limit.limitLabel
 }
@@ -126,7 +120,7 @@ const segments = computed(() => {
     return {
       key: `${usage.benefitServiceId}-${usage.targetId ?? 'etc'}`,
       name: usage.unattributed ? '기타' : usage.targetName,
-      usedLabel: usage.usedLabel ?? unitValue(used, unit),
+      usedLabel: usage.usedLabel ?? benefitUnitValue(used, unit),
       color:
         colorByTarget.value.get(`${usage.benefitServiceId}-${usage.targetId}`) ??
         SERIES_COLORS[index % SERIES_COLORS.length],
@@ -231,9 +225,9 @@ function won(value) {
             class="text-[18px] font-extrabold not-italic"
             :class="isExhausted ? 'text-muted' : 'text-primary-dark'"
           >
-            잔여 {{ unitValue(sharedLimit.remainingValue, sharedLimit.limitUnit) }}
+            잔여 {{ benefitUnitValue(sharedLimit.remainingValue, sharedLimit.limitUnit) }}
           </em>
-          / {{ unitValue(sharedLimit.limitValue, sharedLimit.limitUnit) }}
+          / {{ benefitUnitValue(sharedLimit.limitValue, sharedLimit.limitUnit) }}
         </span>
       </div>
 
