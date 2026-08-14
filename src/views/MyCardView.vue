@@ -36,7 +36,11 @@ const { showToast } = useToast()
 const CARD_PHOTO_RATIO = 322 / 203 //  .mycard-card-photo
 const COMPACT_PHOTO_RATIO = 80 / 50 //  .mycard-compact-card
 
-onMounted(() => cardStore.ensureCardsWithImages())
+onMounted(async () => {
+  await cardStore.ensureCardsWithImages()
+  // 목록이 있어야 카드별로 부를 수 있다. 실패해도 화면은 그대로 뜬다 (store 주석 참고).
+  cardStore.ensureLastUsedAt()
+})
 
 function goHome() {
   router.push({ name: 'home' })
@@ -164,6 +168,34 @@ const cards = computed(() => cardStore.cards)
 watch(cards, (list) => {
   if (activeIndex.value >= list.length) activeIndex.value = 0
 })
+
+/**
+ * 사용자가 직접 카드를 넘겼는지. 넘긴 뒤에는 화면이 자리를 다시 옮기지 않는다.
+ *
+ * 마지막 사용 시각은 카드마다 따로 받아오느라 **화면이 뜬 뒤에 늦게 도착한다.**
+ * 이 빗장이 없으면, 사용자가 그 사이에 옆으로 넘겼는데 응답이 도착하면서
+ * 보던 카드가 제멋대로 바뀐다.
+ */
+const hasPickedCard = ref(false)
+
+/**
+ * 첫 진입은 **가장 최근에 쓴 카드**로 연다 (#176).
+ *
+ * 예전에는 늘 목록 첫 카드였는데, 그 순서는 `displayOrder` 라 "요즘 쓰는 카드" 와 관계가 없다.
+ * 이 화면이 보여주는 것(이용 실적·최근 이용 내역)은 방금 쓴 카드일수록 궁금한 정보다.
+ *
+ * 이번 달 결제가 하나도 없으면 store 가 null 을 주고, 그때는 예전처럼 첫 카드로 둔다.
+ */
+watch(
+  () => cardStore.mostRecentlyUsedCardId,
+  (cardId) => {
+    if (!cardId || hasPickedCard.value) return
+
+    const index = cards.value.findIndex((card) => card.id === cardId)
+    if (index >= 0) activeIndex.value = index
+  },
+  { immediate: true },
+)
 
 /** 펼쳐 놓은 카드 한 장. 목록이 아직 안 왔으면 빈 카드로 그린다. */
 const activeCard = computed(() => ({
@@ -399,6 +431,8 @@ function won(value) {
 
 function selectCard(index) {
   if (index < 0 || index >= cards.value.length) return
+  // 사용자가 고른 자리는 늦게 도착한 응답이 덮지 않는다 (`hasPickedCard` 주석 참고).
+  hasPickedCard.value = true
   activeIndex.value = index
   selectedTier.value = 0
 }

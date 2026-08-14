@@ -66,6 +66,15 @@ export const useCardStore = defineStore('card', () => {
    */
   const imageUrls = ref({})
 
+  /**
+   * 카드별 마지막 결제 시각. `user_card_id` → ISO 문자열(`2026-07-24T16:44:31`) 또는 null.
+   *
+   * TODO(#176): 목록 응답(`CardListResponse`)에 마지막 사용 시각이 없어서 카드 수만큼 더 부른다.
+   *   `cardImageUrl` 때와 똑같은 모양이다(위 `imageUrls` 주석). 백엔드가 `lastUsedAt` 을
+   *   목록에 실어주면 이 ref 와 `ensureLastUsedAt` 은 통째로 사라진다.
+   */
+  const lastUsedAt = ref({})
+
   const cards = computed(() => {
     const list = (fetched.value ?? []).map((card) => ({
       ...card,
@@ -122,6 +131,58 @@ export const useCardStore = defineStore('card', () => {
     imageUrls.value = next
   }
 
+  /**
+   * 카드별 마지막 결제 시각을 채운다.
+   *
+   * 결제 내역을 **한 건만** 부른다(`size=1`). 백엔드가 최신순으로 주므로 그 한 건의
+   * `paidAt` 이 곧 마지막 사용 시각이다.
+   *
+   * ⚠️ **`yearMonth` 를 생략하면 백엔드가 현재 월만 본다.** 이번 달에 안 쓴 카드는
+   * 내역이 비어 `null` 로 남는다. 지난달까지 훑으려면 카드마다 최대 3번을 더 불러야 해서
+   * 그렇게까지 하지 않았다 — "최근 쓴 카드" 를 앞세우는 것이 목적이고, 이번 달에 안 쓴 카드는
+   * 애초에 그 대상이 아니다.
+   *
+   * `ensureCardImages` 와 같이 **실패해도 던지지 않는다.** 못 받은 카드는 순서만
+   * 예전(`displayOrder`)대로 남는다.
+   */
+  async function ensureLastUsedAt() {
+    const targets = (fetched.value ?? []).filter((card) => !(card.id in lastUsedAt.value))
+    if (!targets.length) return
+
+    const loaded = await Promise.all(
+      targets.map((card) =>
+        cardApi
+          .getCardTransactions(card.id, { size: 1 })
+          .then((detail) => [card.id, detail?.transactions?.content?.[0]?.paidAt ?? null])
+          .catch(() => null),
+      ),
+    )
+
+    // 한 번에 갈아끼운다. 카드마다 대입하면 computed 가 카드 수만큼 다시 돈다.
+    const next = { ...lastUsedAt.value }
+    for (const entry of loaded) {
+      if (entry) next[entry[0]] = entry[1]
+    }
+    lastUsedAt.value = next
+  }
+
+  /**
+   * 가장 최근에 결제한 카드. 아직 못 받았거나 이번 달 결제가 하나도 없으면 null 이다.
+   *
+   * `paidAt` 은 자리수가 고정된 ISO 문자열이라 문자열 비교로 시각 순서가 나온다.
+   * `new Date()` 로 바꾸면 시간대가 없는 값이라 브라우저 시간대에 끌려간다.
+   */
+  const mostRecentlyUsedCardId = computed(() => {
+    let latest = null
+
+    for (const card of cards.value) {
+      const paidAt = lastUsedAt.value[card.id]
+      if (!paidAt) continue
+      if (!latest || paidAt > latest.paidAt) latest = { id: card.id, paidAt }
+    }
+    return latest?.id ?? null
+  })
+
   /** 목록과 이미지를 한 번에. 화면은 보통 이것만 부르면 된다. */
   async function ensureCardsWithImages() {
     await ensureCards()
@@ -139,12 +200,15 @@ export const useCardStore = defineStore('card', () => {
   return {
     order,
     cards,
+    lastUsedAt,
+    mostRecentlyUsedCardId,
     isLoading,
     error,
     fetchCards,
     ensureCards,
     ensureCardImages,
     ensureCardsWithImages,
+    ensureLastUsedAt,
     reorder,
     setPrimary,
   }
