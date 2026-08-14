@@ -36,7 +36,11 @@ const { showToast } = useToast()
 const CARD_PHOTO_RATIO = 322 / 203 //  .mycard-card-photo
 const COMPACT_PHOTO_RATIO = 80 / 50 //  .mycard-compact-card
 
-onMounted(() => cardStore.ensureCardsWithImages())
+onMounted(async () => {
+  await cardStore.ensureCardsWithImages()
+  // 목록이 있어야 카드별로 부를 수 있다. 실패해도 화면은 그대로 뜬다 (store 주석 참고).
+  cardStore.ensureLastUsedAt()
+})
 
 function goHome() {
   router.push({ name: 'home' })
@@ -158,11 +162,57 @@ function applyTransactionPage(detail, { append }) {
   nextCursor.value = page?.nextCursor ?? null
 }
 
-const cards = computed(() => cardStore.cards)
+/**
+ * 이 화면의 카드 순서는 **최근에 쓴 순**이다 (#176).
+ *
+ * store 가 주는 순서는 `displayOrder`(또는 카드관리에서 바꾼 순서)라 "요즘 쓰는 카드" 와
+ * 관계가 없다. 이 화면이 보여주는 것(이용 실적·최근 이용 내역)은 방금 쓴 카드일수록
+ * 궁금한 정보라, 여기서만 다시 세운다.
+ *
+ * **`cardStore.cards` 자체는 건드리지 않는다.** 그 배열은 결제·가맹점 화면도 함께 보고,
+ * `paymentStore` 가 순서 변경을 watch 해서 미리 골라둔 카드를 무효로 만든다.
+ * 여기서 정렬을 store 에 밀어 넣으면 가맹점에서 고르고 넘어온 카드가 결제 화면에서 풀린다.
+ *
+ * 마지막 사용 시각을 모르는 카드(이번 달 결제가 없거나 조회 실패)는 뒤로 보낸다.
+ * `sort` 는 안정 정렬이라 그 카드들끼리는 원래 순서가 그대로 남는다.
+ */
+const cards = computed(() => {
+  const lastUsedAt = cardStore.lastUsedAt
 
-// 목록이 줄어들면(카드 해지 등) 펼쳐둔 자리가 목록 밖으로 나갈 수 있다.
-watch(cards, (list) => {
-  if (activeIndex.value >= list.length) activeIndex.value = 0
+  return [...cardStore.cards].sort((a, b) => {
+    // ISO 문자열이라 문자열 비교로 시각 순서가 나온다 (store 주석 참고).
+    const left = lastUsedAt[a.id] ?? ''
+    const right = lastUsedAt[b.id] ?? ''
+    if (left === right) return 0
+    return left < right ? 1 : -1
+  })
+})
+
+/**
+ * 사용자가 직접 카드를 넘겼는지. 넘긴 뒤에는 화면이 자리를 다시 옮기지 않는다.
+ *
+ * 마지막 사용 시각은 카드마다 따로 받아오느라 **화면이 뜬 뒤에 늦게 도착하고**,
+ * 도착하는 순간 위 정렬이 다시 돌아 목록이 통째로 재배치된다.
+ * 그때 자리(index)를 그대로 두면 보던 카드가 다른 카드로 바뀐다.
+ */
+const hasPickedCard = ref(false)
+
+/**
+ * 목록이 바뀔 때 보던 카드를 놓치지 않는다.
+ *
+ * - 사용자가 고르기 전이면 맨 앞(= 가장 최근에 쓴 카드)을 편다
+ * - 고른 뒤라면 **그 카드가 옮겨간 자리**를 찾아 따라간다
+ * - 카드가 사라졌으면(해지 등) 맨 앞으로 돌아간다
+ */
+watch(cards, (list, previous) => {
+  if (!hasPickedCard.value) {
+    activeIndex.value = 0
+    return
+  }
+
+  const pickedId = previous?.[activeIndex.value]?.id
+  const moved = pickedId ? list.findIndex((card) => card.id === pickedId) : -1
+  activeIndex.value = moved >= 0 ? moved : 0
 })
 
 /** 펼쳐 놓은 카드 한 장. 목록이 아직 안 왔으면 빈 카드로 그린다. */
@@ -399,6 +449,8 @@ function won(value) {
 
 function selectCard(index) {
   if (index < 0 || index >= cards.value.length) return
+  // 사용자가 고른 자리는 늦게 도착한 응답이 덮지 않는다 (`hasPickedCard` 주석 참고).
+  hasPickedCard.value = true
   activeIndex.value = index
   selectedTier.value = 0
 }
