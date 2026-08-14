@@ -24,11 +24,15 @@ import iconMycardActive from '@/assets/icons/mycard-selected.svg'
 import iconReport from '@/assets/icons/report.svg'
 import iconReportActive from '@/assets/icons/report-selected.svg'
 import iconLocation from '@/assets/icons/location.svg'
-import { categories, benefitIcons } from '@/data'
+import { categories } from '@/data'
 import { CATEGORY_PHOTOS } from '@/constants/categoryPhotos'
+import { BRAND_LOGOS } from '@/constants/brandLogos'
+import { benefitCategoryIcon } from '@/constants/benefitCategoryIcons'
+import { benefitUnitValue } from '@/utils/benefitUnit'
 import * as cardApi from '@/api/cardApi'
 import * as userApi from '@/api/userApi'
 import BaseSpinner from '@/components/common/BaseSpinner.vue'
+import SharedLimitGroupCard from '@/components/card/SharedLimitGroupCard.vue'
 import { useAsyncState } from '@/composables/useAsyncState'
 import { useCardImage } from '@/composables/useCardImage'
 import { useToast } from '@/composables/useToast'
@@ -261,16 +265,6 @@ const {
 } = useAsyncState(cardApi.getCardMonthlyBenefit)
 
 /**
- * 한도 금액을 표시 단위로 적는다. 포인트 혜택은 `원` 이 아니라 `P` 다.
- *
- * 단위는 `limitUnit` 이 알려준다 (`KRW` · `POINT`). 화면이 카드 종류로 추측하지 않는다.
- */
-function limitAmount(value, unit) {
-  const amount = (Number(value) || 0).toLocaleString('ko-KR')
-  return unit === 'POINT' ? `${amount}P` : `${amount}원`
-}
-
-/**
  * 카테고리·브랜드 혜택 행을 화면이 쓰는 한 가지 모양으로 맞춘다.
  *
  * **표시 문자열은 되도록 백엔드가 만들어 준 것을 쓴다.** `valueLabel` ·
@@ -292,8 +286,8 @@ function toBenefitRow(item, key) {
     imageUrl: item.categoryImageUrl ?? item.brandImageUrl ?? null,
     value: item.valueLabel,
     perTransactionLimit: item.perTransactionLimitLabel,
-    remainingLabel: limit ? limitAmount(limit.remainingValue, limit.limitUnit) : null,
-    totalLimitLabel: limit ? limitAmount(limit.limitValue, limit.limitUnit) : null,
+    remainingLabel: limit ? benefitUnitValue(limit.remainingValue, limit.limitUnit) : null,
+    totalLimitLabel: limit ? benefitUnitValue(limit.limitValue, limit.limitUnit) : null,
     received: item.receivedBenefitLabel,
     transactionCount: item.transactionCount,
     totalPaymentAmount: Number(item.totalPaymentAmount) || 0,
@@ -301,17 +295,61 @@ function toBenefitRow(item, key) {
   }
 }
 
-/** 백엔드가 소진분을 하단으로 정렬해서 준다. 화면이 다시 정렬하지 않는다. */
+/**
+ * 통합 한도(공동 월 한도) 그룹.
+ *
+ * 여러 혜택이 월 한도 하나를 나눠 쓰는 묶음이다. 카드가 그런 혜택을 갖고 있지 않으면 빈 배열이다.
+ * 정렬은 백엔드가 `limitGroupId` 오름차순으로 해서 준다.
+ */
+const sharedLimitGroups = computed(() => monthlyBenefit.value?.sharedLimitGroups ?? [])
+
+/**
+ * 그룹에 속하지 않은 혜택만 낱개 행으로 그린다.
+ *
+ * ⚠️ **`categoryBenefits` · `brandBenefits` 에는 그룹에 든 혜택도 그대로 들어 있다.**
+ * 거르지 않으면 같은 혜택이 그룹 카드와 낱개 행에 두 번 뜨고, 한도가 두 배로 읽힌다.
+ * 판별은 `limitGroupId` 가 한다 — 그룹에 속하면 그룹 ID, 아니면 null 이다.
+ *
+ * 소진분을 하단으로 보내는 정렬도 백엔드가 해서 준다. 화면이 다시 정렬하지 않는다.
+ */
 const categoryBenefits = computed(() =>
-  (monthlyBenefit.value?.categoryBenefits ?? []).map((item) =>
-    toBenefitRow(item, `category-${item.benefitServiceId}-${item.categoryId}`),
-  ),
+  (monthlyBenefit.value?.categoryBenefits ?? [])
+    .filter((item) => item.limitGroupId == null)
+    .map((item) => toBenefitRow(item, `category-${item.benefitServiceId}-${item.categoryId}`)),
 )
 
+/**
+ * 로드에 실패한 브랜드 로고. 주소가 죽으면 깨진 그림 대신 글자 한 자 아바타로 되돌린다.
+ * 로고는 외부(브랜드 사이트)에서 오므로 언제든 사라질 수 있다.
+ */
+const brokenLogos = ref(new Set())
+
+function markLogoBroken(key) {
+  brokenLogos.value = new Set(brokenLogos.value).add(key)
+}
+
+/**
+ * 브랜드 행의 그림은 로고다.
+ *
+ * `brandImageUrl` 이 있으면 그걸 쓰고, 없을 때만 `BRAND_LOGOS` 로 채운다
+ * (시드의 브랜드 59건이 전부 NULL 이라 지금은 후자만 나온다 — 그 파일 주석 참고).
+ */
 const brandBenefits = computed(() =>
-  (monthlyBenefit.value?.brandBenefits ?? []).map((item) =>
-    toBenefitRow(item, `brand-${item.benefitServiceId}-${item.brandId}`),
-  ),
+  (monthlyBenefit.value?.brandBenefits ?? [])
+    .filter((item) => item.limitGroupId == null)
+    .map((item) => {
+      const key = `brand-${item.benefitServiceId}-${item.brandId}`
+      const logo = item.brandImageUrl ?? BRAND_LOGOS[item.brandName] ?? null
+      return { ...toBenefitRow(item, key), imageUrl: brokenLogos.value.has(key) ? null : logo }
+    }),
+)
+
+/** 통합 한도 그룹도 낱개 혜택도 없는 카드. 시트 본문이 통째로 빈다. */
+const hasBenefitDetail = computed(
+  () =>
+    sharedLimitGroups.value.length > 0 ||
+    categoryBenefits.value.length > 0 ||
+    brandBenefits.value.length > 0,
 )
 
 /**
@@ -441,8 +479,15 @@ async function openEvents(card) {
   }
 }
 
+/**
+ * 혜택 행의 업종 아이콘.
+ *
+ * `data.js` 의 `benefitIcons` 는 여섯 종(카페·외식·마트·쇼핑·교통·통신)뿐이라
+ * `푸드` · `병원` 처럼 백엔드가 주는 이름 상당수가 결제 아이콘으로 떨어졌다.
+ * 표를 `constants/benefitCategoryIcons` 로 옮기고 키워드를 넓혔다.
+ */
 function categoryIcon(name) {
-  return Object.entries(benefitIcons).find(([key]) => name.includes(key))?.[1] ?? iconPayment
+  return benefitCategoryIcon(name)
 }
 
 function selectTab(index, label) {
@@ -718,100 +763,127 @@ function selectTab(index, label) {
           </div>
 
           <template v-else>
-            <!-- 카테고리·브랜드 혜택. 월 한도가 걸린 혜택이 없으면 둘 다 빈 배열로 온다. -->
-            <template v-if="categoryBenefits.length || brandBenefits.length">
-              <p class="limit-caption">
-                월별 <b>남은</b> 혜택 한도
-                <span v-if="monthlyBenefit?.asOfDate" class="text-xs">
-                  · {{ monthlyBenefit.asOfDate }} 기준
-                </span>
-              </p>
+            <template v-if="hasBenefitDetail">
+              <!--
+                **통합 한도 그룹이 먼저다.** 한도를 나눠 쓰는 혜택을 낱개로 흩어 놓으면
+                같은 한도가 여러 번 세어져, 받을 수 있는 금액이 실제보다 크게 읽힌다.
+              -->
+              <div v-if="sharedLimitGroups.length" class="mb-5 flex flex-col gap-3">
+                <SharedLimitGroupCard
+                  v-for="group in sharedLimitGroups"
+                  :key="group.limitGroupId"
+                  :group="group"
+                />
+              </div>
 
               <!--
-                두 목록 모두 테두리 있는 상자다. `.benefit-list` 는 배경과 모서리만 잡고
-                테두리·좌우 여백이 없어서 유틸리티로 채운다. 토큰(`border-line`)을 쓴다.
+                그룹에 속하지 않은 혜택. 한도를 혼자 쓰므로 예전 그대로 낱개 행으로 적는다.
+                (디자인의 스타벅스 "0원 / 4,000원" 행이 이 모양이다 — 남은 한도가 여기 붙는다.)
               -->
-              <template v-if="categoryBenefits.length">
-                <h3>카테고리별 혜택</h3>
-                <div class="benefit-list border border-line px-4">
-                  <div v-for="item in categoryBenefits" :key="item.key" class="benefit-row">
-                    <span class="mini-icon">
-                      <img
-                        :src="item.imageUrl ?? categoryIcon(item.name)"
-                        alt=""
-                        width="16"
-                        height="16"
-                      />
-                    </span>
-                    <div class="benefit-body">
-                      <div class="row-title">
-                        <strong>{{ item.name }}</strong>
-                        <span v-if="item.exhausted" class="exhausted">한도 소진</span>
-                        <small v-if="item.perTransactionLimit">{{
-                          item.perTransactionLimit
-                        }}</small>
+              <template v-if="categoryBenefits.length || brandBenefits.length">
+                <p class="limit-caption">
+                  월별 <b>남은</b> 혜택 한도
+                  <span v-if="monthlyBenefit?.asOfDate" class="text-xs">
+                    · {{ monthlyBenefit.asOfDate }} 기준
+                  </span>
+                </p>
+
+                <!--
+                  두 목록 모두 테두리 있는 상자다. `.benefit-list` 는 배경과 모서리만 잡고
+                  테두리·좌우 여백이 없어서 유틸리티로 채운다. 토큰(`border-line`)을 쓴다.
+                -->
+                <template v-if="categoryBenefits.length">
+                  <h3>카테고리별 혜택</h3>
+                  <div class="benefit-list border border-line px-4">
+                    <div v-for="item in categoryBenefits" :key="item.key" class="benefit-row">
+                      <span class="mini-icon">
+                        <img
+                          :src="item.imageUrl ?? categoryIcon(item.name)"
+                          alt=""
+                          width="16"
+                          height="16"
+                        />
+                      </span>
+                      <div class="benefit-body">
+                        <div class="row-title">
+                          <strong>{{ item.name }}</strong>
+                          <span v-if="item.exhausted" class="exhausted">한도 소진</span>
+                          <small v-if="item.perTransactionLimit">{{
+                            item.perTransactionLimit
+                          }}</small>
+                        </div>
+                        <div class="row-discount">
+                          <span>{{ item.value }}</span>
+                          <strong v-if="item.remainingLabel">
+                            <em :class="{ muted: item.exhausted }">{{ item.remainingLabel }}</em>
+                            / {{ item.totalLimitLabel }}
+                          </strong>
+                        </div>
+                        <div class="row-total">
+                          <span>
+                            총 {{ item.transactionCount }}건 ·
+                            {{ won(item.totalPaymentAmount) }} 결제
+                          </span>
+                          <strong>{{ item.received }}</strong>
+                        </div>
                       </div>
-                      <div class="row-discount">
-                        <span>{{ item.value }}</span>
-                        <strong v-if="item.remainingLabel">
-                          <em :class="{ muted: item.exhausted }">{{ item.remainingLabel }}</em>
-                          / {{ item.totalLimitLabel }}
-                        </strong>
-                      </div>
-                      <div class="row-total">
-                        <span>
-                          총 {{ item.transactionCount }}건 · {{ won(item.totalPaymentAmount) }} 결제
-                        </span>
-                        <strong>{{ item.received }}</strong>
+                    </div>
+                  </div>
+                </template>
+
+                <!-- 여백은 래퍼에 준다. `.sheet-scroll h3` 가 레이어 밖 규칙이라 `mt-*` 를 이긴다. -->
+                <div v-if="brandBenefits.length" class="mt-6">
+                  <h3>브랜드별 혜택</h3>
+                  <div class="benefit-list border border-line px-4">
+                    <div v-for="item in brandBenefits" :key="item.key" class="benefit-row">
+                      <!--
+                        로고가 있으면 `.brand-avatar`(28px 원형 + 테두리) 대신 네모 타일을 쓴다.
+                        브랜드 로고는 `7-ELEVEN` · `emart24` 처럼 **가로로 긴 워드마크**가 많아
+                        원형 28px 안에서는 눌려서 안 읽힌다. 글자 한 자로 대신할 때만 원형이다.
+                      -->
+                      <span
+                        v-if="item.imageUrl"
+                        class="grid h-9 w-9 flex-none place-items-center overflow-hidden rounded-xl bg-icon-bg"
+                      >
+                        <!-- 칸을 가득 채운다. 가로로 긴 로고와 정사각 로고를 나란히 놓기 위해서다. -->
+                        <img
+                          :src="item.imageUrl"
+                          alt=""
+                          class="h-full w-full object-contain p-0.5"
+                          @error="markLogoBroken(item.key)"
+                        />
+                      </span>
+                      <span v-else class="brand-avatar">{{ item.name.slice(0, 1) }}</span>
+                      <div class="benefit-body">
+                        <div class="row-title">
+                          <strong>{{ item.name }}</strong>
+                          <span v-if="item.exhausted" class="exhausted">한도 소진</span>
+                          <small v-if="item.perTransactionLimit">
+                            {{ item.perTransactionLimit }}
+                          </small>
+                        </div>
+                        <div class="row-discount">
+                          <span>{{ item.value }}</span>
+                          <strong v-if="item.remainingLabel">
+                            <em :class="{ muted: item.exhausted }">{{ item.remainingLabel }}</em>
+                            / {{ item.totalLimitLabel }}
+                          </strong>
+                        </div>
+                        <div class="row-total">
+                          <span>
+                            총 {{ item.transactionCount }}건 ·
+                            {{ won(item.totalPaymentAmount) }} 결제
+                          </span>
+                          <strong>{{ item.received }}</strong>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               </template>
-
-              <!-- 여백은 래퍼에 준다. `.sheet-scroll h3` 가 레이어 밖 규칙이라 `mt-*` 를 이긴다. -->
-              <div v-if="brandBenefits.length" class="mt-6">
-                <h3>브랜드별 혜택</h3>
-                <div class="benefit-list border border-line px-4">
-                  <div v-for="item in brandBenefits" :key="item.key" class="benefit-row">
-                    <span class="brand-avatar">
-                      <img
-                        v-if="item.imageUrl"
-                        :src="item.imageUrl"
-                        alt=""
-                        width="16"
-                        height="16"
-                      />
-                      <template v-else>{{ item.name.slice(0, 1) }}</template>
-                    </span>
-                    <div class="benefit-body">
-                      <div class="row-title">
-                        <strong>{{ item.name }}</strong>
-                        <span v-if="item.exhausted" class="exhausted">한도 소진</span>
-                        <small v-if="item.perTransactionLimit">
-                          {{ item.perTransactionLimit }}
-                        </small>
-                      </div>
-                      <div class="row-discount">
-                        <span>{{ item.value }}</span>
-                        <strong v-if="item.remainingLabel">
-                          <em :class="{ muted: item.exhausted }">{{ item.remainingLabel }}</em>
-                          / {{ item.totalLimitLabel }}
-                        </strong>
-                      </div>
-                      <div class="row-total">
-                        <span>
-                          총 {{ item.transactionCount }}건 · {{ won(item.totalPaymentAmount) }} 결제
-                        </span>
-                        <strong>{{ item.received }}</strong>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </template>
 
-            <!-- 월 한도가 걸린 혜택이 하나도 없는 카드. 두 배열이 함께 빈다. -->
+            <!-- 월 한도가 걸린 혜택이 하나도 없는 카드. 세 배열이 함께 빈다. -->
             <div v-else class="py-6 text-center text-xs text-sub">
               이 카드에 등록된 혜택 정보가 없어요
             </div>

@@ -62,7 +62,8 @@ export const getCardUsage = (cardId, params) => client.get(`/card/${cardId}/usag
  * KST 이번 달 1일부터 **오늘 00:00 직전까지** 집계한다. 오늘 결제는 안 잡히고,
  * 그래서 `asOfDate` 가 오늘이 아니라 전날이다.
  *
- * @returns `{ card, yearMonth, asOfDate, monthlySummary, performance, categoryBenefits, brandBenefits }`
+ * @returns `{ card, yearMonth, asOfDate, monthlySummary, performance, categoryBenefits,
+ *   brandBenefits, sharedLimitGroups }`
  *
  *   - `categoryBenefits` · `brandBenefits` 는 **백엔드가 소진된 혜택을 배열 하단으로 정렬해서 준다.**
  *     화면이 다시 정렬하지 않는다. 적용 가능한 월 한도 혜택이 없으면 둘 다 빈 배열이다
@@ -73,6 +74,26 @@ export const getCardUsage = (cardId, params) => client.get(`/card/${cardId}/usag
  *   - `monthlySummary.potentialBenefitRate` 는 전체 한도 대비 **남은** 혜택 비율이다.
  *     쓴 비율이 아니다. 전체 한도가 없거나 0 이면 null 이라 화면에서 분기한다
  *   - 금액은 `BigDecimal` 이라 JSON 숫자로 온다
+ *
+ *   ### 통합 한도 — `sharedLimitGroups` (backend#216)
+ *
+ *   여러 혜택이 **월 한도 하나를 나눠 쓰는** 묶음이다. 그런 혜택이 없으면 빈 배열이다.
+ *
+ *   - ⚠️ **`categoryBenefits` · `brandBenefits` 에는 그룹에 든 혜택이 그대로 남아 있다.**
+ *     낱개로도 그리려면 **`limitGroupId` 가 null 인 것만** 골라야 한다. 안 거르면 같은 혜택이
+ *     두 번 뜨고, 나눠 쓰는 한도가 혜택 수만큼 곱해져 읽힌다
+ *   - `sharedMonthlyLimit` 은 그룹이 함께 쓰는 한도 한 줄이다. `usedValue` 는 **그룹 합계**고
+ *     `remainingValue` 는 거기서 남은 몫이다. `monthlyLimits[].shared` 가 true 면 그 한도가 이것이다
+ *   - `usageBreakdown` 은 그 사용량을 **대상(카테고리·브랜드) 단위로 쪼갠 것**이다.
+ *     합계가 `sharedMonthlyLimit.usedValue` 와 맞도록 백엔드가 검증하고 어긋나면 500 을 낸다.
+ *     `unattributed: true` 인 항목은 대상으로 귀속되지 않은 몫이라 `targetName` 이 null 이다
+ *   - `benefitServices[].targets[].sharedLimitUsedValue` 는 그 대상이 공동 한도를 깎은 양이다.
+ *     `receivedBenefitValue`(실제로 받은 혜택)와 **다를 수 있다** — 적립은 포인트로 받고
+ *     한도는 원으로 깎는 식이라 단위부터 갈린다
+ *   - `benefitServices[].displayQualifier` 는 같은 카테고리를 덮는 혜택이 둘일 때의 구분자다
+ *     (마트 주중 / 마트 주말). 없으면 null
+ *   - `categories` 는 그룹이 걸쳐 있는 DB 카테고리다. **브랜드 혜택의 업종명도 여기서만 나온다** —
+ *     `brandBenefits` 항목에는 카테고리 정보가 아예 없다
  *
  *   - 404 CARD_NOT_FOUND : 내 카드가 아니거나 없는 카드
  *   - 500 INVALID_CARD_MONTHLY_BENEFIT_DATA : 카드 혜택 데이터가 깨져 있다
