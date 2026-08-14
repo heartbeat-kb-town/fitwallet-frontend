@@ -218,19 +218,18 @@ const {
 } = useAsyncState(benefitApi.getExpectedBenefits)
 
 /**
- * 순위 배지를 오른쪽 위로 옮기는 스타일.
+ * 카드 그림 위의 배지를 오른쪽 위로 옮기는 스타일. **순위든 사유든 전부 오른쪽이다.**
  *
  * `.pick-status` 는 `style.css` 에서 **왼쪽 위**에 붙는데, 카드 이미지의 카드명이
  * 딱 그 자리라 가려진다 (KB 이미지 기준 좌상단에 "KB 국민카드 / 청춘대로 | 톡톡").
  *
- * 시안도 순위(`1위`)만 오른쪽이고 `혜택 없음` · `조건 불가` 는 왼쪽이다.
- * 받을 수 있는 카드는 카드명이 가려지는 게 아깝고, 못 쓰는 카드는 이유가 먼저다.
+ * 종류마다 자리를 달리하면 카드를 훑을 때 배지를 두 군데서 찾게 된다. 한 줄로 세운다.
  *
  * 동결된 `style.css` 를 건드리지 않고 이 화면에서만 옮긴다.
  * Tailwind 유틸리티로는 안 된다 — `style.css` 규칙이 레이어 밖이라
  * `@layer utilities` 를 이긴다. 인라인만 확실히 덮는다.
  */
-const PICK_RANK_STYLE = { left: 'auto', right: '0', borderRadius: '0 0 0 11px' }
+const PICK_STATUS_STYLE = { left: 'auto', right: '0', borderRadius: '0 0 0 11px' }
 
 /**
  * 선정 기준 설명 토글. 말풍선 옆 ⓘ 를 누를 때마다 열리고 닫힌다.
@@ -568,16 +567,27 @@ async function confirmPin() {
         </button>
       </div>
 
-      <!-- 선정 기준. ⓘ 를 누를 때마다 열리고 닫힌다. 문구는 시안 주석 그대로다. -->
+      <!--
+        선정 기준. ⓘ 를 누를 때마다 열리고 닫힌다.
+        문구는 시안의 `최적의 카드 추천 로직 설명` 그대로다.
+        **세 문단으로 끊는다** — 무엇을 보고 골랐나 / 적립은 어떻게 견주나 / 무엇이 빠졌나 다.
+        붙여 놓으면 셋이 한 덩어리로 보여서, 목록에 안 뜨는 카드가 왜 없는지가 끝에 묻힌다.
+      -->
       <Transition name="expand">
-        <p
+        <div
           v-if="isPickInfoOpen"
-          class="mx-5 mt-2 flex-none rounded-xl bg-icon-bg px-3 py-2 text-[12px] leading-relaxed text-sub"
+          class="mx-5 mt-2 flex-none rounded-xl bg-icon-bg px-3 py-2.5 text-[12px] leading-relaxed text-sub"
         >
-          이 가맹점에 적용되는 혜택인지, 지난달 사용액과 이번 결제 금액이 조건을 채우는지, 남은 혜택
-          한도가 있는지를 고려해서 선정했어요. 적립은 포인트를 원으로 환산해 할인과 같은 기준으로
-          비교합니다.
-        </p>
+          <p class="m-0">
+            이 가맹점에 적용되는 혜택인지, 지난달 사용액과 이번 결제 금액이 조건을 채우는지, 남은
+            혜택 한도가 있는지를 고려해서 선정했어요.
+          </p>
+          <p class="mt-2 mb-0">적립은 포인트를 원으로 환산해 할인과 같은 기준으로 비교합니다.</p>
+          <p class="mt-2 mb-0">
+            이 가맹점 대상이 아니거나, 지난달 사용액·결제 금액 조건에 못 미치거나, 혜택 한도를 모두
+            사용한 혜택은 선정에서 제외되었어요.
+          </p>
+        </div>
       </Transition>
 
       <!--
@@ -620,14 +630,16 @@ async function confirmPin() {
               @load="markCardImageOrientation"
             />
             <!--
-              배지는 **하나만** 붙는다. 순위를 아는 카드는 받을 수 있다는 뜻이라
-              "추천" 을 덧붙일 이유가 없고, 시안도 둘을 같이 두지 않는다.
-              순위는 오른쪽(`PICK_RANK_STYLE`), 못 쓰는 사유는 왼쪽이다.
+              배지는 **하나만** 붙고 자리는 **오른쪽 위 한 곳**이다 (`PICK_STATUS_STYLE`).
+              순위를 아는 카드는 받을 수 있다는 뜻이라 "추천" 을 덧붙일 이유가 없다.
+              종류마다 자리를 달리하면 카드를 훑을 때 배지를 두 군데서 찾게 된다.
             -->
-            <span v-if="pick.rank" class="pick-status" :style="PICK_RANK_STYLE">
+            <span v-if="pick.rank" class="pick-status" :style="PICK_STATUS_STYLE">
               {{ pick.rank }}위
             </span>
-            <span v-else class="pick-status" :class="pick.status">{{ pick.statusLabel }}</span>
+            <span v-else class="pick-status" :class="pick.status" :style="PICK_STATUS_STYLE">
+              {{ pick.statusLabel }}
+            </span>
             <!-- 카드 이미지가 있으면 카드 앞면에 이름이 이미 찍혀 있다. 글자를 겹쳐 쓰지 않는다. -->
             <span v-if="!pick.cardImageUrl" class="pick-card-copy">
               <small>{{ pick.issuer }}</small>
