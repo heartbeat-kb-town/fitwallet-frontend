@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Menu } from 'lucide-vue-next'
+import { Info, Menu } from 'lucide-vue-next'
 import { categories } from '@/data'
 import * as benefitApi from '@/api/benefitApi'
 import { CARD_BENEFIT_STATUS } from '@/api/benefitApi'
@@ -29,6 +29,10 @@ const BACKEND_CATEGORY_IDS = {
 }
 import storeSearchIcon from '@/assets/icons/category-store.svg'
 import benefitGiftIcon from '@/assets/icons/category-benefit.svg'
+import pigPickIcon from '@/assets/icons/pig-pick.svg'
+import pickBubbleIcon from '@/assets/icons/pick-bubble.svg'
+import pickStorePinIcon from '@/assets/icons/pick-store-pin.svg'
+import pickWonIcon from '@/assets/icons/pick-won.svg'
 import iconHome from '@/assets/icons/home.svg'
 import iconPayment from '@/assets/icons/payment.svg'
 import iconMycard from '@/assets/icons/mycard.svg'
@@ -214,16 +218,25 @@ const {
 } = useAsyncState(benefitApi.getExpectedBenefits)
 
 /**
- * 상태 배지를 오른쪽 위로 옮기는 스타일.
+ * 카드 그림 위의 배지를 오른쪽 위로 옮기는 스타일. **순위든 사유든 전부 오른쪽이다.**
  *
  * `.pick-status` 는 `style.css` 에서 **왼쪽 위**에 붙는데, 카드 이미지의 카드명이
  * 딱 그 자리라 가려진다 (KB 이미지 기준 좌상단에 "KB 국민카드 / 청춘대로 | 톡톡").
+ *
+ * 종류마다 자리를 달리하면 카드를 훑을 때 배지를 두 군데서 찾게 된다. 한 줄로 세운다.
  *
  * 동결된 `style.css` 를 건드리지 않고 이 화면에서만 옮긴다.
  * Tailwind 유틸리티로는 안 된다 — `style.css` 규칙이 레이어 밖이라
  * `@layer utilities` 를 이긴다. 인라인만 확실히 덮는다.
  */
 const PICK_STATUS_STYLE = { left: 'auto', right: '0', borderRadius: '0 0 0 11px' }
+
+/**
+ * 선정 기준 설명 토글. 말풍선 옆 ⓘ 를 누를 때마다 열리고 닫힌다.
+ *
+ * 무엇을 보고 순위를 매겼는지가 화면 어디에도 없어서, 1위가 왜 1위인지 알 방법이 없었다.
+ */
+const isPickInfoOpen = ref(false)
 
 /**
  * 카드 그림 칸의 비율. 실제 카드 비율(약 1.58)에 맞춘다.
@@ -290,6 +303,14 @@ const cardPicks = computed(() =>
       status: view.className,
       statusLabel: view.label,
       benefit: card.benefit?.benefitName,
+      /**
+       * 혜택 이름 옆에 붙는 혜택 내용 (`20% 할인`).
+       *
+       * **금액을 보냈을 때만 붙인다.** 금액을 안 보내면 아래 `예상 혜택` 오른쪽이
+       * 곧 `displayText` 라(원화로 환산할 수가 없어서), 여기 또 적으면 같은 문구가 두 번 뜬다.
+       * 금액을 보내면 그 자리가 기대혜택액(원)으로 바뀌면서 혜택 내용이 갈 곳이 없어진다.
+       */
+      benefitDetail: expectedAmount != null ? (card.benefit?.displayText ?? null) : null,
       // 안내 문구는 서버가 사유마다 다르게 만들어 준다. 화면이 지어내지 않는다.
       reason: card.reason?.message,
       /**
@@ -526,12 +547,71 @@ async function confirmPin() {
         </button>
       </header>
 
-      <div class="pick-store-name">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z" />
-          <circle cx="12" cy="10" r="3" />
-        </svg>
-        <strong>{{ selectedStore.storeName }}</strong>
+      <!--
+        피그가 말을 거는 자리. 시안대로 캐릭터 + 말풍선 + ⓘ 다.
+        말풍선은 꼬리까지 그려진 한 장이라 그림 위에 글자를 얹는다.
+        `style.css` 가 동결이라 Tailwind 유틸리티로만 짠다.
+      -->
+      <div class="flex flex-none items-center gap-2 bg-white px-5 pt-4">
+        <img :src="pigPickIcon" alt="" width="61" height="46" class="flex-none" />
+        <span class="relative grid flex-none place-items-center">
+          <img :src="pickBubbleIcon" alt="" width="200" height="38" />
+          <strong class="absolute text-[13px] font-bold text-ink">
+            제가 추천하는 최적의 카드입니다
+          </strong>
+        </span>
+        <!--
+          Preflight 를 빼둔 프로젝트라 버튼 기본 배경을 직접 지운다.
+          안 지우면 브라우저 기본 회색 알약이 그대로 보인다.
+        -->
+        <button
+          type="button"
+          class="flex-none bg-transparent p-0 text-muted transition-colors hover:text-sub"
+          :aria-expanded="isPickInfoOpen"
+          aria-label="어떤 기준으로 골랐는지 보기"
+          @click="isPickInfoOpen = !isPickInfoOpen"
+        >
+          <Info :size="15" />
+        </button>
+      </div>
+
+      <!--
+        선정 기준. ⓘ 를 누를 때마다 열리고 닫힌다.
+        문구는 시안의 `최적의 카드 추천 로직 설명` 그대로다.
+        **세 문단으로 끊는다** — 무엇을 보고 골랐나 / 적립은 어떻게 견주나 / 무엇이 빠졌나 다.
+        붙여 놓으면 셋이 한 덩어리로 보여서, 목록에 안 뜨는 카드가 왜 없는지가 끝에 묻힌다.
+      -->
+      <Transition name="expand">
+        <div
+          v-if="isPickInfoOpen"
+          class="mx-5 mt-2 flex-none rounded-xl bg-icon-bg px-3 py-2.5 text-[12px] leading-relaxed text-sub"
+        >
+          <p class="m-0">
+            이 가맹점에 적용되는 혜택인지, 지난달 사용액과 이번 결제 금액이 조건을 채우는지, 남은
+            혜택 한도가 있는지를 고려해서 선정했어요.
+          </p>
+          <p class="mt-2 mb-0">적립은 포인트를 원으로 환산해 할인과 같은 기준으로 비교합니다.</p>
+          <p class="mt-2 mb-0">
+            이 가맹점 대상이 아니거나, 지난달 사용액·결제 금액 조건에 못 미치거나, 혜택 한도를 모두
+            사용한 혜택은 선정에서 제외되었어요.
+          </p>
+        </div>
+      </Transition>
+
+      <!--
+        가맹점과 결제 예정 금액을 한 줄에 둔다. 둘 다 "이 추천이 무엇을 전제로 하는가" 라서다.
+        가게 이름이 길면 그쪽이 잘리고 금액은 남는다(`shrink-0`) — 금액이 잘리면 액수를 오해한다.
+        금액 화면에서 "아니요" 를 고른 경로에서는 아예 숨긴다. 0원으로 적으면 "0원짜리 결제" 로 읽힌다.
+      -->
+      <div class="flex flex-none items-center gap-2 bg-white px-5 py-4 text-[13px]">
+        <img :src="pickStorePinIcon" alt="" width="15" height="15" class="flex-none" />
+        <strong class="min-w-0 truncate font-bold text-ink">{{ selectedStore.storeName }}</strong>
+        <template v-if="requestedAmount">
+          <img :src="pickWonIcon" alt="" width="15" height="15" class="ml-auto flex-none" />
+          <span class="flex-none text-sub">
+            결제 예정 금액 <b class="font-bold text-ink">{{ won(Number(requestedAmount)) }}</b>
+          </span>
+        </template>
       </div>
 
       <div class="pick-list">
@@ -557,19 +637,16 @@ async function confirmPin() {
               :style="pickImageStyle(pick)"
               @load="markCardImageOrientation"
             />
-            <span class="pick-status" :class="pick.status" :style="PICK_STATUS_STYLE">
-              {{ pick.statusLabel }}
-            </span>
             <!--
-              이득 순위. 금액을 보냈고 받을 수 있는 카드에만 붙는다.
-              상태 배지를 오른쪽으로 옮겨(PICK_STATUS_STYLE) 비워둔 왼쪽 위 자리를 쓴다.
-              `style.css` 는 동결이라 새 클래스 대신 Tailwind 유틸리티로 짠다.
+              배지는 **하나만** 붙고 자리는 **오른쪽 위 한 곳**이다 (`PICK_STATUS_STYLE`).
+              순위를 아는 카드는 받을 수 있다는 뜻이라 "추천" 을 덧붙일 이유가 없다.
+              종류마다 자리를 달리하면 카드를 훑을 때 배지를 두 군데서 찾게 된다.
             -->
-            <span
-              v-if="pick.rank"
-              class="absolute top-0 left-0 rounded-br-[11px] bg-primary px-3.5 py-2 text-[12px] font-extrabold text-ink"
-            >
+            <span v-if="pick.rank" class="pick-status" :style="PICK_STATUS_STYLE">
               {{ pick.rank }}위
+            </span>
+            <span v-else class="pick-status" :class="pick.status" :style="PICK_STATUS_STYLE">
+              {{ pick.statusLabel }}
             </span>
             <!-- 카드 이미지가 있으면 카드 앞면에 이름이 이미 찍혀 있다. 글자를 겹쳐 쓰지 않는다. -->
             <span v-if="!pick.cardImageUrl" class="pick-card-copy">
@@ -579,9 +656,16 @@ async function confirmPin() {
           </button>
 
           <div class="pick-card-info">
+            <!--
+              혜택 이름과 혜택 내용을 한 줄에. 이름이 길면 이름이 잘리고 내용은 남긴다
+              (`20% 할인` 이 잘리면 얼마를 받는지가 사라진다).
+            -->
             <div v-if="pick.status === 'recommended'" class="pick-benefit">
               <img :src="benefitGiftIcon" alt="" />
-              <strong>{{ pick.benefit }}</strong>
+              <strong class="min-w-0 truncate">{{ pick.benefit }}</strong>
+              <span v-if="pick.benefitDetail" class="ml-auto flex-none font-bold">
+                {{ pick.benefitDetail }}
+              </span>
             </div>
             <p v-else-if="pick.status === 'none'" class="pick-no-benefit">
               <span>혜택없음</span>{{ pick.reason }}
