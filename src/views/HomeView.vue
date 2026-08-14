@@ -288,6 +288,14 @@ function toBenefitRow(item, key) {
     perTransactionLimit: item.perTransactionLimitLabel,
     remainingLabel: limit ? benefitUnitValue(limit.remainingValue, limit.limitUnit) : null,
     totalLimitLabel: limit ? benefitUnitValue(limit.limitValue, limit.limitUnit) : null,
+    /**
+     * 횟수 한도는 분수로 적지 않는다 (#178).
+     *
+     * `1회 / 3회` 는 **1 이 쓴 횟수인지 남은 횟수인지 드러나지 않는다.**
+     * 금액은 진행바 옆이라 분수로 읽히지만 횟수는 그 맥락이 없어 반대로 읽기 쉽다.
+     * 이 자리의 값은 남은 횟수이므로 `월 3회 중 1회 남음` 으로 풀어 쓴다.
+     */
+    isCountLimit: limit?.limitUnit === 'COUNT',
     received: item.receivedBenefitLabel,
     transactionCount: item.transactionCount,
     totalPaymentAmount: Number(item.totalPaymentAmount) || 0,
@@ -814,7 +822,13 @@ function selectTab(index, label) {
                         </div>
                         <div class="row-discount">
                           <span>{{ item.value }}</span>
-                          <strong v-if="item.remainingLabel">
+                          <!-- 횟수는 분수로 적으면 쓴 건지 남은 건지 안 드러난다 (#178). -->
+                          <strong v-if="item.remainingLabel && item.isCountLimit">
+                            월 {{ item.totalLimitLabel }} 중
+                            <em :class="{ muted: item.exhausted }">{{ item.remainingLabel }}</em>
+                            남음
+                          </strong>
+                          <strong v-else-if="item.remainingLabel">
                             <em :class="{ muted: item.exhausted }">{{ item.remainingLabel }}</em>
                             / {{ item.totalLimitLabel }}
                           </strong>
@@ -864,7 +878,13 @@ function selectTab(index, label) {
                         </div>
                         <div class="row-discount">
                           <span>{{ item.value }}</span>
-                          <strong v-if="item.remainingLabel">
+                          <!-- 횟수는 분수로 적으면 쓴 건지 남은 건지 안 드러난다 (#178). -->
+                          <strong v-if="item.remainingLabel && item.isCountLimit">
+                            월 {{ item.totalLimitLabel }} 중
+                            <em :class="{ muted: item.exhausted }">{{ item.remainingLabel }}</em>
+                            남음
+                          </strong>
+                          <strong v-else-if="item.remainingLabel">
                             <em :class="{ muted: item.exhausted }">{{ item.remainingLabel }}</em>
                             / {{ item.totalLimitLabel }}
                           </strong>
