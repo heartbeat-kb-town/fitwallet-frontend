@@ -166,23 +166,6 @@ export const useCardStore = defineStore('card', () => {
     lastUsedAt.value = next
   }
 
-  /**
-   * 가장 최근에 결제한 카드. 아직 못 받았거나 이번 달 결제가 하나도 없으면 null 이다.
-   *
-   * `paidAt` 은 자리수가 고정된 ISO 문자열이라 문자열 비교로 시각 순서가 나온다.
-   * `new Date()` 로 바꾸면 시간대가 없는 값이라 브라우저 시간대에 끌려간다.
-   */
-  const mostRecentlyUsedCardId = computed(() => {
-    let latest = null
-
-    for (const card of cards.value) {
-      const paidAt = lastUsedAt.value[card.id]
-      if (!paidAt) continue
-      if (!latest || paidAt > latest.paidAt) latest = { id: card.id, paidAt }
-    }
-    return latest?.id ?? null
-  })
-
   /** 목록과 이미지를 한 번에. 화면은 보통 이것만 부르면 된다. */
   async function ensureCardsWithImages() {
     await ensureCards()
@@ -201,7 +184,6 @@ export const useCardStore = defineStore('card', () => {
     order,
     cards,
     lastUsedAt,
-    mostRecentlyUsedCardId,
     isLoading,
     error,
     fetchCards,
