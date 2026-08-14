@@ -303,6 +303,14 @@ const cardPicks = computed(() =>
       status: view.className,
       statusLabel: view.label,
       benefit: card.benefit?.benefitName,
+      /**
+       * 혜택 이름 옆에 붙는 혜택 내용 (`20% 할인`).
+       *
+       * **금액을 보냈을 때만 붙인다.** 금액을 안 보내면 아래 `예상 혜택` 오른쪽이
+       * 곧 `displayText` 라(원화로 환산할 수가 없어서), 여기 또 적으면 같은 문구가 두 번 뜬다.
+       * 금액을 보내면 그 자리가 기대혜택액(원)으로 바뀌면서 혜택 내용이 갈 곳이 없어진다.
+       */
+      benefitDetail: expectedAmount != null ? (card.benefit?.displayText ?? null) : null,
       // 안내 문구는 서버가 사유마다 다르게 만들어 준다. 화면이 지어내지 않는다.
       reason: card.reason?.message,
       /**
@@ -648,9 +656,16 @@ async function confirmPin() {
           </button>
 
           <div class="pick-card-info">
+            <!--
+              혜택 이름과 혜택 내용을 한 줄에. 이름이 길면 이름이 잘리고 내용은 남긴다
+              (`20% 할인` 이 잘리면 얼마를 받는지가 사라진다).
+            -->
             <div v-if="pick.status === 'recommended'" class="pick-benefit">
               <img :src="benefitGiftIcon" alt="" />
-              <strong>{{ pick.benefit }}</strong>
+              <strong class="min-w-0 truncate">{{ pick.benefit }}</strong>
+              <span v-if="pick.benefitDetail" class="ml-auto flex-none font-bold">
+                {{ pick.benefitDetail }}
+              </span>
             </div>
             <p v-else-if="pick.status === 'none'" class="pick-no-benefit">
               <span>혜택없음</span>{{ pick.reason }}
