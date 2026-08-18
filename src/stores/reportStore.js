@@ -95,6 +95,37 @@ function toCardDetail(response) {
 const loadCardDetail = async (userCardId, yearMonth) =>
   toCardDetail(await reportApi.getReceivedCardBenefit(userCardId, yearMonth))
 
+/** 받은 혜택을 할인과 포인트로 나눈 값. 리포트 메인의 받은 혜택 카드 두 줄이다. */
+const EMPTY_RECEIVED_SPLIT = { totalDiscount: 0, totalPoint: 0 }
+
+/**
+ * 받은 혜택을 할인·포인트로 나눈다.
+ *
+ * **요약 API 에 이 분리가 없다.** `/report/benefit/summary` 는 `totalReceivedBenefit` 총액
+ * 하나만 준다. 나뉜 값은 카드별 상세의 `totalDiscount` · `totalPoint` 뿐이라
+ * **보유 카드 수만큼 부르고 합산한다.** 5장이면 요청이 5개 나간다 — 월을 바꿀 때마다 이만큼
+ * 더 나가므로, 백엔드가 요약에 두 필드를 실어주면 이 함수는 통째로 사라진다.
+ *
+ * 합계가 요약의 총액과 어긋나지 않는다(로컬 실측 4,500 + 2,520 = 7,020 = 총액).
+ * 총액은 요약 것을 그대로 쓰고 여기서 다시 더하지 않는다 — 더하면 진실이 두 곳에 생긴다.
+ *
+ * 한 장이 실패해도 나머지는 살린다. 카드 한 장 때문에 두 줄이 통째로 비면
+ * 사용자는 이번 달 혜택이 없다고 읽는다.
+ */
+const loadReceivedSplit = async (userCardIds, yearMonth) => {
+  const results = await Promise.allSettled(
+    userCardIds.map((userCardId) => reportApi.getReceivedCardBenefit(userCardId, yearMonth)),
+  )
+
+  return results.reduce((sum, result) => {
+    if (result.status !== 'fulfilled') return sum
+    return {
+      totalDiscount: sum.totalDiscount + (Number(result.value?.totalDiscount) || 0),
+      totalPoint: sum.totalPoint + (Number(result.value?.totalPoint) || 0),
+    }
+  }, EMPTY_RECEIVED_SPLIT)
+}
+
 /** 놓친 혜택이 없는 달의 바닥값. `categories` 는 `v-for` 가 도는 자리라 배열을 비워 둔다. */
 const EMPTY_MISSED = {
   totalMissedBenefit: 0,
@@ -166,6 +197,13 @@ export const useReportStore = defineStore('report', () => {
     execute: fetchCardDetail,
   } = useAsyncState(loadCardDetail, EMPTY_CARD_DETAIL)
 
+  // 받은 혜택의 할인·포인트 분리. 요약과 달리 보유 카드 목록이 있어야 부를 수 있어 따로 둔다.
+  const {
+    data: receivedSplit,
+    isLoading: isReceivedSplitLoading,
+    execute: fetchReceivedSplit,
+  } = useAsyncState(loadReceivedSplit, EMPTY_RECEIVED_SPLIT)
+
   // 놓친 혜택 상세. 손실 유형 탭을 바꿀 때마다 다시 받으므로 이것도 상태를 따로 둔다.
   const {
     data: missedDetail,
@@ -183,6 +221,9 @@ export const useReportStore = defineStore('report', () => {
     isCardDetailLoading,
     cardDetailError,
     fetchCardDetail,
+    receivedSplit,
+    isReceivedSplitLoading,
+    fetchReceivedSplit,
     missedDetail,
     isMissedDetailLoading,
     missedDetailError,

@@ -1,15 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  Menu,
-  ChevronDown,
-  ChevronUp,
-  ChevronLeft,
-  ChevronRight,
-  Minus,
-  Info,
-} from 'lucide-vue-next'
+import { Menu, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Info } from 'lucide-vue-next'
 import iconHome from '@/assets/icons/home.svg'
 import iconPayment from '@/assets/icons/payment.svg'
 import iconMycard from '@/assets/icons/mycard.svg'
@@ -24,6 +16,8 @@ import iconTransport from '@/assets/icons/potentialbenefit-transportation.svg'
 import iconPointBadge from '@/assets/icons/point-badge.svg'
 // 놓친 혜택 히어로에 걸터앉는 픽피. 우는 얼굴은 `pig-cry` 와 같고 앞발이 더 붙어 있다.
 import pigCryPeek from '@/assets/icons/pig-cry-peek.svg'
+// 받은 혜택 카드의 웃는 픽피. `pig-cry-peek` 과 같은 자세라 두 카드가 나란히 붙어도 어울린다.
+import pigPeek from '@/assets/icons/pig-peek.svg'
 
 import BaseSpinner from '@/components/common/BaseSpinner.vue'
 import { useCardImage } from '@/composables/useCardImage'
@@ -68,12 +62,10 @@ const page = ref(initialCardId ? 'received' : 'main')
 const missedTab = ref('APP_UNUSED')
 const expanded = ref(new Set())
 const selectedCard = ref(0)
-const missedCount = ref(0)
 
 /** 받은 혜택 설명을 펼쳤나. 이 화면 안에서만 쓰는 상태라 store 로 올리지 않는다. */
 const isBenefitInfoOpen = ref(false)
 const toast = ref('')
-let animationFrame = 0
 let toastTimer
 
 // 원 단위로 반올림한다. 백엔드 금액은 BigDecimal 이라 소수가 섞여 온다
@@ -121,64 +113,31 @@ async function loadSummary() {
 // 달이 바뀌면 다시 조회한다. 화면에 들어올 때도 여기서 한 번 돈다.
 watch(yearMonth, loadSummary, { immediate: true })
 
-/**
- * 도넛 조각 색.
- *
- * 색상 하드코딩 대신 `@theme` 토큰을 쓴다. 도넛은 인라인 style 의 conic-gradient 라
- * `var()` 가 그대로 해석된다. 카테고리는 최대 5개(매퍼 LIMIT 5)라 색도 5개면 된다.
- */
-const CHART_COLORS = [
-  'var(--color-primary)',
-  'var(--color-primary-dark)',
-  'var(--color-muted)',
-  'var(--color-muted-soft)',
-  'var(--color-muted-softer)',
-]
-
-const chartData = computed(() =>
-  summary.value.categories.map((category, index) => ({
-    id: category.categoryId,
-    name: category.categoryName,
-    value: category.benefitAmount,
-    color: CHART_COLORS[index % CHART_COLORS.length],
-  })),
-)
+/* ─── 받은 혜택 카드 (할인·포인트 분리) ─────────────────────────────────── */
 
 /**
- * 도넛 비율의 분모. 가운데 찍히는 "총 혜택" 과 분모가 다르다.
+ * 받은 혜택을 할인과 포인트로 나눈 값.
  *
- * 백엔드가 카테고리를 **상위 5개만** 주므로 6번째부터의 혜택은 조각에 없다.
- * `totalReceivedBenefit` 으로 나누면 그만큼 링이 안 닫혀 빈 부채꼴이 생긴다.
- * 조각의 합으로 나눠 링을 채우고, 가운데 숫자는 진짜 총액을 보여준다.
+ * **요약 API 에 이 분리가 없어서** 보유 카드마다 상세를 불러 합산한다
+ * (`reportStore.fetchReceivedSplit` 주석 참고). 카드가 5장이면 요청이 5개 나간다.
  */
-const slicesTotal = computed(() => chartData.value.reduce((sum, item) => sum + item.value, 0))
+const receivedSplit = computed(() => reportStore.receivedSplit)
 
-const chartBackground = computed(() => {
-  // 이번 달 혜택이 0원이면 나눌 수가 없다. 빈 링으로 둔다.
-  if (!slicesTotal.value) return 'var(--color-muted-softer)'
+/** 카드 목록이 온 뒤에야 부를 수 있다. 목록이 비면 부를 것이 없으니 그냥 둔다. */
+const userCardIds = computed(() => cardStore.cards.map((card) => card.id))
 
-  let current = 0
-  const stops = chartData.value.map((item) => {
-    const start = current
-    current += (item.value / slicesTotal.value) * 100
-    return `${item.color} ${start}% ${current}%`
-  })
-  return `conic-gradient(${stops.join(', ')})`
-})
+async function loadReceivedSplit() {
+  if (!userCardIds.value.length) return
+  try {
+    await reportStore.fetchReceivedSplit(userCardIds.value, yearMonth.value)
+  } catch (error) {
+    // 두 줄이 0 으로 남을 뿐 총액은 요약이 들고 있다. 화면 전체를 막지 않는다.
+    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
+  }
+}
 
-/**
- * 카테고리 랭킹.
- *
- * **다시 정렬하지 않는다.** 매퍼가 `benefitAmount DESC LIMIT 5` 로 정렬해서 준다.
- */
-const rankings = computed(() =>
-  summary.value.categories.map((category) => ({
-    id: category.categoryId,
-    name: category.categoryName,
-    benefit: won(category.benefitAmount),
-    spend: won(category.spendAmount),
-  })),
-)
+// 달이 바뀌거나 카드 목록이 도착하면 다시 합산한다.
+watch([yearMonth, userCardIds], loadReceivedSplit, { immediate: true })
 
 /** 카드 추천. 이것도 서비스가 예상 혜택 내림차순 상위 2건으로 잘라서 준다. */
 const recommendations = computed(() => summary.value.recommendations)
@@ -394,11 +353,17 @@ async function loadMissedDetail() {
 
 // 탭을 바꾸거나 달을 옮기면 다시 받는다.
 //
-// 놓친 혜택 화면에 들어와 있을 때만 부른다. 리포트 메인에서는 쓰지 않는 데이터라
-// 달을 넘길 때마다 미리 받아두면 안 보는 화면 때문에 요청이 나간다.
-watch([missedTab, yearMonth, page], () => {
-  if (page.value === 'missed') loadMissedDetail()
-})
+// **메인에서도 부른다.** 놓친 혜택 카드의 `앱 미사용 손실` · `카드 선택 손실` 두 줄이
+// 이 응답에만 있다(요약 API 는 총액 하나뿐). 두 값은 `lossType` 과 무관하게 늘 같아서
+// 메인에서는 지금 탭 값 그대로 한 번만 부르면 된다.
+watch(
+  [missedTab, yearMonth, page],
+  () => {
+    if (page.value === 'received') return
+    loadMissedDetail()
+  },
+  { immediate: true },
+)
 
 /**
  * 가맹점 이름.
@@ -424,8 +389,17 @@ function missedRateLabel(item) {
   return item.discountRate == null ? '더 유리' : `${item.discountRate}% 할인`
 }
 
-// 도넛 가운데 숫자. 조각의 합(slicesTotal)이 아니라 진짜 총액이다.
+/**
+ * 받은 혜택 총액. **`receivedSplit` 의 두 값을 더해 만들지 않는다.**
+ * 합계가 일치하는 것은 확인했지만, 더해서 쓰면 총액의 근거가 두 곳이 된다.
+ */
 const totalBenefit = computed(() => summary.value.totalReceivedBenefit)
+
+/** 놓친 혜택 총액. 요약과 상세가 같은 값을 주므로 요약 것을 쓴다(상세보다 먼저 온다). */
+const totalMissed = computed(() => summary.value.totalMissedBenefit)
+
+/** 카드 안 월 선택기에 적는 문구. 헤더에 있던 `7월` 과 달리 연도까지 적는다. */
+const monthLabel = computed(() => `${cursor.value.year}년 ${cursor.value.month}월`)
 
 function toggle(id) {
   const next = new Set(expanded.value)
@@ -464,31 +438,6 @@ function selectMissedTab(tab) {
   expanded.value = new Set()
 }
 
-/**
- * 놓친 혜택 총액을 0 부터 굴린다. 목표값은 부를 때마다 응답에서 다시 읽는다.
- *
- * 받은 혜택 총액은 도넛 가운데(`totalBenefit`)가 그대로 보여준다. 예전에는 요약 카드
- * 두 장이 각각 굴렸는데, 피그마 구성에서 그 두 장이 빠지면서 놓친 혜택만 남았다.
- */
-function animateCounts() {
-  cancelAnimationFrame(animationFrame)
-
-  const missedTarget = summary.value.totalMissedBenefit
-  const start = performance.now()
-  const duration = 900
-  const tick = (now) => {
-    const progress = Math.min(1, (now - start) / duration)
-    const eased = 1 - Math.pow(1 - progress, 3)
-    missedCount.value = Math.round(missedTarget * eased)
-    if (progress < 1) animationFrame = requestAnimationFrame(tick)
-  }
-  animationFrame = requestAnimationFrame(tick)
-}
-
-// 응답이 도착할 때마다 다시 굴린다. 달을 바꿔도 새 숫자로 이어진다.
-// 요약이 오기 전에 미리 굴리면 0 에서 0 으로 굴렀다가 값이 튀어 들어온다.
-watch(summary, animateCounts)
-
 onMounted(() => {
   // 보유 카드가 없으면 캐러셀도 상세도 그릴 수 없다. 다른 화면과 같은 store 라 대개 이미 차 있다.
   cardStore.ensureCardsWithImages()
@@ -513,7 +462,6 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  cancelAnimationFrame(animationFrame)
   clearTimeout(toastTimer)
 })
 </script>
@@ -530,30 +478,12 @@ onBeforeUnmount(() => {
       >
         <ChevronLeft :size="25" />
       </button>
+      <!-- 메인 제목은 `혜택` 이다. 월 선택기가 헤더에서 각 혜택 카드 안으로 내려갔다. -->
       <h1>
         {{
-          page === 'main'
-            ? '혜택 리포트'
-            : page === 'received'
-              ? '받은 혜택 리포트'
-              : '놓친 혜택 리포트'
+          page === 'main' ? '혜택' : page === 'received' ? '받은 혜택 리포트' : '놓친 혜택 리포트'
         }}
       </h1>
-      <div v-if="page === 'main'" class="report-month">
-        <button type="button" aria-label="이전 달" @click="shiftMonth(-1)">
-          <ChevronLeft :size="17" />
-        </button>
-        <strong>{{ cursor.month }}월</strong>
-        <!-- 미래 달에는 결제가 있을 수 없다. 이번 달이면 잠근다. -->
-        <button
-          type="button"
-          aria-label="다음 달"
-          :disabled="isCurrentMonth"
-          @click="shiftMonth(1)"
-        >
-          <ChevronRight :size="17" />
-        </button>
-      </div>
       <button class="report-menu" type="button" aria-label="마이페이지 열기" @click="openMyPage()">
         <Menu :size="23" />
       </button>
@@ -582,10 +512,17 @@ onBeforeUnmount(() => {
       </div>
 
       <template v-else>
+        <!--
+          받은 혜택 · 놓친 혜택.
+
+          두 카드는 윗줄 색(노랑/빨강)과 세부 두 줄만 다르고 골격이 같다. 컴포넌트로 묶지 않은
+          이유는 다른 곳에서 재사용하지 않고, 묶으면 슬롯이 네 개(제목·월·총액·세부 두 줄)라
+          오히려 읽기 어려워지기 때문이다. 두 도메인 이상에서 쓰이게 되면 그때 `report/` 로 뺀다.
+        -->
         <section class="report-panel">
           <div class="flex items-center justify-between gap-2">
             <div class="flex min-w-0 items-center gap-1.5">
-              <h2>카테고리별 받은 혜택</h2>
+              <h2>받은 혜택</h2>
               <button
                 type="button"
                 class="flex shrink-0 items-center bg-transparent text-muted"
@@ -601,64 +538,133 @@ onBeforeUnmount(() => {
               class="flex shrink-0 items-center gap-0.5 bg-transparent !text-[13px] !font-bold text-primary-dark"
               @click="openPage('received')"
             >
-              자세히보기 <ChevronRight :size="14" />
+              세부 내역 보기 <ChevronRight :size="14" />
             </button>
           </div>
 
           <!--
             받은 혜택이 캐시백과 포인트를 합친 값이라는 사실은 숫자만 봐서는 드러나지 않는다.
-            늘 띄워두면 도넛을 밀어내므로 물어본 사람에게만 보여준다.
+            늘 띄워두면 카드를 밀어내므로 물어본 사람에게만 보여준다.
           -->
           <p
             v-if="isBenefitInfoOpen"
             class="mt-2.5 rounded-xl bg-icon-bg px-3.5 py-2.5 text-[12px] leading-[1.7] text-sub"
           >
-            캐시백·포인트를 원화로 환산해 더한 금액입니다.
+            캐시백·포인트를 원화로 환산해 더한 금액입니다. 세부 내역에서 각각 나눠 볼 수 있습니다.
           </p>
 
-          <div class="report-donut-wrap">
-            <div class="report-donut" :style="{ background: chartBackground }">
-              <div>
-                <span>총 혜택</span>
-                <strong>{{ won(totalBenefit) }}</strong>
+          <div class="mt-3 overflow-hidden rounded-2xl border border-line">
+            <!-- 카드 성격을 색으로 먼저 알린다. 받은 혜택은 primary. -->
+            <div class="h-1.5 bg-primary"></div>
+            <div class="relative px-3.5 pt-3 pb-3.5">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] text-sub">총 받은 혜택</span>
+                <div class="flex shrink-0 items-center gap-1 text-muted-deep">
+                  <button type="button" aria-label="이전 달" @click="shiftMonth(-1)">
+                    <ChevronLeft :size="14" />
+                  </button>
+                  <strong class="text-[12px] font-bold text-sub">{{ monthLabel }}</strong>
+                  <!-- 미래 달에는 결제가 있을 수 없다. 이번 달이면 잠근다. -->
+                  <button
+                    type="button"
+                    aria-label="다음 달"
+                    :disabled="isCurrentMonth"
+                    class="disabled:opacity-30"
+                    @click="shiftMonth(1)"
+                  >
+                    <ChevronRight :size="14" />
+                  </button>
+                </div>
               </div>
-            </div>
-            <div class="report-legend">
-              <span v-for="item in chartData.slice(0, 3)" :key="item.id">
-                <i :style="{ background: item.color }"></i>{{ item.name }}
-              </span>
+
+              <strong class="mt-1 block text-[28px] leading-tight font-bold text-ink">
+                {{ won(totalBenefit) }}
+              </strong>
+              <!-- 장식이라 스크린리더가 읽지 않는다. 총액 오른쪽에 걸터앉는다. -->
+              <img
+                :src="pigPeek"
+                alt=""
+                aria-hidden="true"
+                class="pointer-events-none absolute top-7 right-3 w-[62px]"
+              />
+
+              <dl class="mt-3 space-y-1.5 text-[12px]">
+                <div class="flex items-center justify-between gap-2">
+                  <dt class="text-sub">총 할인 금액</dt>
+                  <dd class="font-bold text-received">{{ won(receivedSplit.totalDiscount) }}</dd>
+                </div>
+                <div class="flex items-center justify-between gap-2">
+                  <dt class="text-sub">총 포인트</dt>
+                  <!-- 포인트는 원이 아니다. 배지를 붙여 원화 줄과 단위가 갈리게 한다. -->
+                  <dd class="flex items-center gap-1 font-bold text-primary-dark">
+                    <img :src="iconPointBadge" alt="" class="size-3.5" />
+                    {{ points(receivedSplit.totalPoint) }}
+                  </dd>
+                </div>
+              </dl>
             </div>
           </div>
-          <div v-if="rankings.length" class="report-ranking">
-            <div v-for="(item, index) in rankings" :key="item.id" :class="{ first: index === 0 }">
-              <span class="rank">{{ index + 1 }}</span>
-              <strong>{{ item.name }}</strong>
-              <p>
-                <b>{{ item.benefit }}</b
-                ><small>지출 {{ item.spend }}</small>
-              </p>
-            </div>
-          </div>
-          <div v-else class="py-6 text-center text-xs text-sub">이 달에는 받은 혜택이 없어요</div>
         </section>
 
-        <!-- 놓친 혜택은 요약 API 가 총액 하나만 준다. 분해와 거래 목록은 상세 화면이 맡는다. -->
         <section class="report-panel">
           <div class="flex items-center justify-between gap-2">
-            <h2 class="!text-[15px]">이번 달 놓친 혜택</h2>
+            <h2>놓친 혜택</h2>
             <button
               type="button"
               class="flex shrink-0 items-center gap-0.5 bg-transparent !text-[13px] !font-bold text-primary-dark"
               @click="openPage('missed')"
             >
-              자세히보기 <ChevronRight :size="14" />
+              세부 내역 보기 <ChevronRight :size="14" />
             </button>
           </div>
-          <div class="mt-3 flex items-center gap-3">
-            <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-icon-bg">
-              <Minus :size="18" :stroke-width="4" class="text-primary-dark" />
-            </span>
-            <strong class="text-[26px] font-bold text-ink">{{ won(missedCount) }}</strong>
+
+          <div class="mt-3 overflow-hidden rounded-2xl border border-line">
+            <div class="h-1.5 bg-danger"></div>
+            <div class="relative px-3.5 pt-3 pb-3.5">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] text-sub">총 놓친 혜택</span>
+                <div class="flex shrink-0 items-center gap-1 text-muted-deep">
+                  <button type="button" aria-label="이전 달" @click="shiftMonth(-1)">
+                    <ChevronLeft :size="14" />
+                  </button>
+                  <strong class="text-[12px] font-bold text-sub">{{ monthLabel }}</strong>
+                  <button
+                    type="button"
+                    aria-label="다음 달"
+                    :disabled="isCurrentMonth"
+                    class="disabled:opacity-30"
+                    @click="shiftMonth(1)"
+                  >
+                    <ChevronRight :size="14" />
+                  </button>
+                </div>
+              </div>
+
+              <strong class="mt-1 block text-[28px] leading-tight font-bold text-ink">
+                {{ won(totalMissed) }}
+              </strong>
+              <img
+                :src="pigCryPeek"
+                alt=""
+                aria-hidden="true"
+                class="pointer-events-none absolute top-7 right-3 w-[62px]"
+              />
+
+              <!--
+                이 두 줄은 요약 API 에 없다. `/report/benefit/missed` 가 주는 값이고
+                `lossType` 과 무관하게 늘 같다 (reportApi 주석 참고).
+              -->
+              <dl class="mt-3 space-y-1.5 text-[12px]">
+                <div class="flex items-center justify-between gap-2">
+                  <dt class="text-sub">앱 미사용 손실</dt>
+                  <dd class="font-bold text-danger">{{ won(missedDetail.appUnusedAmount) }}</dd>
+                </div>
+                <div class="flex items-center justify-between gap-2">
+                  <dt class="text-sub">카드 선택 손실</dt>
+                  <dd class="font-bold text-danger">{{ won(missedDetail.cardMismatchAmount) }}</dd>
+                </div>
+              </dl>
+            </div>
           </div>
         </section>
 
