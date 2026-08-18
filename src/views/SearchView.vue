@@ -178,7 +178,7 @@ function submitSearch() {
           <path d="M4 5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
           <path d="M19 9h2a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-5a3 3 0 0 1 0-6z" />
         </svg>
-        <span>내 카드</span>
+        <span>카드 내역</span>
       </button>
       <button type="button">
         <svg viewBox="0 0 24 24" aria-hidden="true">

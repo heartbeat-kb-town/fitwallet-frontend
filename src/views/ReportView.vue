@@ -944,7 +944,7 @@ onBeforeUnmount(() => {
         <img :src="iconPayment" alt="" /><span>결제</span>
       </button>
       <button type="button" @click="navigate('mycard')">
-        <img :src="iconMycard" alt="" /><span>내 카드</span>
+        <img :src="iconMycard" alt="" /><span>카드 내역</span>
       </button>
       <button class="active" type="button">
         <img :src="iconReportActive" alt="" /><span>리포트</span>

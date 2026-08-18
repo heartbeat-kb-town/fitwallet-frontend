@@ -138,7 +138,7 @@ function openReport(cardId = '') {
 const navItems = [
   { label: '홈', icon: iconHome, iconActive: iconHomeActive },
   { label: '결제', icon: iconPayment, iconActive: iconPaymentActive },
-  { label: '내 카드', icon: iconMycard, iconActive: iconMycardActive },
+  { label: '카드 내역', icon: iconMycard, iconActive: iconMycardActive },
   { label: '리포트', icon: iconReport, iconActive: iconReportActive },
 ]
 

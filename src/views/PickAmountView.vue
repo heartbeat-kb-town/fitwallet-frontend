@@ -220,7 +220,7 @@ function navigateTo(target) {
         <img :src="iconPayment" alt="" width="22" height="22" /><span>결제</span>
       </button>
       <button type="button" @click="navigateTo('mycard')">
-        <img :src="iconMycard" alt="" width="22" height="22" /><span>내 카드</span>
+        <img :src="iconMycard" alt="" width="22" height="22" /><span>카드 내역</span>
       </button>
       <button type="button" @click="router.push({ name: 'report' })">
         <img :src="iconReport" alt="" width="22" height="22" /><span>리포트</span>

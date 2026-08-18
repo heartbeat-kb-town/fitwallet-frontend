@@ -870,7 +870,7 @@ onBeforeUnmount(() => {
         </button>
         <button type="button" @click="goToMyCard()">
           <img :src="iconMycard" alt="" width="22" height="22" />
-          <span>내 카드</span>
+          <span>카드 내역</span>
         </button>
         <button type="button" @click="openReport()">
           <img :src="iconReport" alt="" width="22" height="22" />
