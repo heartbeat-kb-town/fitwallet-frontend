@@ -350,6 +350,87 @@ const shownBenefits = computed(() => {
   return list.map((benefit) => [benefit.benefitName, benefit.valueLabel].filter(Boolean).join(' '))
 })
 
+/**
+ * 실적 바에서 `index` 번째 구간이 놓이는 가로 위치(%).
+ *
+ * **금액 비례가 아니라 순번 등분이다.** 백엔드가 내려주는 `tierProgressRate` 자체가
+ * 구간 사이를 같은 너비로 나눠 계산하기 때문이다
+ * (`CardUsageTierStateCalculator.calculateProgressRate` — `currentIndex/intervalCount` 기준).
+ * 여기서 금액으로 위치를 잡으면 눈금과 돼지 얼굴이 서로 다른 좌표계에 놓여 어긋난다.
+ */
+function tierPercent(index) {
+  const intervals = tiers.value.length - 1
+  return intervals > 0 ? (index / intervals) * 100 : 0
+}
+
+/**
+ * 눈금을 픽셀 격자에 맞추기 위해 재는 바의 실제 너비와 화면 배율.
+ *
+ * `left: 33.333%` 처럼 소수점 좌표에 선을 그으면 브라우저가 이웃 픽셀까지 번지게 그린다.
+ * **번지는 정도가 구간마다 달라서 굵기가 제각각으로 보인다.** CSS 로는 못 막는다 —
+ * 너비를 재서 물리 픽셀 단위로 반올림한 좌표를 직접 넣어야 모든 눈금이 똑같이 그려진다.
+ */
+const progressBarRef = ref(null)
+const barWidth = ref(0)
+const screenRatio = ref(1)
+
+/**
+ * 눈금 두께. **CSS px 이 아니라 물리 픽셀 개수다.**
+ * 배율이 1.25 면 2픽셀 = 1.6px 로 나간다. 정수 CSS px 로 잡으면 배율에 따라
+ * 픽셀 경계에 안 떨어져 다시 번진다 — 굵기를 바꿀 때는 이 숫자만 만진다.
+ */
+const TICK_DEVICE_PIXELS = 2
+
+let barObserver = null
+
+function measureProgressBar() {
+  barWidth.value = progressBarRef.value?.getBoundingClientRect().width ?? 0
+  // 배율은 브라우저 확대/축소로 바뀐다. 그때 너비도 같이 바뀌므로 여기서 함께 읽는다.
+  screenRatio.value = window.devicePixelRatio || 1
+}
+
+// 바는 `v-if` 안에 있어 setup 시점엔 없다. 붙고 떨어질 때마다 관찰을 갈아끼운다.
+watch(progressBarRef, (element) => {
+  barObserver?.disconnect()
+  barObserver = null
+  if (!element) return
+  barObserver = new ResizeObserver(measureProgressBar)
+  barObserver.observe(element)
+  measureProgressBar()
+})
+
+onBeforeUnmount(() => barObserver?.disconnect())
+
+/**
+ * 바 위에 그릴 구간 경계 눈금. 양 끝은 바의 끝이 곧 경계라 빼고 사이만 긋는다.
+ * 너비를 재기 전에는 그리지 않는다 — 전부 0px 에 겹쳐 찍힌 게 한 번 보였다 사라진다.
+ */
+const tierTicks = computed(() => {
+  if (barWidth.value <= 0) return []
+
+  const ratio = screenRatio.value
+  return tiers.value.slice(1, -1).map((tier, index) => {
+    const offset = (barWidth.value * tierPercent(index + 1)) / 100
+    return {
+      ...tier,
+      style: {
+        left: `${Math.round(offset * ratio) / ratio}px`,
+        width: `${TICK_DEVICE_PIXELS / ratio}px`,
+      },
+    }
+  })
+})
+
+/**
+ * 구간 라벨 위치. 가운데 라벨만 눈금에 맞춰 중앙 정렬하고,
+ * 양 끝은 바 밖으로 삐져나가지 않게 끝에 붙인다.
+ */
+function tierLabelStyle(index) {
+  if (index === 0) return { left: '0' }
+  if (index === tiers.value.length - 1) return { right: '0' }
+  return { left: `${tierPercent(index)}%`, transform: 'translateX(-50%)' }
+}
+
 /** 구간 버튼 아래 표시할 금액 범위. 최고 구간은 위쪽이 열려 있다. */
 function tierRangeLabel(tier) {
   if (!tier) return ''
@@ -775,13 +856,37 @@ function dateLabel(date) {
                 <strong>{{ won(performance) }} <ChevronRight :size="15" /></strong>
               </button>
               <div class="mycard-progress-wrap detail">
-                <div class="mycard-progress">
-                  <span :style="{ width: `${progress}%` }"
-                    ><i><img :src="pigFace" alt="" /></i
+                <!-- 눈금은 바 밖(relative 래퍼)에 둔다. `.mycard-progress > span` 규칙이
+                     안쪽 span 을 전부 노란 채움으로 칠해 버려서다. -->
+                <div ref="progressBarRef" class="relative">
+                  <div class="mycard-progress">
+                    <!-- 돼지 얼굴은 눈금보다 위에 있어야 한다. 눈금이 DOM 상 뒤라 z-index 없이는
+                         32px 얼굴 위로 작대기가 그어진다. -->
+                    <span :style="{ width: `${progress}%` }"
+                      ><i class="z-10"><img :src="pigFace" alt="" /></i
+                    ></span>
+                  </div>
+                  <!-- 바(10px)보다 조금 길게 빼서 위아래로 2px 씩 걸치게 둔다. 색은 ink 다 —
+                       회색은 노란 채움 위에서만 대비가 세게 잡혀 지나온 구간의 눈금만 굵어 보였다.
+                       가로 위치와 두께는 클래스가 아니라 `tierTicks` 가 계산한 px 값이다.
+                       %  로 두면 구간마다 번짐이 달라 굵기가 제각각으로 보인다. -->
+                  <span
+                    v-for="tick in tierTicks"
+                    :key="tick.tierOrder"
+                    class="absolute top-1/2 h-3.5 -translate-y-1/2 bg-ink"
+                    :style="tick.style"
                   ></span>
                 </div>
-                <div class="mycard-tier-labels">
-                  <span v-for="tier in tiers" :key="tier.tierOrder">{{ tier.tierName }}</span>
+                <!-- 라벨은 바에 붙이고(12px) 아래를 넉넉히 띄운다(16px). 12px 은 돼지 얼굴이
+                     바 아래로 내려오는 11px 을 겨우 비키는 값이라 더 줄이면 겹친다. -->
+                <div class="relative mt-3 mb-4 h-[15px]">
+                  <span
+                    v-for="(tier, index) in tiers"
+                    :key="tier.tierOrder"
+                    class="absolute text-[11px] leading-[15px] whitespace-nowrap text-muted-deep"
+                    :style="tierLabelStyle(index)"
+                    >{{ tier.tierName }}</span
+                  >
                 </div>
               </div>
               <div class="mycard-achievement">

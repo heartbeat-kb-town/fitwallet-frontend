@@ -26,6 +26,11 @@
   --color-muted-soft: #ede8e0;
   --color-muted-softer: #f5f2ee;
 
+  /* muted 보다 한 단계 진한 회갈색. 기존 .mycard-tier-labels · .mycard-notice 가
+     쓰던 값을 그대로 토큰화했다. 이용 실적 바의 구간 눈금·라벨이 이 색을 쓴다 —
+     muted(#d4c4ab) 는 바의 노란 채움(#ffcc00) 위에서 거의 안 보인다. */
+  --color-muted-deep: #b0a89e;
+
   /* 에러 표시용. 기존 화면(.pick-ineligible 등)이 쓰던 값을 그대로 토큰화했다.
      검증 실패 인라인 메시지와 토스트가 이 색을 쓴다. */
   --color-danger: #d62828;
