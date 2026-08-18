@@ -38,7 +38,9 @@ export const getUserCard = (cardId) => client.get(`/card/${cardId}/summary`)
  * 카드별 세부 결제 내역. 커서 방식이다.
  *
  * @param params `{ yearMonth, cursor, size }` — 전부 선택.
- *   `yearMonth` 를 생략하면 현재 월이고, 현재 월 포함 최근 3개월만 조회할 수 있다.
+ *   `yearMonth` 를 생략하면 현재 월이다. 과거는 그 카드의 최초 거래 월까지 열려 있고,
+ *   미래 월은 400 `YEAR_MONTH_OUT_OF_RANGE` 다 (`CardMonthlyPeriodResolver.resolveYearMonth`).
+ *   조회 가능한 월 목록은 응답의 `availableYearMonths` 로 온다.
  */
 export const getCardTransactions = (cardId, params) =>
   client.get(`/card/${cardId}/transactions`, { params })

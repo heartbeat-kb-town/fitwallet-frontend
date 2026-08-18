@@ -105,10 +105,14 @@ const selectedTier = ref(0)
 const touchStartX = ref(0)
 
 /**
- * 조회할 수 있는 최근 3개월. 최신이 앞이다 (`['2026-08', '2026-07', '2026-06']`).
+ * 조회할 수 있는 월. 최신이 앞이다 (`['2026-08', '2026-07', '2026-06', ...]`).
  *
  * 백엔드가 응답에 실어 주므로 화면이 정하지 않는다. 첫 조회는 `yearMonth` 없이 보내고
  * (백엔드가 현재 월을 쓴다) 그때 받은 목록으로 월 선택기를 채운다.
+ *
+ * **개수가 정해져 있지 않다.** 백엔드는 이번 달부터 그 카드의 최초 거래 월까지 거래가 없는
+ * 달까지 포함해 전부 내려준다 (`CardMonthlyPeriodResolver.createAvailableYearMonths`).
+ * 예전에는 3개월로 잘려 있어서 화면에 "최근 3개월" 안내가 붙어 있었다.
  */
 const months = ref([])
 
@@ -898,7 +902,7 @@ function dateLabel(date) {
               ※ 실적 인정 금액은 전표 접수 시간에 따라 바뀔 수 있으며, 할인된 등록 혜택은 이용
               실적에서 제외될 수 있습니다.
             </p>
-            <p class="mycard-notice">※ 최근 3개월 실적만 보여집니다.</p>
+            <p class="mycard-notice">※ 거래가 있는 달부터 이번 달까지 볼 수 있습니다.</p>
           </section>
 
           <section class="mycard-panel benefit-tier-panel">
@@ -990,7 +994,7 @@ function dateLabel(date) {
           목록 끝 표시가 아니라 이 화면이 무엇을 보여주는지에 대한 안내라서,
           불러오는 중이든 내역이 없든 조건 없이 보여준다.
         -->
-        <p class="mycard-history-notice">최근 3개월 내역을 제공합니다.</p>
+        <p class="mycard-history-notice">거래가 있는 달부터 이번 달까지 제공합니다.</p>
 
         <p v-if="isTransactionsLoading" class="py-6 text-center text-[13px] text-sub">
           불러오는 중이에요
