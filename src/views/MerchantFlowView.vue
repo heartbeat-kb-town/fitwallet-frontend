@@ -697,7 +697,7 @@ async function confirmPin() {
         <img :src="iconPayment" alt="" width="22" height="22" /><span>결제</span>
       </button>
       <button type="button">
-        <img :src="iconMycard" alt="" width="22" height="22" /><span>내 카드</span>
+        <img :src="iconMycard" alt="" width="22" height="22" /><span>카드 내역</span>
       </button>
       <button type="button">
         <img :src="iconReport" alt="" width="22" height="22" /><span>리포트</span>
