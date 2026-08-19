@@ -900,9 +900,23 @@ onBeforeUnmount(() => {
               <template v-else><span></span><i></i></template>
             </div>
             <div class="recommendation-copy">
-              <strong>{{ card.cardName }}</strong>
+              <!--
+                `!` 가 필요하다. `.recommendation-copy > strong { font-size: 13px }` 가
+                특이도(0,1,1)로 유틸리티(0,1,0)를 이긴다. 아래 칩들도 같은 이유다.
+              -->
+              <strong class="!text-[15px]">{{ card.cardName }}</strong>
               <div>
-                <span>예상 혜택 {{ won(card.expectedBenefit) }}</span>
+                <!--
+                  예상 혜택은 이 카드를 고를 이유이므로 키워드 칩과 달리 보여야 한다.
+                  키워드는 옅은 크림 바탕에 테두리(`bg-icon-bg` + `border-line`)인데,
+                  이건 primary 를 꽉 채워 눌러 담는다. 테두리도 같은 색으로 덮어야
+                  칩 크기가 키워드와 어긋나지 않는다.
+
+                  `#ffcc00` 바탕에 `text-ink` 는 대비가 넉넉하다.
+                -->
+                <span class="!border-primary !bg-primary !text-[11px] font-bold !text-ink">
+                  예상 혜택 {{ won(card.expectedBenefit) }}
+                </span>
               </div>
             </div>
 
