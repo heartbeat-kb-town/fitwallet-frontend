@@ -930,9 +930,15 @@ onBeforeUnmount(() => {
               이었는데, 조각내 나열하면 어떤 조건이 붙는 카드인지 훑어보기 쉽다.
               문장을 지우고 옮긴 것이라 같은 내용이 두 번 나오지 않는다.
 
-              카드 그림 아래에 둔다. `.recommendation-card` 는 `96px 1fr` 2열 그리드라
-              그냥 넣으면 왼쪽 96px 칸에 갇히는데, `전월 실적 300,000원 이상` 같은 칩은
-              거기 절대 안 들어간다. 그래서 **두 열을 걸쳐** 그림과 설명 아래 한 줄을 쓴다.
+              카드 그림 아래, **`신청하기` 버튼과 같은 줄**에 둔다.
+
+              흐름에 두면 그리드에 줄이 하나 더 생겨 카드가 그만큼(약 36px) 길어진다.
+              그런데 버튼이 `position: absolute` 로 떠 있고 `.recommendation-card` 가
+              이미 `padding-bottom: 46px` 로 그 자리를 비워 두고 있어서, 그 빈 띠를 같이
+              쓰면 **카드를 늘리지 않고** 한 줄을 더 놓을 수 있다.
+
+              `bottom`·높이는 버튼과 같은 값이라 세로 가운데가 맞는다. 오른쪽은 버튼
+              너비만큼 비워 둬야 칩이 버튼 밑으로 기어들지 않는다.
 
               칩 모양은 `.recommendation-copy div span` 안에서만 먹는 규칙이라 여기서는
               유틸리티로 다시 짠다. 색은 토큰만 쓴다(테두리는 `#ede8dc` 대신 `border-line`,
@@ -940,7 +946,7 @@ onBeforeUnmount(() => {
             -->
             <div
               v-if="recommendationKeywords(card.description).length"
-              class="col-span-2 flex flex-wrap gap-1"
+              class="absolute right-[92px] bottom-[10px] left-0 flex min-h-[34px] flex-wrap items-center gap-1"
             >
               <span
                 v-for="keyword in recommendationKeywords(card.description)"
