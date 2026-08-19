@@ -109,6 +109,34 @@ function openMerchants({ categoryId, title, query = '' }) {
   router.push({ name: 'merchants', query: { categoryId, title, query } })
 }
 
+/**
+ * 자주 찾는 장소를 고르면 **금액 입력 화면으로 간다** (#194).
+ *
+ * 예전에는 가맹점 목록으로 보냈는데, 이 카드는 어느 가게인지 이미 정해 놓고 누르는 자리다.
+ * 목록으로 보내면 방금 고른 가게를 목록에서 한 번 더 찾아야 했다. 가맹점 화면에서 가게를
+ * 고른 뒤의 흐름(`MerchantFlowView.selectStore`, #144)과 같은 자리로 바로 붙인다.
+ *
+ * ⚠️ **`returnTo` 는 뒤로 가기 주소만이 아니다.** `PickAmountView.goToPick` 이 금액을 넣은 뒤
+ * **PICK 을 그릴 주소**로도 쓴다 — 그 주소에 `store` · `storeId` · `amount` 를 실어 보내고
+ * `MerchantFlowView` 가 그 쿼리로 PICK 을 복원한다. 그래서 홈 주소를 넣으면 안 된다.
+ * 금액을 입력해도 홈으로 돌아오고 PICK 이 뜨지 않는다.
+ *
+ * 그래서 `returnTo` 에는 가맹점 목록 주소를 넣고, **뒤로 갈 곳은 `backTo` 로 따로 넘긴다.**
+ * 홈에서 들어왔으니 뒤로 가면 홈이어야 한다.
+ */
+function openPlaceAmount(place) {
+  const returnTo = router.resolve({
+    name: 'merchants',
+    query: { categoryId: place.categoryId, title: place.name, query: place.name },
+  }).fullPath
+
+  router.push({
+    name: 'pick-amount',
+    // `place.id` 는 응답의 `storeId` 다 (`places` computed 참고). 쿼리는 문자열로 넘긴다.
+    query: { storeId: String(place.id), store: place.name, returnTo, backTo: '/home' },
+  })
+}
+
 function goToMyCard() {
   router.push({ name: 'my-card' })
 }
@@ -313,13 +341,7 @@ function selectTab(index, label) {
           v-for="place in places"
           :key="place.id"
           class="place-card"
-          @click="
-            openMerchants({
-              categoryId: place.categoryId,
-              title: place.name,
-              query: place.name,
-            })
-          "
+          @click="openPlaceAmount(place)"
         >
           <!--
             백엔드가 가게 사진을 주지 않아 **카테고리 대표 사진**을 그린다.
