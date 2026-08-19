@@ -604,8 +604,17 @@ onBeforeUnmount(() => {
             <div class="relative px-5 pt-4 pb-5">
               <div class="flex items-center justify-between gap-2">
                 <span class="text-[13px] text-sub">총 받은 혜택</span>
+                <!--
+                  Preflight 를 빼둔 프로젝트라 `bg-transparent` 를 직접 준다.
+                  안 주면 브라우저 기본 버튼 배경(회색 알약)이 화살표 뒤에 그대로 보인다.
+                -->
                 <div class="flex shrink-0 items-center gap-1 text-muted-deep">
-                  <button type="button" aria-label="이전 달" @click="shiftMonth(-1)">
+                  <button
+                    type="button"
+                    aria-label="이전 달"
+                    class="flex bg-transparent p-0"
+                    @click="shiftMonth(-1)"
+                  >
                     <ChevronLeft :size="16" />
                   </button>
                   <strong class="text-[13px] font-bold text-sub">{{ monthLabel }}</strong>
@@ -614,7 +623,7 @@ onBeforeUnmount(() => {
                     type="button"
                     aria-label="다음 달"
                     :disabled="isCurrentMonth"
-                    class="disabled:opacity-30"
+                    class="flex bg-transparent p-0 disabled:opacity-30"
                     @click="shiftMonth(1)"
                   >
                     <ChevronRight :size="16" />
@@ -683,8 +692,14 @@ onBeforeUnmount(() => {
             <div class="relative px-5 pt-4 pb-5">
               <div class="flex items-center justify-between gap-2">
                 <span class="text-[13px] text-sub">총 놓친 혜택</span>
+                <!-- 받은 혜택 카드와 같다. `bg-transparent` 가 없으면 회색 알약이 보인다. -->
                 <div class="flex shrink-0 items-center gap-1 text-muted-deep">
-                  <button type="button" aria-label="이전 달" @click="shiftMonth(-1)">
+                  <button
+                    type="button"
+                    aria-label="이전 달"
+                    class="flex bg-transparent p-0"
+                    @click="shiftMonth(-1)"
+                  >
                     <ChevronLeft :size="16" />
                   </button>
                   <strong class="text-[13px] font-bold text-sub">{{ monthLabel }}</strong>
@@ -692,7 +707,7 @@ onBeforeUnmount(() => {
                     type="button"
                     aria-label="다음 달"
                     :disabled="isCurrentMonth"
-                    class="disabled:opacity-30"
+                    class="flex bg-transparent p-0 disabled:opacity-30"
                     @click="shiftMonth(1)"
                   >
                     <ChevronRight :size="16" />
