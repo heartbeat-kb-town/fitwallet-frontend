@@ -905,19 +905,6 @@ onBeforeUnmount(() => {
                 특이도(0,1,1)로 유틸리티(0,1,0)를 이긴다. 아래 칩들도 같은 이유다.
               -->
               <strong class="!text-[15px]">{{ card.cardName }}</strong>
-              <div>
-                <!--
-                  예상 혜택은 이 카드를 고를 이유이므로 키워드 칩과 달리 보여야 한다.
-                  키워드는 옅은 크림 바탕에 테두리(`bg-icon-bg` + `border-line`)인데,
-                  이건 primary 를 꽉 채워 눌러 담는다. 테두리도 같은 색으로 덮어야
-                  칩 크기가 키워드와 어긋나지 않는다.
-
-                  `#ffcc00` 바탕에 `text-ink` 는 대비가 넉넉하다.
-                -->
-                <span class="!border-primary !bg-primary !text-[11px] font-bold !text-ink">
-                  예상 혜택 {{ won(card.expectedBenefit) }}
-                </span>
-              </div>
             </div>
 
             <!--
@@ -945,6 +932,22 @@ onBeforeUnmount(() => {
                 {{ keyword }}
               </span>
             </div>
+            <!--
+              예상 혜택. 카드명 바로 아래에 있던 것을 키워드 바로 밑으로 내렸다.
+
+              **`신청하기` 줄까지 내리지 않는다.** 버튼 자리(`padding-bottom: 46px`)에
+              띄워 봤더니 키워드와 멀어져 따로 노는 값처럼 보였다. 흐름에 그대로 두어
+              키워드 한 줄 아래에 붙인다.
+
+              바탕은 키워드와 같은 옅은 크림이고 **테두리만 primary** 다. 꽉 채운 노랑은
+              이 작은 칸에서 너무 진했다. 글자는 `text-ink` 라 크림 위에서 대비가 넉넉하다
+              (`text-primary-dark` 는 크림 바탕에서 2:1 밖에 안 나온다).
+            -->
+            <span
+              class="col-span-2 w-fit rounded-md border border-primary bg-icon-bg px-2 py-0.5 text-[11px] font-bold text-ink"
+            >
+              예상 혜택 {{ won(card.expectedBenefit) }}
+            </span>
             <button type="button" @click="notify('카드 신청 페이지는 준비 중이에요.')">
               신청하기
             </button>
