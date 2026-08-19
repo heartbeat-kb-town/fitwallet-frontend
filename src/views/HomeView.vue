@@ -12,6 +12,8 @@ let locationConsented = false
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Menu } from 'lucide-vue-next'
+// 헤더 로고. 로그인 화면(`LoginView`)과 같은 파일을 쓴다 — 그림을 두 벌로 두지 않는다.
+import titleImage from '@/assets/title.png'
 import iconSearch from '@/assets/icons/search.svg'
 import iconPigPeek from '@/assets/icons/pig-peek.svg'
 import iconSpeechBubble from '@/assets/icons/speech-bubble.svg'
@@ -203,21 +205,59 @@ function selectTab(index, label) {
 </script>
 
 <template>
-  <header class="header">
-    <!--
-      디자인상 이 자리에 인사말("안녕하세요 김지연님") 대신 픽피와 말풍선이 들어간다.
+  <!--
+    헤더와 본문을 가르는 선. 픽피가 스크롤로 내려가면서 헤더가 흰 띠만 남아, 아래 내용이
+    헤더 밑으로 지나갈 때 경계가 보이지 않았다.
 
-      픽피는 헤더 아래 검색창에 걸쳐야 한다. 헤더는 80px 고정 밴드이고 검색창은 그 아래
-      스크롤 영역의 첫 요소라, 픽피를 헤더 바닥에 붙인 뒤(`self-end`) 8px 흘러나오게 한다
-      (`translate-y-2`). `translate` 는 레이아웃을 밀지 않아서 헤더 높이가 그대로 유지된다.
-      헤더가 `z-index: 2` 라 흘러나온 부분이 검색창 위에 그려진다.
+    색은 토큰(`border-line` = `#e9e4dc`)이고 리포트 헤더(`.report-header`)가 쓰는 선과 같다 —
+    화면마다 다른 회색을 쓰지 않는다. `style.css` 는 동결이라 유틸리티로 얹는다.
+  -->
+  <header class="header border-b border-line">
+    <!--
+      픽피와 말풍선은 아래 스크롤 영역으로 내려갔다 (#192). 그 자리에 서비스 로고를 둔다.
+
+      **로그인 화면이 쓰는 `assets/title.png` 를 그대로 쓴다.** 같은 그림을 파일 두 벌로
+      두면 한쪽만 바뀌었을 때 화면끼리 로고가 달라진다.
+
+      원본은 700×200(3.5:1)이다. 헤더가 80px 이고 위 패딩이 13px 이라 34px 로 잡으면
+      아래로 넉넉히 남는다. `width` 는 비율대로 따라오게 `h-*` 만 준다.
+
+      장식이 아니라 **서비스 이름**이므로 `alt` 를 채운다.
+    -->
+    <!--
+      `self-end` 로 아래에 붙인다. 헤더는 `padding: 13px 20px 0` 이라 가운데 정렬하면 위 패딩
+      때문에 로고가 위쪽으로 치우쳐 보인다. 오른쪽 마이페이지 버튼도 `self-end` 라 둘의
+      아래 선이 맞는다.
+    -->
+    <img :src="titleImage" alt="PickPIG" class="mb-2 h-[34px] w-auto self-end" />
+
+    <button class="icon-button mb-1 self-end" aria-label="마이페이지 열기" @click="openMyPage()">
+      <Menu :size="23" />
+    </button>
+  </header>
+
+  <div class="scroll-content">
+    <!--
+      디자인상 인사말("안녕하세요 김지연님") 자리를 대신하는 픽피와 말풍선이다.
+
+      **스크롤에 실려야 한다** (#192). 예전에는 헤더 안에 있었는데, 헤더가 80px 고정 밴드라
+      본문을 내려도 픽피만 그 자리에 남았다. 걸쳐 있던 검색창은 올라가는데 픽피는 허공에
+      뜬 것처럼 보였다. 스크롤 영역의 첫 요소로 옮겨 검색창과 같이 움직인다.
+
+      겹침은 **음수 아래 마진**으로 만든다. 헤더에 있을 때는 `translate-y-2` 로 밴드 밖으로
+      흘려보냈지만, `translate` 는 레이아웃을 밀지 않아 흐름 안에서는 아래 요소를 끌어오지
+      못한다. `-mb-2` 가 검색창을 8px 끌어올려 같은 겹침을 만든다.
 
       8px 은 에셋 여백까지 계산한 값이다. `pig-peek.svg` 는 55×60 캔버스 안에서 그림이
-      y 15~57.3 에만 있어 **아래로 2.7px 이 비어 있다.** 캔버스를 8px 내리면 실제 그림은
+      y 15~57.3 에만 있어 **아래로 2.7px 이 비어 있다.** 8px 을 끌어올리면 실제 그림은
       검색창을 5px 파고든다 — 디자인의 겹침과 같다.
+
+      `relative z-[1]` 이 없으면 뒤에 오는 검색창이 위에 그려져 픽피 아랫부분이 가려진다.
+      헤더의 `z-index: 2` 가 하던 일을 대신하는 것이다.
+      왼쪽 `pl-3`(12px)은 헤더에 있을 때와 같은 자리다 — 헤더 패딩 20px 에 `-ml-2` 였다.
     -->
-    <div class="flex translate-y-2 items-end self-end">
-      <img :src="iconPigPeek" alt="" width="55" height="60" class="-ml-2 shrink-0" />
+    <div class="relative z-[1] -mb-2 flex items-end pl-3">
+      <img :src="iconPigPeek" alt="" width="55" height="60" class="shrink-0" />
       <!--
         말풍선은 디자이너가 준 도형(120×26)이고 글자가 들어 있지 않다. 이미지를 깔고 그 위에
         실제 텍스트를 얹는다 — 글자를 이미지로 구우면 읽히지도, 확대에도 견디지 못한다.
@@ -236,12 +276,6 @@ function selectTab(index, label) {
       </div>
     </div>
 
-    <button class="icon-button mb-1 self-end" aria-label="마이페이지 열기" @click="openMyPage()">
-      <Menu :size="23" />
-    </button>
-  </header>
-
-  <div class="scroll-content">
     <div class="search-wrap">
       <button class="search-bar" @click="openSearch()">
         <img :src="iconSearch" alt="" width="19" height="19" />
