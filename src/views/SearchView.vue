@@ -4,8 +4,10 @@ import { useRouter } from 'vue-router'
 import * as storeApi from '@/api/storeApi'
 import { useAsyncState } from '@/composables/useAsyncState'
 import { useToast } from '@/composables/useToast'
+import { usePaymentStore } from '@/stores/paymentStore'
 
 const router = useRouter()
+const paymentStore = usePaymentStore()
 const { showToast } = useToast()
 
 const searchInput = ref(null)
@@ -57,9 +59,23 @@ async function selectWord(word) {
   submitSearch()
 }
 
-// 홈은 셸의 기본 화면이라 query 없이 셸로 보내면 된다.
+// 뒤로가기와 하단 탭 `검색` 칸이 함께 쓴다. 둘 다 홈 화면(검색창·카테고리)으로 간다.
 function goHome() {
   router.push({ name: 'home' })
+}
+
+// 하단 탭 `홈` 칸. 결제 화면을 연다. 들어가면 카드 선택부터 시작한다 (#66).
+function openPayment() {
+  paymentStore.reset()
+  router.push({ name: 'payment' })
+}
+
+function goToMyCard() {
+  router.push({ name: 'my-card' })
+}
+
+function openReport() {
+  router.push({ name: 'report' })
 }
 
 // 검색 조건은 store 가 아니라 URL 에 싣는다. 이 조건은 가맹점 화면 하나가 읽고,
@@ -160,27 +176,37 @@ function submitSearch() {
     </div>
 
     <nav class="search-bottom-nav" aria-label="하단 메뉴">
-      <button class="active" type="button" @click="goHome()">
+      <!--
+        라벨과 아이콘만 바뀌었다 (#198). 첫 칸 `검색` 은 홈 화면(검색창·카테고리)을,
+        둘째 칸 `홈` 은 결제 화면을 가리킨다.
+
+        **켜지는 칸이 없다.** 이 화면은 홈의 검색창으로 들어오는 곳이라 어느 탭의 목적지도
+        아니다. 예전에는 `홈` 이 켜져 있었는데 여기는 홈이 아니다.
+
+        이 하단 탭만 `<img>` 가 아니라 인라인 SVG 를 쓰고 `stroke: currentColor` 라,
+        색을 켜야 할 때 `.active` 하나로 글자와 아이콘이 함께 물든다.
+      -->
+      <button type="button" @click="goHome()">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m16.5 16.5 4 4" />
+        </svg>
+        <span>검색</span>
+      </button>
+      <button type="button" @click="openPayment()">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" />
         </svg>
         <span>홈</span>
       </button>
-      <button type="button">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="3" y="5" width="18" height="14" rx="2" />
-          <path d="M3 10h18" />
-        </svg>
-        <span>결제</span>
-      </button>
-      <button type="button">
+      <button type="button" @click="goToMyCard()">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M4 5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
           <path d="M19 9h2a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-5a3 3 0 0 1 0-6z" />
         </svg>
         <span>카드 내역</span>
       </button>
-      <button type="button">
+      <button type="button" @click="openReport()">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="m3 17 6-6 4 4 8-9" />
           <path d="M15 6h6v6" />
