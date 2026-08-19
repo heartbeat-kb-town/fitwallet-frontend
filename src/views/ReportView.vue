@@ -10,6 +10,7 @@ import {
   Info,
   Smartphone,
   CreditCard,
+  TrendingUp,
 } from 'lucide-vue-next'
 import iconHome from '@/assets/icons/home.svg'
 import iconPayment from '@/assets/icons/payment.svg'
@@ -909,19 +910,27 @@ onBeforeUnmount(() => {
               <!--
                 예상 혜택은 **카드명 바로 밑**이다. 이 카드를 고를 이유라 이름 다음에 와야 한다.
 
-                `block w-fit` 이 필요하다. `strong` 도 이 `span` 도 인라인이라 그냥 두면
-                카드명과 한 줄에 붙어 버린다. 예전에는 `div` 로 감싸서 줄이 나뉘었는데,
-                그 `div` 는 `.recommendation-copy div span` 규칙(옅은 칩 모양)을 끌고 와서
-                유틸리티를 `!` 로 덮어야 했다. 감싸지 않으면 그 규칙이 아예 걸리지 않는다.
+                상자에 담지 않는다. 아래 키워드도 칩이라 상자가 둘 겹치면 어느 쪽이 값이고
+                어느 쪽이 조건인지 안 갈렸다. 대신 리포트의 다른 숫자들과 같은 방식
+                (작은 라벨 + 큰 숫자)으로 적고, 앞에 동그란 아이콘을 하나 붙여 눈이 먼저 닿게 한다.
+                아이콘은 장식이라 스크린리더에서 뺀다 — 라벨이 이미 무엇인지 말한다.
 
-                바탕은 키워드와 같은 옅은 크림이고 **테두리만 primary** 다. 꽉 채운 노랑은
-                이 작은 칸에서 너무 진했다. 글자는 `text-ink` 라 크림 위에서 대비가 넉넉하다
-                (`text-primary-dark` 는 크림 바탕에서 2:1 밖에 안 나온다).
+                **`div` 로 감싸면 안 된다.** `.recommendation-copy div` 와
+                `.recommendation-copy div span` 이 안쪽을 전부 칩 모양으로 되돌린다.
+                `span` 으로 감싸면 그 규칙이 아예 걸리지 않아 `!` 없이 짤 수 있다.
+                `flex` 를 직접 주므로 인라인이라 카드명과 붙는 문제도 없다.
               -->
-              <span
-                class="mt-3 block w-fit rounded-md border border-primary bg-icon-bg px-2 py-0.5 text-[11px] font-bold text-ink"
-              >
-                예상 혜택 {{ won(card.expectedBenefit) }}
+              <span class="mt-2.5 flex items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  class="grid size-[18px] shrink-0 place-items-center rounded-full bg-icon-bg text-primary-dark"
+                >
+                  <TrendingUp :size="11" />
+                </span>
+                <span class="text-[11px] text-sub">예상 혜택</span>
+                <strong class="text-[16px] leading-none font-bold text-ink">
+                  {{ won(card.expectedBenefit) }}
+                </strong>
               </span>
             </div>
 
