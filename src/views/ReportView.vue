@@ -721,8 +721,12 @@ onBeforeUnmount(() => {
                   걸터앉은** 모습으로 쓰라고 만들어졌다.
 
                   그래서 총액이 아니라 **이 칸 줄을 기준으로** 앉힌다. `bottom: calc(100% - 12px)`
-                  는 그림의 아랫변을 줄의 윗변보다 12px 아래에 두라는 뜻이라, 앞발만 칸에 걸친다.
+                  는 그림의 아랫변을 줄의 윗변보다 12px 아래에 두라는 뜻이다.
                   카드 위에서부터 거리를 재면 총액 자릿수가 바뀔 때마다 걸친 정도가 달라진다.
+
+                  `50px` 이다. 62px 일 때는 그림 윗변이 월 표시를 파고들었다 —
+                  받은 혜택은 3px, 놓친 혜택은 10px 겹쳤다(실측). 줄이면 아랫변 기준이라
+                  윗변이 그만큼 내려와 간격이 생긴다.
 
                   칸보다 위에 그려야(`z-[1]`) 앞발이 칸 밑으로 숨지 않는다.
                 -->
@@ -730,7 +734,7 @@ onBeforeUnmount(() => {
                   :src="pigSmilePeek"
                   alt=""
                   aria-hidden="true"
-                  class="pointer-events-none absolute right-4 bottom-[calc(100%-12px)] z-[1] w-[62px]"
+                  class="pointer-events-none absolute right-4 bottom-[calc(100%-12px)] z-[1] w-[50px]"
                 />
 
                 <div class="min-w-0 flex-1 rounded-xl bg-icon-bg px-3.5 py-3">
@@ -806,12 +810,20 @@ onBeforeUnmount(() => {
                 카드를 잘못 골라 놓친 것이다. 글자만으로는 나란히 놓였을 때 잘 안 갈린다.
               -->
               <div class="relative mt-3 flex gap-3">
-                <!-- 받은 혜택 카드와 같은 방식으로 칸의 윗변에 걸터앉힌다 (위 주석 참고). -->
+                <!--
+                  받은 혜택 카드와 같은 방식으로 칸의 윗변에 걸터앉힌다 (위 주석 참고).
+                  폭도 `50px` 로 같다 — 몸통이 같은 크기로 그려진다.
+
+                  ⚠️ **아래로 미는 값만 다르다(12px → 15px).** 이 에셋은 캔버스 아래쪽에
+                  앞발이 차지하는 투명 여백이 훨씬 크다(41/465 = 8.8%, 웃는 픽피는 2/56 = 3.6%).
+                  같은 값을 주면 몸통이 칸에 덜 걸쳐 혼자 떠 보인다. 이 크기에서 여백 차이가
+                  약 3px 이라 그만큼 더 민다.
+                -->
                 <img
                   :src="pigCryPeek"
                   alt=""
                   aria-hidden="true"
-                  class="pointer-events-none absolute right-4 bottom-[calc(100%-12px)] z-[1] w-[62px]"
+                  class="pointer-events-none absolute right-4 bottom-[calc(100%-15px)] z-[1] w-[50px]"
                 />
 
                 <div class="min-w-0 flex-1 rounded-xl bg-danger-bg px-3.5 py-3">
