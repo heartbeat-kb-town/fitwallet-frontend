@@ -874,7 +874,7 @@ onBeforeUnmount(() => {
         </button>
         <button type="button" @click="openReport()">
           <img :src="iconReport" alt="" width="22" height="22" />
-          <span>리포트</span>
+          <span>혜택</span>
         </button>
       </nav>
 

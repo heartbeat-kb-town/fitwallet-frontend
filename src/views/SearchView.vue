@@ -185,7 +185,7 @@ function submitSearch() {
           <path d="m3 17 6-6 4 4 8-9" />
           <path d="M15 6h6v6" />
         </svg>
-        <span>리포트</span>
+        <span>혜택</span>
       </button>
     </nav>
   </div>

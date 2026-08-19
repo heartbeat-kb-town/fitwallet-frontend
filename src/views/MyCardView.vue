@@ -754,7 +754,7 @@ function dateLabel(date) {
           <img :src="iconMycardActive" alt="" width="22" height="22" /><span>카드 내역</span>
         </button>
         <button type="button" @click="openReport()">
-          <img :src="iconReport" alt="" width="22" height="22" /><span>리포트</span>
+          <img :src="iconReport" alt="" width="22" height="22" /><span>혜택</span>
         </button>
       </nav>
     </template>
