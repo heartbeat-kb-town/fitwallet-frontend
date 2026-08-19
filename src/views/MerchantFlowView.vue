@@ -93,6 +93,11 @@ function navigateTo(target) {
     router.push({ name: 'my-card' })
     return
   }
+  // `report` 분기가 없으면 마지막 줄로 떨어져 홈으로 간다. 탭 이름과 라우트 이름이 다르다.
+  if (target === 'report') {
+    router.push({ name: 'report' })
+    return
+  }
   router.push({ name: 'home' })
 }
 
@@ -696,10 +701,11 @@ async function confirmPin() {
       <button type="button" @click="navigateTo('payment')">
         <img :src="iconPayment" alt="" width="22" height="22" /><span>결제</span>
       </button>
-      <button type="button">
+      <!-- 두 버튼에 핸들러가 없어 이 화면에서 나가는 길이 뒤로가기뿐이었다 (#196). -->
+      <button type="button" @click="navigateTo('mycard')">
         <img :src="iconMycard" alt="" width="22" height="22" /><span>카드 내역</span>
       </button>
-      <button type="button">
+      <button type="button" @click="navigateTo('report')">
         <img :src="iconReport" alt="" width="22" height="22" /><span>혜택</span>
       </button>
     </nav>
