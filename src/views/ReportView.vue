@@ -904,20 +904,32 @@ onBeforeUnmount(() => {
               <div>
                 <span>예상 혜택 {{ won(card.expectedBenefit) }}</span>
               </div>
-              <!--
-                키워드. 예전에는 같은 내용이 `<p>` 한 줄(`카페/디저트 5% 할인, 전월 실적 …`)
-                이었는데, 조각내서 나열하면 어떤 조건이 붙는 카드인지 훑어보기 쉽다.
-                문장을 지우고 옮긴 것이라 같은 내용이 두 번 나오지 않는다.
+            </div>
 
-                `.recommendation-copy div` 가 이미 `display: flex` 와 칩 모양을 잡아 준다.
-                `flex-wrap` 은 그 규칙에 없어서 유틸리티가 그대로 먹는다 — 칩이 셋이면
-                한 줄에 안 들어간다.
-              -->
-              <div v-if="recommendationKeywords(card.description).length" class="mt-1.5 flex-wrap">
-                <span v-for="keyword in recommendationKeywords(card.description)" :key="keyword">
-                  {{ keyword }}
-                </span>
-              </div>
+            <!--
+              키워드. 예전에는 같은 내용이 `<p>` 한 줄(`카페/디저트 5% 할인, 전월 실적 …`)
+              이었는데, 조각내 나열하면 어떤 조건이 붙는 카드인지 훑어보기 쉽다.
+              문장을 지우고 옮긴 것이라 같은 내용이 두 번 나오지 않는다.
+
+              카드 그림 아래에 둔다. `.recommendation-card` 는 `96px 1fr` 2열 그리드라
+              그냥 넣으면 왼쪽 96px 칸에 갇히는데, `전월 실적 300,000원 이상` 같은 칩은
+              거기 절대 안 들어간다. 그래서 **두 열을 걸쳐** 그림과 설명 아래 한 줄을 쓴다.
+
+              칩 모양은 `.recommendation-copy div span` 안에서만 먹는 규칙이라 여기서는
+              유틸리티로 다시 짠다. 색은 토큰만 쓴다(테두리는 `#ede8dc` 대신 `border-line`,
+              육안으로 구분되지 않는다).
+            -->
+            <div
+              v-if="recommendationKeywords(card.description).length"
+              class="col-span-2 flex flex-wrap gap-1"
+            >
+              <span
+                v-for="keyword in recommendationKeywords(card.description)"
+                :key="keyword"
+                class="rounded-md border border-line bg-icon-bg px-[7px] py-0.5 text-[10px] text-sub"
+              >
+                {{ keyword }}
+              </span>
             </div>
             <button type="button" @click="notify('카드 신청 페이지는 준비 중이에요.')">
               신청하기
