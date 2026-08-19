@@ -140,7 +140,7 @@ const confirmInfo = ref(null)
  * 그쪽은 목값이 정상 동작이다(가맹점 단말이 없어 백엔드가 지어내는 값이다).
  *
  * ⚠️ **이것으로 다 해결되지 않는다.** 백엔드는 덮어쓴 금액으로 혜택과 `payment_transaction`
- * 을 만들기 때문에(`completeAndBuildResponse`), 아래 `receivedBenefit` 과 결제 내역·리포트는
+ * 을 만들기 때문에(`completeAndBuildResponse`), 아래 `expectedBenefit` 과 결제 내역·리포트는
  * 여전히 4,500원 기준이다. 완전한 해결은 백엔드 수정이다.
  */
 const receiptStoreName = computed(
@@ -185,8 +185,14 @@ let processingStartedAt = 0
 
 const activeCard = computed(() => cards.value[activeIndex.value])
 
-/** 결제로 받은 혜택. 응답 필드명은 `expectedBenefitAmount` 지만 완료 시점에는 확정된 값이다. */
-const receivedBenefit = computed(() => Number(paymentResult.value?.expectedBenefitAmount) || 0)
+/**
+ * 이 결제로 받을 혜택. 백엔드 응답 필드명(`expectedBenefitAmount`)을 그대로 따른다.
+ *
+ * 예전에는 `receivedBenefit` 이라 부르고 화면에도 `받은 혜택` 으로 적었다. 확정된 값이라는
+ * 판단이었는데, 이 금액은 **아직 청구·적립이 반영되기 전**이다. 화면 문구를 `예상 혜택` 으로
+ * 되돌리면서 이름도 응답 필드에 맞췄다 — 화면과 응답이 다른 말을 쓰면 대조할 때 헷갈린다.
+ */
+const expectedBenefit = computed(() => Number(paymentResult.value?.expectedBenefitAmount) || 0)
 
 /** 금액 표기. 값이 없으면 0 원이 아니라 빈 표시로 둔다 — 0 원 결제와 구분되어야 한다. */
 function won(value) {
@@ -1171,10 +1177,20 @@ onBeforeUnmount(() => {
             <dt>결제 금액</dt>
             <dd>{{ won(receiptAmount) }}</dd>
           </div>
-          <!-- 혜택이 없는 결제도 있다. 0원을 "받은 혜택" 으로 적기보다 줄을 빼는 편이 정확하다. -->
-          <div v-if="receivedBenefit > 0">
-            <dt>받은 혜택</dt>
-            <dd class="benefit">{{ won(receivedBenefit) }}</dd>
+          <!--
+            혜택이 0원이어도 줄을 보여준다 (#190).
+
+            예전에는 `v-if="expectedBenefit > 0"` 으로 빼놨는데, **줄이 없으면 혜택을 못 받은
+            것인지 화면이 덜 그려진 것인지 구분되지 않는다.** 결제마다 영수증 줄 수가 달라지는
+            것도 어색했다. 영수증은 결과를 확인하는 화면이고, 혜택이 없었다는 것도 결과다.
+
+            혜택 없이 끝난 결제는 `applied_benefit_service_id` 가 NULL 이라 백엔드가
+            `expectedBenefitAmount` 를 null 로 준다(`PaymentMapper` 의 LEFT JOIN).
+            `expectedBenefit` 이 computed 에서 이미 숫자로 눌러 두므로 `0원` 으로 적힌다.
+          -->
+          <div>
+            <dt>예상 혜택</dt>
+            <dd class="benefit">{{ won(expectedBenefit) }}</dd>
           </div>
         </dl>
       </div>
