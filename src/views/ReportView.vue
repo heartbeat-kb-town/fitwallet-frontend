@@ -400,45 +400,16 @@ const LOSS_TYPES = {
 const missedDetail = computed(() => reportStore.missedDetail)
 
 /**
- * 히어로 바탕색.
+ * 손실 유형 칸(=탭)의 테두리.
  *
- * 기존 금색 그라데이션(`#ffcc00 → #ffe999`)을 걷어내고 옅은 크림 단색으로 둔다.
- * 그라데이션 위에 무엇을 얹어도 금색으로 물들어 바꾼 티가 나지 않았다.
+ * Tailwind 유틸리티로는 안 된다 — `style.css` 의 `button { border: 0 }` 이 레이어 밖이라
+ * `@layer utilities` 를 이긴다. `PickAmountView` 의 예/아니요 버튼과 같은 사정이다.
+ * 색은 하드코딩하지 않고 `@theme` 토큰을 읽는다.
  *
- * **값을 적지 않고 토큰을 참조한다**(`--color-icon-bg` = `#fff8e5`).
- * 인라인 style 이라 유틸리티 클래스를 못 쓰지만 `var()` 는 그대로 해석된다.
- *
- * 글씨 대비는 넉넉하다 — `style.css` 의 라벨 `#7a4800` 이 7.2:1,
- * 총액 `#3a2200` 이 14.2:1 이라 색을 덮을 필요가 없다.
+ * 고르지 않은 칸에도 같은 두께를 투명으로 둔다. 안 그러면 고를 때마다 칸이 2px 씩 흔들린다.
  */
-const MISSED_HERO_BACKGROUND = 'var(--color-icon-bg)'
-
-/**
- * "카드 선택 손실" 칸에 걸터앉은 픽피.
- *
- * 이 그림은 앞발이 아래쪽에 따로 그려져 있어서, 무언가의 **윗변에 걸친** 모습으로
- * 쓰라고 만들어진 에셋이다. 그래서 아래 칸 위에 얹는다.
- *
- * 위치는 `.missed-hero` 의 `style.css` 값에서 계산했다.
- *   패딩 20 + 라벨 14 + h2(마진 4 + 34 + 15) = 87 → 아래 칸의 윗변
- *   히어로 높이 ≈ 166 이므로 아래에서 79px 지점이다
- * `bottom: 69px` 은 그 윗변보다 10px 아래, 즉 칸에 **10px 걸치게** 한다.
- * 위가 아니라 아래를 기준으로 잡아야 칸 높이가 흔들려도 걸친 정도가 유지된다.
- *
- * `zIndex` 가 글씨(`relative`)보다 위다. 뒤에 두면 앞발이 칸 밑으로 숨어
- * "얹은" 것이 아니라 잘린 것처럼 보인다. 10px 은 칸의 위쪽 패딩(11px) 안이라
- * 글자를 가리지 않는다.
- *
- * 장식이므로 `aria-hidden` 이고, 칸을 넘치는 만큼은 `overflow: hidden` 이 잘라낸다.
- */
-const MISSED_HERO_PIG_STYLE = {
-  position: 'absolute',
-  bottom: '69px',
-  right: '36px',
-  width: '77px', // 원본 406×465 비율 유지
-  height: '88px',
-  zIndex: 2,
-}
+const MISSED_TAB_STYLE = { border: '2px solid transparent' }
+const MISSED_TAB_SELECTED_STYLE = { border: '2px solid var(--color-danger)' }
 
 /** 안내 문구는 서버가 주지 않는다. 손실 유형을 설명하는 고정 카피라 화면이 들고 있다. */
 const missedInfo = computed(() => LOSS_TYPES[missedTab.value]?.info ?? '')
@@ -769,9 +740,13 @@ onBeforeUnmount(() => {
         <section class="report-panel">
           <div class="flex items-center justify-between gap-2">
             <h2>놓친 혜택</h2>
+            <!--
+              이 링크만 빨강이다 (#202). 받은 혜택 쪽은 primary 를 쓰지만, 이 줄이 여는 것은
+              빨간 카드와 빨간 상세 화면이라 노랑이면 색이 가리키는 곳과 어긋난다.
+            -->
             <button
               type="button"
-              class="flex shrink-0 items-center gap-0.5 bg-transparent !text-[13px] !font-bold text-primary-dark"
+              class="flex shrink-0 items-center gap-0.5 bg-transparent !text-[13px] !font-bold text-danger"
               @click="openPage('missed')"
             >
               세부 내역 보기 <ChevronRight :size="14" />
@@ -1109,62 +1084,92 @@ onBeforeUnmount(() => {
 
     <div v-else class="report-scroll report-detail-scroll">
       <!--
-        상세에서도 달을 옮길 수 있다 (#200). 받은 혜택 상세와 같은 자리(총액 위)에 둔다.
-        **메인의 놓친 혜택 카드와 같은 커서를 쓴다** — 받은 혜택과는 여전히 별개다(#188).
+        메인의 놓친 혜택 카드와 **같은 모양**이다 (#202). 예전에는 이 화면만 크림색 히어로라,
+        메인에서 빨간 카드를 누르고 들어오면 색이 통째로 바뀌어 다른 것을 보는 것처럼 읽혔다.
+
+        다른 점은 하나다 — **아래 두 칸이 탭이다.** 예전에는 알약 모양 탭이 카드 밖에 따로
+        있었는데, 같은 두 손실을 카드 안에서 한 번 보여주고 밖에서 또 고르게 하는 구조였다.
+        칸을 그대로 누르게 하면 "이 금액의 내역" 이라는 뜻이 분명해진다.
       -->
-      <div class="mb-3 flex items-center">
-        <ReportMonthPicker
-          name="놓친 혜택"
-          :label="missedMonthLabel"
-          :is-current-month="isMissedCurrentMonth"
-          @prev="shiftMissedMonth(-1)"
-          @next="shiftMissedMonth(1)"
-        />
-      </div>
+      <div class="overflow-hidden rounded-2xl border border-line">
+        <div class="h-2.5 bg-danger"></div>
+        <div class="relative px-5 pt-4 pb-5">
+          <div class="flex items-center justify-between gap-2">
+            <!-- `이번 달` 을 뗐다. 선택기로 다른 달을 볼 수 있게 되면서 사실과 어긋난다 (#200). -->
+            <span class="text-[13px] text-sub">총 놓친 혜택</span>
+            <!-- 메인의 놓친 혜택 카드와 같은 커서를 쓴다. 받은 혜택과는 여전히 별개다(#188). -->
+            <ReportMonthPicker
+              name="놓친 혜택"
+              :label="missedMonthLabel"
+              :is-current-month="isMissedCurrentMonth"
+              @prev="shiftMissedMonth(-1)"
+              @next="shiftMissedMonth(1)"
+            />
+          </div>
 
-      <!-- 히어로 세 숫자는 탭과 무관하게 늘 같다. 백엔드가 두 손실을 항상 함께 준다.
-           배경의 카드 그림은 장식이라 스크린리더에서 뺀다. `style.css` 가 동결이라
-           position·overflow 는 인라인으로 얹는다 (받은 혜택 카드 칸과 같은 방식). -->
-      <section
-        class="missed-hero"
-        :style="{ position: 'relative', overflow: 'hidden', background: MISSED_HERO_BACKGROUND }"
-      >
-        <img :src="pigCryPeek" alt="" aria-hidden="true" :style="MISSED_HERO_PIG_STYLE" />
-        <!-- `이번 달` 을 뗐다. 위 선택기로 다른 달을 볼 수 있게 되면서 사실과 어긋난다 (#200). -->
-        <p class="relative">총 놓친 혜택</p>
-        <h2 class="relative">{{ currency(missedDetail.totalMissedBenefit) }}</h2>
-        <div class="relative">
-          <span
-            ><small>▣ 앱 미사용</small
-            ><strong>{{ currency(missedDetail.appUnusedAmount) }}</strong></span
-          >
-          <span
-            ><small>▰ 카드 선택 손실</small
-            ><strong>{{ currency(missedDetail.cardMismatchAmount) }}</strong></span
-          >
+          <strong class="mt-0.5 block text-[28px] leading-tight font-bold text-ink">
+            {{ currency(missedDetail.totalMissedBenefit) }}
+          </strong>
+
+          <!--
+            두 칸이 곧 탭이다. 고른 칸만 테두리로 표시한다 — 배경까지 바꾸면 금액이 읽히는
+            무게가 달라져서, 안 고른 쪽 손실이 작아 보인다. 두 금액은 늘 함께 참이다.
+
+            테두리는 고르지 않은 칸에도 같은 두께로 둔다(투명). 안 그러면 고를 때마다
+            칸 크기가 2px 씩 흔들린다.
+          -->
+          <div class="relative mt-3 flex gap-3">
+            <img
+              :src="pigCryPeek"
+              alt=""
+              aria-hidden="true"
+              class="pointer-events-none absolute right-4 bottom-[calc(100%-15px)] z-[1] w-[50px]"
+            />
+            <button
+              v-for="(lossType, key) in LOSS_TYPES"
+              :key="key"
+              type="button"
+              :aria-pressed="missedTab === key"
+              class="min-w-0 flex-1 rounded-xl bg-danger-bg px-3.5 py-3 text-left"
+              :style="missedTab === key ? MISSED_TAB_SELECTED_STYLE : MISSED_TAB_STYLE"
+              @click="selectMissedTab(key)"
+            >
+              <span class="flex items-center gap-1 text-[12px] text-sub">
+                <Smartphone v-if="key === 'APP_UNUSED'" :size="14" class="shrink-0" />
+                <CreditCard v-else :size="14" class="shrink-0" />
+                {{ lossType.label }}
+              </span>
+              <strong class="mt-1.5 block text-[20px] leading-tight font-bold text-danger">
+                {{
+                  currency(
+                    key === 'APP_UNUSED'
+                      ? missedDetail.appUnusedAmount
+                      : missedDetail.cardMismatchAmount,
+                  )
+                }}
+              </strong>
+            </button>
+          </div>
         </div>
-      </section>
-
-      <div class="missed-tabs">
-        <button
-          v-for="(lossType, key) in LOSS_TYPES"
-          :key="key"
-          type="button"
-          :class="{ active: missedTab === key }"
-          @click="selectMissedTab(key)"
-        >
-          {{ lossType.label }}
-        </button>
       </div>
 
-      <p class="missed-info">ⓘ {{ missedInfo }}</p>
+      <!--
+        설명 상자. 바탕을 위 칸과 같은 연분홍(`bg-danger-bg`)으로 맞춘다 (#202).
+        `style.css` 의 `.missed-info` 가 크림색(`#fffbee`)을 들고 있고 레이어 밖이라 `!` 로 덮는다.
+        테두리도 같은 색으로 덮어 칸과 같은 인상을 준다.
+      -->
+      <p class="missed-info !border-danger-bg !bg-danger-bg">ⓘ {{ missedInfo }}</p>
 
       <!-- 받은 혜택 상세와 같이 소제목을 뺐다 (#200). 위 탭이 이미 무엇의 목록인지 말한다. -->
       <section class="report-category-section missed-section">
         <BaseSpinner v-if="reportStore.isMissedDetailLoading" />
 
         <!-- 그 달에 그 손실이 없으면 빈 배열이 온다. 실제로 흔하다 -->
-        <p v-else-if="!missedDetail.categories.length" class="missed-info">
+        <!-- 위 설명 상자와 같은 바탕이다 (#202). 두 상자가 나란히 서는데 색이 다르면 어긋나 보인다. -->
+        <p
+          v-else-if="!missedDetail.categories.length"
+          class="missed-info !border-danger-bg !bg-danger-bg"
+        >
           이 달에는 {{ LOSS_TYPES[missedTab]?.label }}이 없어요.
         </p>
 
