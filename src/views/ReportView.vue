@@ -215,6 +215,31 @@ function recommendationImageStyle(card) {
   return cardImageStyle(card.cardImageUrl, RECOMMENDATION_VISUAL_RATIO)
 }
 
+/**
+ * 추천 카드의 키워드.
+ *
+ * **카드 상품에 키워드 컬럼이 없다.** 백엔드 스키마의 `keyword` 는 검색 기록용이고
+ * 카드와 무관하다. 대신 추천 응답의 `description` 이 이미 키워드를 이어 붙인 한 줄이라
+ * 그것을 도로 조각낸다 — 없는 것을 지어내지 않고 오는 값만 쓴다.
+ *
+ * 백엔드가 만드는 모양은 이렇다 (`DefaultBenefitReportService.buildDescription`):
+ *
+ *     {카테고리} {N% 할인|N% 적립|N원 할인|N포인트 적립}
+ *     [, 전월 실적 N원 이상]
+ *     [, 월 최대 N원|N포인트|N회 한도]
+ *
+ * ⚠️ **쉼표만으로 자르면 안 된다.** 금액을 `%,d` 로 찍어서 `전월 실적 300,000원 이상`
+ * 처럼 천 단위 쉼표가 섞여 있고, 그 쉼표 뒤에는 공백이 없다. 조각 사이 구분자만
+ * `, `(쉼표+공백)이므로 그것으로 자른다. 카테고리명에는 쉼표가 없다(`카페/디저트` 처럼
+ * 슬래시를 쓴다).
+ */
+function recommendationKeywords(description) {
+  return String(description ?? '')
+    .split(', ')
+    .map((keyword) => keyword.trim())
+    .filter(Boolean)
+}
+
 /* ─── 받은 혜택 상세 (API) ──────────────────────────────────────────────── */
 
 /**
@@ -876,9 +901,22 @@ onBeforeUnmount(() => {
             </div>
             <div class="recommendation-copy">
               <strong>{{ card.cardName }}</strong>
-              <p>{{ card.description }}</p>
               <div>
                 <span>예상 혜택 {{ won(card.expectedBenefit) }}</span>
+              </div>
+              <!--
+                키워드. 예전에는 같은 내용이 `<p>` 한 줄(`카페/디저트 5% 할인, 전월 실적 …`)
+                이었는데, 조각내서 나열하면 어떤 조건이 붙는 카드인지 훑어보기 쉽다.
+                문장을 지우고 옮긴 것이라 같은 내용이 두 번 나오지 않는다.
+
+                `.recommendation-copy div` 가 이미 `display: flex` 와 칩 모양을 잡아 준다.
+                `flex-wrap` 은 그 규칙에 없어서 유틸리티가 그대로 먹는다 — 칩이 셋이면
+                한 줄에 안 들어간다.
+              -->
+              <div v-if="recommendationKeywords(card.description).length" class="mt-1.5 flex-wrap">
+                <span v-for="keyword in recommendationKeywords(card.description)" :key="keyword">
+                  {{ keyword }}
+                </span>
               </div>
             </div>
             <button type="button" @click="notify('카드 신청 페이지는 준비 중이에요.')">
