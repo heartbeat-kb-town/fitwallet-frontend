@@ -19,8 +19,10 @@ import iconPigPeek from '@/assets/icons/pig-peek.svg'
 import iconSpeechBubble from '@/assets/icons/speech-bubble.svg'
 import iconHomeActive from '@/assets/icons/click-home.svg'
 import iconHome from '@/assets/icons/home.svg'
-import iconPayment from '@/assets/icons/payment.svg'
-import iconPaymentActive from '@/assets/icons/payment-selected.svg'
+// 하단 탭 첫 칸의 검색 아이콘. 검색창이 쓰는 `search.svg` 와 그림은 같고 색만 다르다 —
+// 비활성은 다른 탭과 같은 회색(#9B948D), 활성은 노랑(#FFCC00)이다.
+import iconSearchTab from '@/assets/icons/search-tab.svg'
+import iconSearchTabActive from '@/assets/icons/search-tab-selected.svg'
 import iconMycard from '@/assets/icons/mycard.svg'
 import iconMycardActive from '@/assets/icons/mycard-selected.svg'
 import iconReport from '@/assets/icons/report.svg'
@@ -90,14 +92,16 @@ onMounted(() => {
   fetchFrequentPlaces().catch(() => {})
 })
 
-// 결제 탭으로 들어가면 카드 선택부터 시작한다 (기존 navigateTo('payment') 의 초기화).
+// 홈 화면 위쪽 검색창. 최근·인기 검색어 화면으로 들어간다.
+// **하단 탭의 `검색` 칸과 다른 곳이다** — 그 칸은 이 화면 자체를 가리킨다 (#198).
+function openSearch() {
+  router.push({ name: 'search' })
+}
+
+// 하단 탭 `홈` 칸. 결제 화면을 연다. 들어가면 카드 선택부터 시작한다 (#66).
 function openPayment() {
   paymentStore.reset()
   router.push({ name: 'payment' })
-}
-
-function openSearch() {
-  router.push({ name: 'search' })
 }
 
 // 돌아올 주소를 통째로 넘긴다 (#61).
@@ -145,28 +149,31 @@ function openReport(cardId = '') {
   router.push({ name: 'report', query: cardId ? { cardId } : {} })
 }
 
-// 하단 내비게이션 탭: icon(비활성/회색), iconActive(활성/노랑)
+/**
+ * 하단 내비게이션 탭: icon(비활성/회색), iconActive(활성/노랑).
+ *
+ * **라벨과 아이콘만 바뀌었고 가는 곳은 예전 그대로다** (#198).
+ * 첫 칸 `검색` 은 예전 `홈` 칸이라 이 화면(`/home`, 검색창·카테고리)을 가리키고,
+ * 둘째 칸 `홈` 은 예전 `결제` 칸이라 결제 화면(`/payment`)을 가리킨다.
+ * 둘째 칸의 아이콘은 예전 홈 칸이 쓰던 것을 그대로 가져왔다.
+ */
 const navItems = [
+  { label: '검색', icon: iconSearchTab, iconActive: iconSearchTabActive },
   { label: '홈', icon: iconHome, iconActive: iconHomeActive },
-  { label: '결제', icon: iconPayment, iconActive: iconPaymentActive },
   { label: '카드 내역', icon: iconMycard, iconActive: iconMycardActive },
   { label: '혜택', icon: iconReport, iconActive: iconReportActive },
 ]
 
+/** 이 화면은 검색 칸이 가리키는 곳이므로 첫 칸이 켜져 있다. */
+const SEARCH_TAB_INDEX = 0
+
 const selectedCategory = ref(null)
 const consentCategory = ref(null)
 const isSavingConsent = ref(false)
-const activeTab = ref(0)
-const toast = ref('')
-let toastTimer
+const activeTab = ref(SEARCH_TAB_INDEX)
 
-function notify(message) {
-  toast.value = message
-  clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => {
-    toast.value = ''
-  }, 2200)
-}
+// 이 화면의 자체 토스트는 없앴다. 유일한 사용처가 "이 탭은 제외했어요" 였는데 네 칸이 전부
+// 실제 화면으로 이어지면서 부를 일이 사라졌다. 에러 토스트는 공용 `useToast` 가 맡는다.
 
 function chooseCategory(category) {
   selectedCategory.value = category.id
@@ -209,7 +216,14 @@ async function confirmLocation() {
   }
 }
 
-function selectTab(index, label) {
+/**
+ * 하단 탭 이동. 자리는 `navItems` 순서와 같다 (검색 · 홈 · 카드 내역 · 혜택).
+ *
+ * 첫 칸(검색)은 이미 이 화면이라 아무 데도 가지 않는다. 예전에는 여기에
+ * "이 탭은 제외했어요" 토스트가 있었는데, 네 칸이 전부 실제 화면으로 이어지면서
+ * 닿을 수 없는 가지가 됐다.
+ */
+function selectTab(index) {
   activeTab.value = index
   if (index === 1) {
     openPayment()
@@ -221,13 +235,6 @@ function selectTab(index, label) {
   }
   if (index === 3) {
     openReport()
-    return
-  }
-  if (index !== 0) {
-    notify(`${label} 탭은 홈 화면 변환본에서 제외했어요.`)
-    requestAnimationFrame(() => {
-      activeTab.value = 0
-    })
   }
 }
 </script>
@@ -384,7 +391,7 @@ function selectTab(index, label) {
       v-for="(item, index) in navItems"
       :key="item.label"
       :class="{ active: activeTab === index }"
-      @click="selectTab(index, item.label)"
+      @click="selectTab(index)"
     >
       <img
         :src="activeTab === index ? item.iconActive : item.icon"
@@ -419,8 +426,4 @@ function selectTab(index, label) {
   </Transition>
 
   <!-- 혜택 현황·이벤트 시트는 `CardBenefitStatusSection` 과 함께 리포트로 옮겼다. -->
-
-  <Transition name="toast">
-    <div v-if="toast" class="toast">{{ toast }}</div>
-  </Transition>
 </template>

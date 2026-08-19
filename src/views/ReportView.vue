@@ -13,7 +13,7 @@ import {
   TrendingUp,
 } from 'lucide-vue-next'
 import iconHome from '@/assets/icons/home.svg'
-import iconPayment from '@/assets/icons/payment.svg'
+import iconSearchTab from '@/assets/icons/search-tab.svg'
 import iconMycard from '@/assets/icons/mycard.svg'
 import iconReportActive from '@/assets/icons/report-selected.svg'
 import iconFood from '@/assets/icons/category-food.svg'
@@ -64,8 +64,13 @@ function openMyPage() {
 
 // 하단 탭. 이제 전부 라우트다.
 function navigate(target) {
-  if (target === 'payment') {
-    // 결제 탭으로 들어가면 카드 선택부터 시작한다 (#66).
+  // 검색 칸은 홈 화면(검색창·카테고리)을 연다. 라벨만 바뀌었고 가는 곳은 예전 그대로다.
+  if (target === 'search') {
+    router.push({ name: 'home' })
+    return
+  }
+  // 홈 칸은 결제 화면을 연다. 들어가면 카드 선택부터 시작한다 (#66).
+  if (target === 'home') {
     paymentStore.reset()
     router.push({ name: 'payment' })
     return
@@ -1214,11 +1219,11 @@ onBeforeUnmount(() => {
     </div>
 
     <nav class="bottom-nav report-bottom-nav">
+      <button type="button" @click="navigate('search')">
+        <img :src="iconSearchTab" alt="" /><span>검색</span>
+      </button>
       <button type="button" @click="navigate('home')">
         <img :src="iconHome" alt="" /><span>홈</span>
-      </button>
-      <button type="button" @click="navigate('payment')">
-        <img :src="iconPayment" alt="" /><span>결제</span>
       </button>
       <button type="button" @click="navigate('mycard')">
         <img :src="iconMycard" alt="" /><span>카드 내역</span>

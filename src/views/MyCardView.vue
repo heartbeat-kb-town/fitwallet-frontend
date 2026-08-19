@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, ChevronRight, Menu } from 'lucide-vue-next'
 import iconHome from '@/assets/icons/home.svg'
-import iconPayment from '@/assets/icons/payment.svg'
+import iconSearchTab from '@/assets/icons/search-tab.svg'
 import iconMycardActive from '@/assets/icons/mycard-selected.svg'
 import iconReport from '@/assets/icons/report.svg'
 import iconCafe from '@/assets/icons/category-cafe.svg'
@@ -42,14 +42,15 @@ onMounted(async () => {
   cardStore.ensureLastUsedAt()
 })
 
+// 홈 칸은 결제 화면을 연다 (#198). 들어가면 카드 선택부터 시작한다 (#66).
 function goHome() {
-  router.push({ name: 'home' })
-}
-
-// 결제 탭으로 들어가면 카드 선택부터 시작한다 (#66).
-function openPayment() {
   paymentStore.reset()
   router.push({ name: 'payment' })
+}
+
+// 검색 칸은 홈 화면(검색창·카테고리)을 연다. 라벨만 바뀌었고 가는 곳은 예전 그대로다.
+function openSearch() {
+  router.push({ name: 'home' })
 }
 
 // 돌아올 주소를 통째로 넘긴다 (#61).
@@ -748,11 +749,11 @@ function dateLabel(date) {
       </div>
 
       <nav class="bottom-nav">
+        <button type="button" @click="openSearch()">
+          <img :src="iconSearchTab" alt="" width="22" height="22" /><span>검색</span>
+        </button>
         <button type="button" @click="goHome()">
           <img :src="iconHome" alt="" width="22" height="22" /><span>홈</span>
-        </button>
-        <button type="button" @click="openPayment()">
-          <img :src="iconPayment" alt="" width="22" height="22" /><span>결제</span>
         </button>
         <button class="active" type="button">
           <img :src="iconMycardActive" alt="" width="22" height="22" /><span>카드 내역</span>

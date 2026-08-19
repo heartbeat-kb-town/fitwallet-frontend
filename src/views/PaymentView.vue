@@ -2,8 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Menu } from 'lucide-vue-next'
-import iconHome from '@/assets/icons/home.svg'
-import iconPaymentActive from '@/assets/icons/payment-selected.svg'
+import iconHomeActive from '@/assets/icons/click-home.svg'
+import iconSearchTab from '@/assets/icons/search-tab.svg'
 import iconMycard from '@/assets/icons/mycard.svg'
 import iconReport from '@/assets/icons/report.svg'
 import waitingPig from '@/assets/icons/pig-waiting.svg'
@@ -55,6 +55,11 @@ function openMyPage() {
 
 function goToMyCard() {
   router.push({ name: 'my-card' })
+}
+
+// 검색 칸은 홈 화면(검색창·카테고리)을 연다. 라벨만 바뀌었고 가는 곳은 예전 그대로다.
+function openSearch() {
+  router.push({ name: 'home' })
 }
 
 function openReport() {
@@ -866,13 +871,17 @@ onBeforeUnmount(() => {
       </div>
 
       <nav class="bottom-nav">
-        <button type="button" @click="goHome()">
-          <img :src="iconHome" alt="" width="22" height="22" />
-          <span>홈</span>
+        <!--
+          이 화면이 `홈` 칸이 가리키는 곳이다 (#198). 라벨만 `결제` → `홈` 으로 바뀌었고
+          켜지는 칸은 그대로 둘째 칸이다. 아이콘은 예전 홈 칸이 쓰던 것을 가져왔다.
+        -->
+        <button type="button" @click="openSearch()">
+          <img :src="iconSearchTab" alt="" width="22" height="22" />
+          <span>검색</span>
         </button>
         <button class="active" type="button">
-          <img :src="iconPaymentActive" alt="" width="22" height="22" />
-          <span>결제</span>
+          <img :src="iconHomeActive" alt="" width="22" height="22" />
+          <span>홈</span>
         </button>
         <button type="button" @click="goToMyCard()">
           <img :src="iconMycard" alt="" width="22" height="22" />
