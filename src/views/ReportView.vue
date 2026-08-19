@@ -40,6 +40,7 @@ import pigSmilePeek from '@/assets/icons/pig-smile-peek.svg'
 
 import BaseSpinner from '@/components/common/BaseSpinner.vue'
 import CardBenefitStatusSection from '@/components/card/CardBenefitStatusSection.vue'
+import ReportMonthPicker from '@/components/report/ReportMonthPicker.vue'
 import { useCardImage } from '@/composables/useCardImage'
 import { useToast } from '@/composables/useToast'
 import { useCardStore } from '@/stores/cardStore'
@@ -105,8 +106,9 @@ const today = new Date()
  * 월 선택기가 카드 안에 있으므로 하나를 돌리면 그 카드만 바뀌는 것이 자연스럽다.
  * 받은 혜택은 6월을 보면서 놓친 혜택은 7월을 보는 식으로 겹쳐 볼 수 있다.
  *
- * 상세 화면에는 월 선택기가 없다. 받은 혜택 상세는 `receivedCursor` 를,
- * 놓친 혜택 상세는 `missedCursor` 를 따라간다 — 들어온 카드의 달을 그대로 잇는다.
+ * **상세 화면도 같은 커서를 쓴다** (#200). 받은 혜택 상세는 `receivedCursor` 를,
+ * 놓친 혜택 상세는 `missedCursor` 를 본다. 상세에서 달을 옮기면 메인 카드도 따라 바뀐다 —
+ * 같은 것을 보는 두 화면이 서로 다른 달을 가리키면 어느 쪽이 맞는지 알 수 없다.
  */
 const receivedCursor = ref({ year: today.getFullYear(), month: today.getMonth() + 1 })
 const missedCursor = ref({ year: today.getFullYear(), month: today.getMonth() + 1 })
@@ -616,9 +618,7 @@ onBeforeUnmount(() => {
         `left: 50%` + `translateX(-50%)` 로 가운데 정렬이라 마진을 주면 그만큼 밀린다.
       -->
       <h1 :class="{ '!ml-5': page === 'main' }">
-        {{
-          page === 'main' ? '혜택' : page === 'received' ? '받은 혜택 리포트' : '놓친 혜택 리포트'
-        }}
+        {{ page === 'main' ? '혜택' : page === 'received' ? '받은 혜택 상세' : '놓친 혜택 상세' }}
       </h1>
       <button class="report-menu" type="button" aria-label="마이페이지 열기" @click="openMyPage()">
         <Menu :size="23" />
@@ -710,31 +710,13 @@ onBeforeUnmount(() => {
             <div class="relative px-5 pt-4 pb-5">
               <div class="flex items-center justify-between gap-2">
                 <span class="text-[13px] text-sub">총 받은 혜택</span>
-                <!--
-                  Preflight 를 빼둔 프로젝트라 `bg-transparent` 를 직접 준다.
-                  안 주면 브라우저 기본 버튼 배경(회색 알약)이 화살표 뒤에 그대로 보인다.
-                -->
-                <div class="flex shrink-0 items-center gap-1 text-muted-deep">
-                  <button
-                    type="button"
-                    aria-label="받은 혜택 이전 달"
-                    class="flex bg-transparent p-0"
-                    @click="shiftReceivedMonth(-1)"
-                  >
-                    <ChevronLeft :size="16" />
-                  </button>
-                  <strong class="text-[13px] font-bold text-sub">{{ receivedMonthLabel }}</strong>
-                  <!-- 미래 달에는 결제가 있을 수 없다. 이번 달이면 잠근다. -->
-                  <button
-                    type="button"
-                    aria-label="받은 혜택 다음 달"
-                    :disabled="isReceivedCurrentMonth"
-                    class="flex bg-transparent p-0 disabled:opacity-30"
-                    @click="shiftReceivedMonth(1)"
-                  >
-                    <ChevronRight :size="16" />
-                  </button>
-                </div>
+                <ReportMonthPicker
+                  name="받은 혜택"
+                  :label="receivedMonthLabel"
+                  :is-current-month="isReceivedCurrentMonth"
+                  @prev="shiftReceivedMonth(-1)"
+                  @next="shiftReceivedMonth(1)"
+                />
               </div>
 
               <!-- 금액 표기는 `₩` 다. 아래 두 칸과 같은 단위 기호를 써야 한 눈에 붙어 읽힌다. -->
@@ -803,26 +785,13 @@ onBeforeUnmount(() => {
               <div class="flex items-center justify-between gap-2">
                 <span class="text-[13px] text-sub">총 놓친 혜택</span>
                 <!-- 받은 혜택 카드와 별개의 달을 본다. 이 선택기는 이 카드만 움직인다. -->
-                <div class="flex shrink-0 items-center gap-1 text-muted-deep">
-                  <button
-                    type="button"
-                    aria-label="놓친 혜택 이전 달"
-                    class="flex bg-transparent p-0"
-                    @click="shiftMissedMonth(-1)"
-                  >
-                    <ChevronLeft :size="16" />
-                  </button>
-                  <strong class="text-[13px] font-bold text-sub">{{ missedMonthLabel }}</strong>
-                  <button
-                    type="button"
-                    aria-label="놓친 혜택 다음 달"
-                    :disabled="isMissedCurrentMonth"
-                    class="flex bg-transparent p-0 disabled:opacity-30"
-                    @click="shiftMissedMonth(1)"
-                  >
-                    <ChevronRight :size="16" />
-                  </button>
-                </div>
+                <ReportMonthPicker
+                  name="놓친 혜택"
+                  :label="missedMonthLabel"
+                  :is-current-month="isMissedCurrentMonth"
+                  @prev="shiftMissedMonth(-1)"
+                  @next="shiftMissedMonth(1)"
+                />
               </div>
 
               <strong class="mt-0.5 block text-[28px] leading-tight font-bold text-ink">
@@ -1023,6 +992,24 @@ onBeforeUnmount(() => {
       </div>
 
       <!--
+        상세에서도 달을 옮길 수 있다 (#200). 예전에는 메인 카드에서 고른 달로 고정이라,
+        다른 달을 보려면 뒤로 나갔다 들어와야 했다.
+
+        **메인의 받은 혜택 카드와 같은 커서를 쓴다.** 여기서 7월로 옮기고 뒤로 나가면
+        메인의 받은 혜택 카드도 7월이다 — 같은 것을 보는 두 화면이 서로 다른 달을 가리키면
+        어느 쪽이 맞는지 알 수 없다.
+      -->
+      <div class="mb-3 flex items-center">
+        <ReportMonthPicker
+          name="받은 혜택"
+          :label="receivedMonthLabel"
+          :is-current-month="isReceivedCurrentMonth"
+          @prev="shiftReceivedMonth(-1)"
+          @next="shiftReceivedMonth(1)"
+        />
+      </div>
+
+      <!--
         총액이 셋이다. 할인(원화)과 포인트는 단위가 달라 합칠 수 없어 나란히 두고,
         사용 금액은 성격이 달라 아래 줄을 통째로 쓴다. `.received-total` 이 2열 그리드다.
       -->
@@ -1118,6 +1105,20 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-else class="report-scroll report-detail-scroll">
+      <!--
+        상세에서도 달을 옮길 수 있다 (#200). 받은 혜택 상세와 같은 자리(총액 위)에 둔다.
+        **메인의 놓친 혜택 카드와 같은 커서를 쓴다** — 받은 혜택과는 여전히 별개다(#188).
+      -->
+      <div class="mb-3 flex items-center">
+        <ReportMonthPicker
+          name="놓친 혜택"
+          :label="missedMonthLabel"
+          :is-current-month="isMissedCurrentMonth"
+          @prev="shiftMissedMonth(-1)"
+          @next="shiftMissedMonth(1)"
+        />
+      </div>
+
       <!-- 히어로 세 숫자는 탭과 무관하게 늘 같다. 백엔드가 두 손실을 항상 함께 준다.
            배경의 카드 그림은 장식이라 스크린리더에서 뺀다. `style.css` 가 동결이라
            position·overflow 는 인라인으로 얹는다 (받은 혜택 카드 칸과 같은 방식). -->
@@ -1126,7 +1127,8 @@ onBeforeUnmount(() => {
         :style="{ position: 'relative', overflow: 'hidden', background: MISSED_HERO_BACKGROUND }"
       >
         <img :src="pigCryPeek" alt="" aria-hidden="true" :style="MISSED_HERO_PIG_STYLE" />
-        <p class="relative">이번 달 총 놓친 혜택</p>
+        <!-- `이번 달` 을 뗐다. 위 선택기로 다른 달을 볼 수 있게 되면서 사실과 어긋난다 (#200). -->
+        <p class="relative">총 놓친 혜택</p>
         <h2 class="relative">{{ currency(missedDetail.totalMissedBenefit) }}</h2>
         <div class="relative">
           <span
