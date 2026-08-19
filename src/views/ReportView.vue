@@ -1158,7 +1158,16 @@ onBeforeUnmount(() => {
         `style.css` 의 `.missed-info` 가 크림색(`#fffbee`)을 들고 있고 레이어 밖이라 `!` 로 덮는다.
         테두리도 같은 색으로 덮어 칸과 같은 인상을 준다.
       -->
-      <p class="missed-info !border-danger-bg !bg-white">ⓘ {{ missedInfo }}</p>
+      <!--
+        ⓘ 만 옅은 빨강이다. 상자가 흰 바탕이 되면서 표시가 본문과 같은 회색으로 묻혔다.
+
+        색은 하드코딩하지 않는다 — `danger` 토큰에 투명도를 얹어 옅게 만든다. 새 색을
+        토큰에 더하지 않아도 되고, 나중에 `danger` 가 바뀌면 이것도 따라간다.
+        `p` 의 색은 상속이라 자기 규칙을 가진 이 `span` 이 그냥 이긴다(`!` 가 필요 없다).
+      -->
+      <p class="missed-info !border-danger-bg !bg-white">
+        <span class="text-danger/60">ⓘ</span> {{ missedInfo }}
+      </p>
 
       <!-- 받은 혜택 상세와 같이 소제목을 뺐다 (#200). 위 탭이 이미 무엇의 목록인지 말한다. -->
       <section class="report-category-section missed-section">
