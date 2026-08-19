@@ -1026,9 +1026,12 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
+      <!--
+        소제목(`카테고리별 전체 혜택`)을 뺐다 (#200). 이 화면에 목록이 하나뿐이라
+        무엇의 목록인지 헷갈릴 일이 없고, 제목이 없어도 카테고리 카드가 스스로 설명한다.
+        위 여백은 `.report-category-section` 의 `margin-top` 이 그대로 잡아 준다.
+      -->
       <section class="report-category-section">
-        <h2>카테고리별 전체 혜택</h2>
-
         <div v-if="reportStore.isCardDetailLoading" class="flex justify-center py-16 text-sub">
           <BaseSpinner size="lg" label="카드 혜택을 불러오는 중" />
         </div>
@@ -1156,9 +1159,8 @@ onBeforeUnmount(() => {
 
       <p class="missed-info">ⓘ {{ missedInfo }}</p>
 
+      <!-- 받은 혜택 상세와 같이 소제목을 뺐다 (#200). 위 탭이 이미 무엇의 목록인지 말한다. -->
       <section class="report-category-section missed-section">
-        <h2>카테고리별 상세</h2>
-
         <BaseSpinner v-if="reportStore.isMissedDetailLoading" />
 
         <!-- 그 달에 그 손실이 없으면 빈 배열이 온다. 실제로 흔하다 -->
