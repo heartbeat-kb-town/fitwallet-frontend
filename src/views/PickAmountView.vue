@@ -31,12 +31,28 @@ const storeId = computed(() => str(route.query.storeId))
 const storeName = computed(() => str(route.query.store))
 
 /**
- * 돌아갈 목록 주소.
+ * 금액을 넣은 뒤 **PICK 을 그릴 주소.**
  *
- * 검색 조건(카테고리·검색어)이 통째로 들어 있어야 뒤로 갔을 때 같은 목록이 나온다.
+ * 검색 조건(카테고리·검색어)이 통째로 들어 있어야 같은 목록 위에서 PICK 이 뜬다.
  * 없으면 가맹점 화면 기본값으로 떨어진다.
+ *
+ * ⚠️ 이름과 달리 "뒤로 가기 주소" 가 아니다. `goToPick` 이 여기에
+ * `store` · `storeId` · `amount` 를 실어 보내고 `MerchantFlowView` 가 그 쿼리로 PICK 을
+ * 복원한다. 뒤로 갈 곳은 아래 `backTo` 가 따로 정한다.
  */
 const returnTo = computed(() => str(route.query.returnTo))
+
+/**
+ * 뒤로 갈 주소. **들어온 화면으로 돌려보낸다.**
+ *
+ * 가맹점 목록에서 가게를 골라 들어왔으면 그 목록으로 돌아가는 것이 맞지만, 홈의
+ * `자주 찾는 장소` 에서 들어왔으면 홈으로 돌아가야 한다 (#194). 앞으로 갈 곳(`returnTo`)과
+ * 뒤로 갈 곳이 늘 같지는 않아서 값을 따로 받는다.
+ *
+ * 없으면 예전처럼 `returnTo` 로 떨어진다 — 가맹점 화면에서 들어오는 기존 경로는
+ * 이 값을 보내지 않고, 그때는 두 곳이 같아서 문제가 없다.
+ */
+const backTo = computed(() => str(route.query.backTo) || returnTo.value)
 
 /**
  * 예 / 아니요 버튼의 테두리·배경.
@@ -99,9 +115,9 @@ function goToPick(withAmount) {
   })
 }
 
-/** 목록으로 돌아간다. 금액을 묻기 전 상태이므로 `store` 를 싣지 않는다. */
+/** 들어온 화면으로 돌아간다. 금액을 묻기 전 상태이므로 `store` 를 싣지 않는다. */
 function goBack() {
-  if (returnTo.value) router.replace(returnTo.value)
+  if (backTo.value) router.replace(backTo.value)
   else router.replace({ name: 'merchants' })
 }
 

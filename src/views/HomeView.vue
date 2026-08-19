@@ -121,8 +121,8 @@ function openMerchants({ categoryId, title, query = '' }) {
  * `MerchantFlowView` 가 그 쿼리로 PICK 을 복원한다. 그래서 홈 주소를 넣으면 안 된다.
  * 금액을 입력해도 홈으로 돌아오고 PICK 이 뜨지 않는다.
  *
- * 예전에 열던 가맹점 목록 주소를 그대로 넘기면 둘 다 맞는다 — 뒤로 가면 그 목록이고,
- * 금액을 넣으면 거기서 PICK 이 그려진다.
+ * 그래서 `returnTo` 에는 가맹점 목록 주소를 넣고, **뒤로 갈 곳은 `backTo` 로 따로 넘긴다.**
+ * 홈에서 들어왔으니 뒤로 가면 홈이어야 한다.
  */
 function openPlaceAmount(place) {
   const returnTo = router.resolve({
@@ -133,7 +133,7 @@ function openPlaceAmount(place) {
   router.push({
     name: 'pick-amount',
     // `place.id` 는 응답의 `storeId` 다 (`places` computed 참고). 쿼리는 문자열로 넘긴다.
-    query: { storeId: String(place.id), store: place.name, returnTo },
+    query: { storeId: String(place.id), store: place.name, returnTo, backTo: '/home' },
   })
 }
 
