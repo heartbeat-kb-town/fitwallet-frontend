@@ -1158,7 +1158,7 @@ onBeforeUnmount(() => {
         `style.css` 의 `.missed-info` 가 크림색(`#fffbee`)을 들고 있고 레이어 밖이라 `!` 로 덮는다.
         테두리도 같은 색으로 덮어 칸과 같은 인상을 준다.
       -->
-      <p class="missed-info !border-danger-bg !bg-danger-bg">ⓘ {{ missedInfo }}</p>
+      <p class="missed-info !border-danger-bg !bg-white">ⓘ {{ missedInfo }}</p>
 
       <!-- 받은 혜택 상세와 같이 소제목을 뺐다 (#200). 위 탭이 이미 무엇의 목록인지 말한다. -->
       <section class="report-category-section missed-section">
@@ -1168,7 +1168,7 @@ onBeforeUnmount(() => {
         <!-- 위 설명 상자와 같은 바탕이다 (#202). 두 상자가 나란히 서는데 색이 다르면 어긋나 보인다. -->
         <p
           v-else-if="!missedDetail.categories.length"
-          class="missed-info !border-danger-bg !bg-danger-bg"
+          class="missed-info !border-danger-bg !bg-white"
         >
           이 달에는 {{ LOSS_TYPES[missedTab]?.label }}이 없어요.
         </p>
