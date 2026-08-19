@@ -97,40 +97,83 @@ function won(value) {
 
 // 기준은 오늘이다. 예전에는 3월이 하드코딩돼 있었고 버튼을 눌러도 숫자만 바뀌었다.
 const today = new Date()
-const cursor = ref({ year: today.getFullYear(), month: today.getMonth() + 1 })
+
+/**
+ * 조회 기간. **두 카드가 각자의 달을 본다.**
+ *
+ * 월 선택기가 카드 안에 있으므로 하나를 돌리면 그 카드만 바뀌는 것이 자연스럽다.
+ * 받은 혜택은 6월을 보면서 놓친 혜택은 7월을 보는 식으로 겹쳐 볼 수 있다.
+ *
+ * 상세 화면에는 월 선택기가 없다. 받은 혜택 상세는 `receivedCursor` 를,
+ * 놓친 혜택 상세는 `missedCursor` 를 따라간다 — 들어온 카드의 달을 그대로 잇는다.
+ */
+const receivedCursor = ref({ year: today.getFullYear(), month: today.getMonth() + 1 })
+const missedCursor = ref({ year: today.getFullYear(), month: today.getMonth() + 1 })
 
 // 백엔드가 DATE_FORMAT(paid_at, '%Y-%m') 과 문자열로 비교한다.
 // `2026-8` 처럼 0 을 빼면 에러 없이 조용히 0건이 되므로 두 자리로 맞춘다.
-const yearMonth = computed(
-  () => `${cursor.value.year}-${String(cursor.value.month).padStart(2, '0')}`,
-)
+function toYearMonth({ year, month }) {
+  return `${year}-${String(month).padStart(2, '0')}`
+}
 
-// 미래 달에는 결제가 있을 수 없다. 이번 달에서 다음 달 버튼을 잠근다.
-const isCurrentMonth = computed(
-  () => cursor.value.year === today.getFullYear() && cursor.value.month === today.getMonth() + 1,
-)
+const receivedYearMonth = computed(() => toYearMonth(receivedCursor.value))
+const missedYearMonth = computed(() => toYearMonth(missedCursor.value))
+
+// 미래 달에는 결제가 있을 수 없다. 이번 달이면 다음 달 버튼을 잠근다.
+function isThisMonth({ year, month }) {
+  return year === today.getFullYear() && month === today.getMonth() + 1
+}
+
+const isReceivedCurrentMonth = computed(() => isThisMonth(receivedCursor.value))
+const isMissedCurrentMonth = computed(() => isThisMonth(missedCursor.value))
 
 /** 달을 옮긴다. 1월 ↔ 12월 을 넘길 때 연도까지 같이 움직여야 해서 Date 에 맡긴다. */
-function shiftMonth(delta) {
-  if (delta > 0 && isCurrentMonth.value) return
+function shiftMonth(cursor, delta) {
+  if (delta > 0 && isThisMonth(cursor.value)) return
   const shifted = new Date(cursor.value.year, cursor.value.month - 1 + delta, 1)
   cursor.value = { year: shifted.getFullYear(), month: shifted.getMonth() + 1 }
 }
+
+// 템플릿에서는 ref 가 벗겨져 넘어가므로 카드마다 함수를 따로 둔다.
+const shiftReceivedMonth = (delta) => shiftMonth(receivedCursor, delta)
+const shiftMissedMonth = (delta) => shiftMonth(missedCursor, delta)
 
 /* ─── 리포트 요약 (API) ──────────────────────────────────────────────────── */
 
 const summary = computed(() => reportStore.summary)
 
+/**
+ * 요약을 한 번이라도 받아 봤나.
+ *
+ * **전체 스피너는 처음 들어왔을 때만 쓴다.** 월을 바꿀 때마다 본문을 스피너로 갈아치우면
+ * 스크롤 영역의 내용이 통째로 사라져 **높이가 0 이 되고, 스크롤이 맨 위로 튄다.**
+ * 아래쪽 놓친 혜택 카드에서 월을 넘기면 화면이 리포트 꼭대기로 올라가 버렸다.
+ *
+ * 두 번째부터는 내용을 그대로 둔 채 숫자만 갈린다. 조회 중이라는 것은 `aria-busy` 로 알린다.
+ */
+const hasLoadedSummary = ref(false)
+
+/** 이미 내용이 떠 있는 상태에서 다시 조회 중인가. 스피너 대신 이걸로 표시한다. */
+const isRefreshing = computed(() => reportStore.isLoading && hasLoadedSummary.value)
+
+/**
+ * 요약은 **받은 혜택의 달**을 따라간다.
+ *
+ * 이 응답에서 실제로 쓰는 것은 `totalReceivedBenefit` 과 카드 추천뿐이다.
+ * 놓친 혜택 총액도 들어 있지만 쓰지 않는다 — 그 카드는 자기 달의
+ * `/report/benefit/missed` 응답을 쓴다(`totalMissed` 주석 참고).
+ */
 async function loadSummary() {
   try {
-    await reportStore.fetchSummary(yearMonth.value)
+    await reportStore.fetchSummary(receivedYearMonth.value)
+    hasLoadedSummary.value = true
   } catch (error) {
     showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
   }
 }
 
 // 달이 바뀌면 다시 조회한다. 화면에 들어올 때도 여기서 한 번 돈다.
-watch(yearMonth, loadSummary, { immediate: true })
+watch(receivedYearMonth, loadSummary, { immediate: true })
 
 /* ─── 받은 혜택 카드 (할인·포인트 분리) ─────────────────────────────────── */
 
@@ -148,7 +191,7 @@ const userCardIds = computed(() => cardStore.cards.map((card) => card.id))
 async function loadReceivedSplit() {
   if (!userCardIds.value.length) return
   try {
-    await reportStore.fetchReceivedSplit(userCardIds.value, yearMonth.value)
+    await reportStore.fetchReceivedSplit(userCardIds.value, receivedYearMonth.value)
   } catch (error) {
     // 두 줄이 0 으로 남을 뿐 총액은 요약이 들고 있다. 화면 전체를 막지 않는다.
     showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
@@ -156,7 +199,7 @@ async function loadReceivedSplit() {
 }
 
 // 달이 바뀌거나 카드 목록이 도착하면 다시 합산한다.
-watch([yearMonth, userCardIds], loadReceivedSplit, { immediate: true })
+watch([receivedYearMonth, userCardIds], loadReceivedSplit, { immediate: true })
 
 /** 카드 추천. 이것도 서비스가 예상 혜택 내림차순 상위 2건으로 잘라서 준다. */
 const recommendations = computed(() => summary.value.recommendations)
@@ -296,7 +339,7 @@ async function loadCardDetail() {
   const userCardId = currentUserCardId.value
   if (!userCardId) return
   try {
-    await reportStore.fetchCardDetail(userCardId, yearMonth.value)
+    await reportStore.fetchCardDetail(userCardId, receivedYearMonth.value)
   } catch (error) {
     showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
   }
@@ -304,7 +347,7 @@ async function loadCardDetail() {
 
 // 카드를 바꾸거나 달을 옮기면 다시 받는다. 상세를 열어둔 채 달을 바꿔도 따라오고,
 // 목록이 도착해 카드가 처음 정해지는 순간에도 여기서 돈다.
-watch([currentUserCardId, yearMonth], loadCardDetail, { immediate: true })
+watch([currentUserCardId, receivedYearMonth], loadCardDetail, { immediate: true })
 
 /* ─── 놓친 혜택 상세 (API) ──────────────────────────────────────────────── */
 
@@ -374,7 +417,7 @@ const missedInfo = computed(() => LOSS_TYPES[missedTab.value]?.info ?? '')
 
 async function loadMissedDetail() {
   try {
-    await reportStore.fetchMissedDetail(yearMonth.value, missedTab.value)
+    await reportStore.fetchMissedDetail(missedYearMonth.value, missedTab.value)
   } catch (error) {
     showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
   }
@@ -386,7 +429,7 @@ async function loadMissedDetail() {
 // 이 응답에만 있다(요약 API 는 총액 하나뿐). 두 값은 `lossType` 과 무관하게 늘 같아서
 // 메인에서는 지금 탭 값 그대로 한 번만 부르면 된다.
 watch(
-  [missedTab, yearMonth, page],
+  [missedTab, missedYearMonth, page],
   () => {
     if (page.value === 'received') return
     loadMissedDetail()
@@ -424,11 +467,25 @@ function missedRateLabel(item) {
  */
 const totalBenefit = computed(() => summary.value.totalReceivedBenefit)
 
-/** 놓친 혜택 총액. 요약과 상세가 같은 값을 주므로 요약 것을 쓴다(상세보다 먼저 온다). */
-const totalMissed = computed(() => summary.value.totalMissedBenefit)
+/**
+ * 놓친 혜택 총액. **요약이 아니라 놓친 혜택 상세 응답에서 가져온다.**
+ *
+ * 두 응답이 같은 값을 주므로 예전에는 먼저 오는 요약 것을 썼다. 하지만 두 카드가 각자
+ * 다른 달을 보게 되면서 요약은 **받은 혜택의 달**을 따라가게 됐다. 요약 것을 그대로 두면
+ * 놓친 혜택 카드가 6월을 가리키면서 7월 총액을 적는다.
+ *
+ * `/report/benefit/missed` 는 이 카드의 두 손실 금액 때문에 어차피 부르고 있어서
+ * 요청이 늘지 않는다.
+ */
+const totalMissed = computed(() => missedDetail.value.totalMissedBenefit)
 
 /** 카드 안 월 선택기에 적는 문구. 헤더에 있던 `7월` 과 달리 연도까지 적는다. */
-const monthLabel = computed(() => `${cursor.value.year}년 ${cursor.value.month}월`)
+const receivedMonthLabel = computed(
+  () => `${receivedCursor.value.year}년 ${receivedCursor.value.month}월`,
+)
+const missedMonthLabel = computed(
+  () => `${missedCursor.value.year}년 ${missedCursor.value.month}월`,
+)
 
 function toggle(id) {
   const next = new Set(expanded.value)
@@ -531,7 +588,11 @@ onBeforeUnmount(() => {
     </header>
 
     <div v-if="page === 'main'" class="report-scroll">
-      <div v-if="reportStore.isLoading" class="flex justify-center py-24 text-sub">
+      <!-- 처음 들어왔을 때만이다. 월을 바꿀 때도 띄우면 스크롤이 튄다 (hasLoadedSummary 주석). -->
+      <div
+        v-if="reportStore.isLoading && !hasLoadedSummary"
+        class="flex justify-center py-24 text-sub"
+      >
         <BaseSpinner size="lg" label="리포트를 불러오는 중" />
       </div>
 
@@ -552,7 +613,14 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <template v-else>
+      <!--
+        다시 조회하는 동안에도 내용을 그대로 둔다. 스피너로 갈아치우면 스크롤이 튄다.
+
+        **화면을 옅게 만들지 않는다.** 이 값은 요약(받은 혜택 쪽) 조회만 반영하는데
+        본문에는 놓친 혜택 카드와 카드 혜택 현황도 있어서, 통째로 흐려지면 상관없는 곳까지
+        조회 중인 것처럼 보인다. 보조 기술에는 `aria-busy` 로 알린다.
+      -->
+      <div v-else :aria-busy="isRefreshing">
         <!--
           받은 혜택 · 놓친 혜택.
 
@@ -611,20 +679,20 @@ onBeforeUnmount(() => {
                 <div class="flex shrink-0 items-center gap-1 text-muted-deep">
                   <button
                     type="button"
-                    aria-label="이전 달"
+                    aria-label="받은 혜택 이전 달"
                     class="flex bg-transparent p-0"
-                    @click="shiftMonth(-1)"
+                    @click="shiftReceivedMonth(-1)"
                   >
                     <ChevronLeft :size="16" />
                   </button>
-                  <strong class="text-[13px] font-bold text-sub">{{ monthLabel }}</strong>
+                  <strong class="text-[13px] font-bold text-sub">{{ receivedMonthLabel }}</strong>
                   <!-- 미래 달에는 결제가 있을 수 없다. 이번 달이면 잠근다. -->
                   <button
                     type="button"
-                    aria-label="다음 달"
-                    :disabled="isCurrentMonth"
+                    aria-label="받은 혜택 다음 달"
+                    :disabled="isReceivedCurrentMonth"
                     class="flex bg-transparent p-0 disabled:opacity-30"
-                    @click="shiftMonth(1)"
+                    @click="shiftReceivedMonth(1)"
                   >
                     <ChevronRight :size="16" />
                   </button>
@@ -692,23 +760,23 @@ onBeforeUnmount(() => {
             <div class="relative px-5 pt-4 pb-5">
               <div class="flex items-center justify-between gap-2">
                 <span class="text-[13px] text-sub">총 놓친 혜택</span>
-                <!-- 받은 혜택 카드와 같다. `bg-transparent` 가 없으면 회색 알약이 보인다. -->
+                <!-- 받은 혜택 카드와 별개의 달을 본다. 이 선택기는 이 카드만 움직인다. -->
                 <div class="flex shrink-0 items-center gap-1 text-muted-deep">
                   <button
                     type="button"
-                    aria-label="이전 달"
+                    aria-label="놓친 혜택 이전 달"
                     class="flex bg-transparent p-0"
-                    @click="shiftMonth(-1)"
+                    @click="shiftMissedMonth(-1)"
                   >
                     <ChevronLeft :size="16" />
                   </button>
-                  <strong class="text-[13px] font-bold text-sub">{{ monthLabel }}</strong>
+                  <strong class="text-[13px] font-bold text-sub">{{ missedMonthLabel }}</strong>
                   <button
                     type="button"
-                    aria-label="다음 달"
-                    :disabled="isCurrentMonth"
+                    aria-label="놓친 혜택 다음 달"
+                    :disabled="isMissedCurrentMonth"
                     class="flex bg-transparent p-0 disabled:opacity-30"
-                    @click="shiftMonth(1)"
+                    @click="shiftMissedMonth(1)"
                   >
                     <ChevronRight :size="16" />
                   </button>
@@ -797,7 +865,7 @@ onBeforeUnmount(() => {
             지금은 추천할 카드가 없어요. 이 달의 결제가 쌓이면 다시 추천해 드려요.
           </div>
         </section>
-      </template>
+      </div>
     </div>
 
     <div v-else-if="page === 'received'" class="report-scroll report-detail-scroll">
@@ -1048,7 +1116,7 @@ onBeforeUnmount(() => {
         <img :src="iconMycard" alt="" /><span>카드 내역</span>
       </button>
       <button class="active" type="button">
-        <img :src="iconReportActive" alt="" /><span>리포트</span>
+        <img :src="iconReportActive" alt="" /><span>혜택</span>
       </button>
     </nav>
 

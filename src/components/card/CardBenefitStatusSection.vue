@@ -270,13 +270,23 @@ onMounted(() => {
   <section class="report-panel">
     <h2>카드 혜택 현황</h2>
     <!--
-      리포트의 패널은 좌우 20px 패딩이 있는 상자다. 카드가 상자 안쪽에서만 굴러가면
-      마지막 카드가 잘려 보이지 않으므로, 음수 마진으로 패딩을 걷어내고 스크롤 영역이
-      상자의 양 끝까지 닿게 한다. 안쪽 패딩을 다시 주어 첫 카드는 제목과 줄을 맞춘다.
+      스크롤 영역의 패딩을 0 으로 지운다. `.horizontal-scroll` 은 홈의 전체폭 레이아웃용이라
+      `padding: 0 20px 5px 0` 을 갖고 있는데, 여기서는 패널이 이미 좌우 20px 을 잡고 있다.
+
+      ⚠️ **패딩으로 카드를 띄우려 하면 안 된다.** `scroll-snap-type: x mandatory` 가
+      첫 카드의 시작변을 스크롤 영역의 시작변에 붙이느라 `scrollLeft` 를 패딩만큼 밀어버려서,
+      왼쪽 패딩이 그대로 상쇄된다(실측 `scrollLeft: 20`). 카드가 제목보다 왼쪽에 붙어 보인
+      원인이 이것이다. 여백은 패널 패딩에 맡기고 여기서는 0 으로 둔다.
+
       `.horizontal-scroll` 이 레이어 밖 규칙이라 `!` 로 덮는다.
     -->
-    <div v-drag-scroll class="horizontal-scroll mt-3 -mx-5 !px-5 !pb-1.5">
-      <article v-for="card in cards" :key="card.id" class="benefit-card">
+    <div v-drag-scroll class="horizontal-scroll mt-3 !px-0 !pt-0 !pb-1.5">
+      <!--
+        그림자를 지운다. `.benefit-card` 의 `0 10px 24px rgba(43,35,26,.14)` 는 홈의 베이지
+        배경에서 카드를 띄우려고 넣은 것인데, 흰 패널 위에서는 회색 얼룩으로 보인다.
+        카드 경계는 이미 `border: 1px solid #e9e4dc` 가 잡아 준다.
+      -->
+      <article v-for="card in cards" :key="card.id" class="benefit-card !shadow-none">
         <div class="card-visual" :class="{ 'bg-muted-softer': !card.cardImageUrl }">
           <img
             v-if="card.cardImageUrl"
