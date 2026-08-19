@@ -1171,8 +1171,18 @@ onBeforeUnmount(() => {
             <dt>결제 금액</dt>
             <dd>{{ won(receiptAmount) }}</dd>
           </div>
-          <!-- 혜택이 없는 결제도 있다. 0원을 "받은 혜택" 으로 적기보다 줄을 빼는 편이 정확하다. -->
-          <div v-if="receivedBenefit > 0">
+          <!--
+            혜택이 0원이어도 줄을 보여준다 (#190).
+
+            예전에는 `v-if="receivedBenefit > 0"` 으로 빼놨는데, **줄이 없으면 혜택을 못 받은
+            것인지 화면이 덜 그려진 것인지 구분되지 않는다.** 결제마다 영수증 줄 수가 달라지는
+            것도 어색했다. 영수증은 결과를 확인하는 화면이고, 혜택이 없었다는 것도 결과다.
+
+            혜택 없이 끝난 결제는 `applied_benefit_service_id` 가 NULL 이라 백엔드가
+            `expectedBenefitAmount` 를 null 로 준다(`PaymentMapper` 의 LEFT JOIN).
+            `receivedBenefit` 이 computed 에서 이미 숫자로 눌러 두므로 `0원` 으로 적힌다.
+          -->
+          <div>
             <dt>받은 혜택</dt>
             <dd class="benefit">{{ won(receivedBenefit) }}</dd>
           </div>
