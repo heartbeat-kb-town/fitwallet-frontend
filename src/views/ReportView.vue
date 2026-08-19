@@ -626,18 +626,24 @@ onBeforeUnmount(() => {
               <strong class="mt-0.5 block text-[28px] leading-tight font-bold text-ink">
                 {{ currency(totalBenefit) }}
               </strong>
-              <!--
-                장식이라 스크린리더가 읽지 않는다. 앞발이 따로 그려진 에셋이라 **아래 두 칸의
-                윗변에 걸터앉게** 둔다. 칸보다 위에 그려야(`z-[1]`) 앞발이 칸 밑으로 숨지 않는다.
-              -->
-              <img
-                :src="pigSmilePeek"
-                alt=""
-                aria-hidden="true"
-                class="pointer-events-none absolute top-9 right-7 z-[1] w-[62px]"
-              />
+              <div class="relative mt-3 flex gap-3">
+                <!--
+                  장식이라 스크린리더가 읽지 않는다. 앞발이 따로 그려진 에셋이라 **칸의 윗변에
+                  걸터앉은** 모습으로 쓰라고 만들어졌다.
 
-              <div class="mt-3 flex gap-3">
+                  그래서 총액이 아니라 **이 칸 줄을 기준으로** 앉힌다. `bottom: calc(100% - 12px)`
+                  는 그림의 아랫변을 줄의 윗변보다 12px 아래에 두라는 뜻이라, 앞발만 칸에 걸친다.
+                  카드 위에서부터 거리를 재면 총액 자릿수가 바뀔 때마다 걸친 정도가 달라진다.
+
+                  칸보다 위에 그려야(`z-[1]`) 앞발이 칸 밑으로 숨지 않는다.
+                -->
+                <img
+                  :src="pigSmilePeek"
+                  alt=""
+                  aria-hidden="true"
+                  class="pointer-events-none absolute right-4 bottom-[calc(100%-12px)] z-[1] w-[62px]"
+                />
+
                 <div class="min-w-0 flex-1 rounded-xl bg-icon-bg px-3.5 py-3">
                   <span class="block text-[12px] text-sub">총 할인 금액</span>
                   <strong class="mt-1.5 block text-[20px] leading-tight font-bold text-received">
@@ -697,13 +703,6 @@ onBeforeUnmount(() => {
               <strong class="mt-0.5 block text-[28px] leading-tight font-bold text-ink">
                 {{ currency(totalMissed) }}
               </strong>
-              <img
-                :src="pigCryPeek"
-                alt=""
-                aria-hidden="true"
-                class="pointer-events-none absolute top-9 right-7 z-[1] w-[62px]"
-              />
-
               <!--
                 이 두 값은 요약 API 에 없다. `/report/benefit/missed` 가 주는 값이고
                 `lossType` 과 무관하게 늘 같다 (reportApi 주석 참고).
@@ -711,7 +710,15 @@ onBeforeUnmount(() => {
                 라벨 앞 아이콘은 두 손실의 성격을 구분한다 — 앱을 안 써서 놓친 것과
                 카드를 잘못 골라 놓친 것이다. 글자만으로는 나란히 놓였을 때 잘 안 갈린다.
               -->
-              <div class="mt-3 flex gap-3">
+              <div class="relative mt-3 flex gap-3">
+                <!-- 받은 혜택 카드와 같은 방식으로 칸의 윗변에 걸터앉힌다 (위 주석 참고). -->
+                <img
+                  :src="pigCryPeek"
+                  alt=""
+                  aria-hidden="true"
+                  class="pointer-events-none absolute right-4 bottom-[calc(100%-12px)] z-[1] w-[62px]"
+                />
+
                 <div class="min-w-0 flex-1 rounded-xl bg-danger-bg px-3.5 py-3">
                   <span class="flex items-center gap-1 text-[12px] text-sub">
                     <Smartphone :size="14" class="shrink-0" />
