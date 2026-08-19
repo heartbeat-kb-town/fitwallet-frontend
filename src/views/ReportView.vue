@@ -928,7 +928,7 @@ onBeforeUnmount(() => {
                   <TrendingUp :size="11" />
                 </span>
                 <span class="text-[11px] text-sub">예상 혜택</span>
-                <strong class="text-[16px] leading-none font-bold text-ink">
+                <strong class="text-[14px] leading-none font-bold text-ink">
                   {{ won(card.expectedBenefit) }}
                 </strong>
               </span>
