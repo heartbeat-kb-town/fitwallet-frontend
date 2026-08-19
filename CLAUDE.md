@@ -47,7 +47,8 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
   `routes.js`의 catch-all 바로 위에 한 줄 추가한다.
 - 스타일은 전역 `src/style.css` 4772줄 한 파일이고 `<style scoped>`가 하나도 없다.
 - 보유 카드는 `cardStore` 하나에서만 나온다. 화면이 자체 카드 배열을 두지 않는다(#76).
-  **단 홈 화면은 아직 예외다** — `src/data.js`의 목 카드를 쓴다(아래 목데이터 항목 참고).
+  예외는 없다 — 홈이 쓰던 목 카드는 `cardStore`로 바뀌었고(#101), 그 섹션 자체가
+  리포트로 옮겨갔다(아래 리포트 항목 참고).
 - **카드 그림은 실제 카드 이미지다**(#97). 예전에는 `payment-card-sheet.png` 한 장을
   잘라 4종을 돌려 썼는데 실제 카드 상품과 아무 관계가 없었다.
   `cardStore.ensureCardImages()`가 카드별 요약(`/card/{id}/summary`)에서 `cardImageUrl`을
@@ -74,13 +75,21 @@ Vue 3 + Vite / Pinia / Vue Router / Tailwind CSS / Zod / axios
   - `cardImageStyle(url, boxRatio)`의 `boxRatio`는 **칸**의 비율이지 카드의 비율이 아니다.
     눕힌 뒤 칸을 채우려면 가로·세로를 칸 기준으로 맞바꿔야 해서다.
     결제 화면의 칸은 344×198(1.74)이라 다른 칸(약 1.58)과 값이 다르다.
-- 리포트 **메인 화면**은 API에서 온다(#95). 받은·놓친 혜택 총액, 도넛, 카테고리 랭킹,
-  카드 추천이 `/report/benefit/summary` 하나로 그려진다. 월을 바꾸면 다시 조회한다.
-  **정렬을 화면에서 하지 않는다** — 카테고리는 매퍼가 혜택 내림차순 상위 5개로,
-  카드 추천은 서비스가 예상 혜택 내림차순 상위 2건으로 잘라서 준다.
-- **목데이터가 남은 곳은 `src/data.js` 하나다.** 홈 화면이 직접 import한다
-  (`categories`는 가맹점 화면도 아이콘 때문에 쓴다).
-  카드 목록·혜택 현황·이벤트가 여기 있고, 홈에 뜨는 카드는 **실제 보유 카드가 아니다.**
+- 리포트 **메인 화면**은 API에서 온다(#95). 받은·놓친 혜택 총액과 카드 추천이
+  `/report/benefit/summary` 하나로 그려진다. 월을 바꾸면 다시 조회한다.
+  **정렬을 화면에서 하지 않는다** — 카드 추천은 서비스가 예상 혜택 내림차순 상위 2건으로 준다.
+  - 메인은 **받은 혜택 · 놓친 혜택 두 장의 카드**다(#188). 골격이 같고 윗줄 색과 아래 두 칸만
+    다르다. 월 선택기는 헤더가 아니라 **각 카드 안**에 있다. 도넛·카테고리 랭킹은 없앴다.
+  - 받은 혜택의 할인·포인트 분리가 요약 API에 없다. `reportStore.fetchReceivedSplit`이
+    보유 카드 수만큼 상세를 불러 합산한다. 놓친 혜택의 두 손실 금액도 요약에 없어
+    메인에서 `/report/benefit/missed`를 함께 부른다.
+  - **`카드 혜택 현황`은 리포트에 있다.** 홈에 있던 섹션을 놓친 혜택 아래로 옮겼고,
+    카드 캐러셀과 두 시트(혜택 현황 · 이벤트)를 `components/card/CardBenefitStatusSection.vue`
+    한 덩어리로 묶었다. 시트의 `받은 혜택 리포트 보기`는 라우터를 타지 않고
+    `open-card-report`를 올려 같은 화면의 받은 혜택 상세로 갈아탄다.
+- **목데이터가 남은 곳은 `src/data.js` 하나다.** 홈 화면이 `categories`를 직접 import한다
+  (가맹점 화면도 아이콘 때문에 쓴다). 파일에 남은 카드 목록·혜택 현황·이벤트는
+  **이제 아무 화면도 읽지 않는다.**
 - 리포트는 세 화면이 **전부 API**다. 메인(#95), 받은 혜택 상세(카드별, #152),
   놓친 혜택 상세(손실 유형별)까지 목데이터가 없다.
   놓친 혜택 상세는 `GET /report/benefit/missed?yearMonth&lossType`이고
@@ -112,6 +121,7 @@ src/
 │  └─ routes.js             라우트 추가는 배열 끝에 한 줄
 ├─ stores/                  authStore.js, cardStore.js …
 ├─ composables/             useAsyncState.js, useToast.js, useCardImage.js …
+├─ directives/              v-drag-scroll 처럼 두 화면 이상이 쓰는 커스텀 디렉티브
 ├─ views/                   라우트와 1:1 대응하는 화면
 ├─ components/
 │  ├─ common/               BaseButton, BaseToast … 프로젝트 전역 재사용

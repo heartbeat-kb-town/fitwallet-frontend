@@ -1,7 +1,16 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Menu, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Info } from 'lucide-vue-next'
+import {
+  Menu,
+  ChevronDown,
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  Smartphone,
+  CreditCard,
+} from 'lucide-vue-next'
 import iconHome from '@/assets/icons/home.svg'
 import iconPayment from '@/assets/icons/payment.svg'
 import iconMycard from '@/assets/icons/mycard.svg'
@@ -16,10 +25,20 @@ import iconTransport from '@/assets/icons/potentialbenefit-transportation.svg'
 import iconPointBadge from '@/assets/icons/point-badge.svg'
 // 놓친 혜택 히어로에 걸터앉는 픽피. 우는 얼굴은 `pig-cry` 와 같고 앞발이 더 붙어 있다.
 import pigCryPeek from '@/assets/icons/pig-cry-peek.svg'
-// 받은 혜택 카드의 웃는 픽피. `pig-cry-peek` 과 같은 자세라 두 카드가 나란히 붙어도 어울린다.
-import pigPeek from '@/assets/icons/pig-peek.svg'
+/**
+ * 받은 혜택 카드의 웃는 픽피.
+ *
+ * `pig-peek`(홈 헤더용, 앞발 없음) 대신 **앞발이 그려진 에셋**을 쓴다. `pig-cry-peek` 과
+ * 같은 자세라 두 카드가 위아래로 붙었을 때 한 쌍으로 읽힌다.
+ *
+ * 두 에셋은 캔버스 비율이 다르다 (54×56 대 406×465). **몸통이 캔버스에서 차지하는 비율이
+ * 달라서**(54/56 대 424/465) 같은 `width` 를 주면 앞발까지 포함한 전체 높이는 다르지만
+ * 몸통은 같은 크기로 그려진다. 그래서 두 카드 모두 `w-[62px]` 하나로 맞춘다.
+ */
+import pigSmilePeek from '@/assets/icons/pig-smile-peek.svg'
 
 import BaseSpinner from '@/components/common/BaseSpinner.vue'
+import CardBenefitStatusSection from '@/components/card/CardBenefitStatusSection.vue'
 import { useCardImage } from '@/composables/useCardImage'
 import { useToast } from '@/composables/useToast'
 import { useCardStore } from '@/stores/cardStore'
@@ -199,6 +218,16 @@ function currency(value) {
 
 function points(value) {
   return `${Math.round(Number(value)).toLocaleString('ko-KR')}P`
+}
+
+/**
+ * 리포트 메인 포인트 칸의 숫자.
+ *
+ * 여기서는 **뒤에 `P` 를 붙이지 않는다.** 앞에 Ⓟ 배지가 붙어 단위가 이미 드러나고,
+ * 디자인도 배지 + 숫자다. 상세 화면의 `points()` 는 배지 없이 쓰이는 자리라 그대로 둔다.
+ */
+function pointNumber(value) {
+  return Math.round(Number(value)).toLocaleString('ko-KR')
 }
 
 /** `2026-07-15T21:16:30` → `07.15`. 줄이 좁아 연도는 적지 않는다. */
@@ -416,6 +445,18 @@ function backToMain() {
   openPage('main')
 }
 
+/**
+ * 혜택 현황 시트의 `받은 혜택 리포트 보기` 로 넘어온 카드.
+ *
+ * 홈에 있을 때는 라우터로 리포트를 열었지만 이제는 이미 리포트 안이다. 같은 화면의
+ * 받은 혜택 상세로 갈아타고, 그 카드를 캐러셀에서 골라 둔다.
+ */
+function openCardReport(cardId) {
+  const index = receivedCards.value.findIndex((card) => card.id === cardId)
+  if (index >= 0) selectedCard.value = index
+  openPage('received')
+}
+
 function selectCard(index) {
   if (index < 0 || index >= receivedCards.value.length) return
   selectedCard.value = index
@@ -553,17 +594,21 @@ onBeforeUnmount(() => {
             캐시백·포인트를 원화로 환산해 더한 금액입니다. 세부 내역에서 각각 나눠 볼 수 있습니다.
           </p>
 
+          <!--
+            세부 두 값은 아래 줄이 아니라 **칸 두 개**다 (피그마 `node-id=1478-664`).
+            총액과 나란히 두면 셋 다 같은 무게로 읽혀 무엇이 합계인지 드러나지 않는다.
+          -->
           <div class="mt-3 overflow-hidden rounded-2xl border border-line">
             <!-- 카드 성격을 색으로 먼저 알린다. 받은 혜택은 primary. -->
-            <div class="h-1.5 bg-primary"></div>
-            <div class="relative px-3.5 pt-3 pb-3.5">
+            <div class="h-2.5 bg-primary"></div>
+            <div class="relative px-5 pt-4 pb-5">
               <div class="flex items-center justify-between gap-2">
-                <span class="text-[11px] text-sub">총 받은 혜택</span>
+                <span class="text-[13px] text-sub">총 받은 혜택</span>
                 <div class="flex shrink-0 items-center gap-1 text-muted-deep">
                   <button type="button" aria-label="이전 달" @click="shiftMonth(-1)">
-                    <ChevronLeft :size="14" />
+                    <ChevronLeft :size="16" />
                   </button>
-                  <strong class="text-[12px] font-bold text-sub">{{ monthLabel }}</strong>
+                  <strong class="text-[13px] font-bold text-sub">{{ monthLabel }}</strong>
                   <!-- 미래 달에는 결제가 있을 수 없다. 이번 달이면 잠근다. -->
                   <button
                     type="button"
@@ -572,36 +617,44 @@ onBeforeUnmount(() => {
                     class="disabled:opacity-30"
                     @click="shiftMonth(1)"
                   >
-                    <ChevronRight :size="14" />
+                    <ChevronRight :size="16" />
                   </button>
                 </div>
               </div>
 
-              <strong class="mt-1 block text-[28px] leading-tight font-bold text-ink">
-                {{ won(totalBenefit) }}
+              <!-- 금액 표기는 `₩` 다. 아래 두 칸과 같은 단위 기호를 써야 한 눈에 붙어 읽힌다. -->
+              <strong class="mt-0.5 block text-[28px] leading-tight font-bold text-ink">
+                {{ currency(totalBenefit) }}
               </strong>
-              <!-- 장식이라 스크린리더가 읽지 않는다. 총액 오른쪽에 걸터앉는다. -->
+              <!--
+                장식이라 스크린리더가 읽지 않는다. 앞발이 따로 그려진 에셋이라 **아래 두 칸의
+                윗변에 걸터앉게** 둔다. 칸보다 위에 그려야(`z-[1]`) 앞발이 칸 밑으로 숨지 않는다.
+              -->
               <img
-                :src="pigPeek"
+                :src="pigSmilePeek"
                 alt=""
                 aria-hidden="true"
-                class="pointer-events-none absolute top-7 right-3 w-[62px]"
+                class="pointer-events-none absolute top-9 right-7 z-[1] w-[62px]"
               />
 
-              <dl class="mt-3 space-y-1.5 text-[12px]">
-                <div class="flex items-center justify-between gap-2">
-                  <dt class="text-sub">총 할인 금액</dt>
-                  <dd class="font-bold text-received">{{ won(receivedSplit.totalDiscount) }}</dd>
+              <div class="mt-3 flex gap-3">
+                <div class="min-w-0 flex-1 rounded-xl bg-icon-bg px-3.5 py-3">
+                  <span class="block text-[12px] text-sub">총 할인 금액</span>
+                  <strong class="mt-1.5 block text-[20px] leading-tight font-bold text-received">
+                    {{ currency(receivedSplit.totalDiscount) }}
+                  </strong>
                 </div>
-                <div class="flex items-center justify-between gap-2">
-                  <dt class="text-sub">총 포인트</dt>
-                  <!-- 포인트는 원이 아니다. 배지를 붙여 원화 줄과 단위가 갈리게 한다. -->
-                  <dd class="flex items-center gap-1 font-bold text-primary-dark">
-                    <img :src="iconPointBadge" alt="" class="size-3.5" />
-                    {{ points(receivedSplit.totalPoint) }}
-                  </dd>
+                <div class="min-w-0 flex-1 rounded-xl bg-icon-bg px-3.5 py-3">
+                  <span class="block text-[12px] text-sub">총 포인트</span>
+                  <!-- 포인트는 원이 아니다. 배지를 붙여 왼쪽 원화 칸과 단위가 갈리게 한다. -->
+                  <strong
+                    class="mt-1.5 flex items-center gap-1 text-[20px] leading-tight font-bold text-primary-dark"
+                  >
+                    <img :src="iconPointBadge" alt="" class="size-[18px] shrink-0" />
+                    {{ pointNumber(receivedSplit.totalPoint) }}
+                  </strong>
                 </div>
-              </dl>
+              </div>
             </div>
           </div>
         </section>
@@ -618,16 +671,17 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
+          <!-- 받은 혜택 카드와 같은 골격이다 (피그마 `node-id=1478-708`). 윗줄 색과 두 칸만 다르다. -->
           <div class="mt-3 overflow-hidden rounded-2xl border border-line">
-            <div class="h-1.5 bg-danger"></div>
-            <div class="relative px-3.5 pt-3 pb-3.5">
+            <div class="h-2.5 bg-danger"></div>
+            <div class="relative px-5 pt-4 pb-5">
               <div class="flex items-center justify-between gap-2">
-                <span class="text-[11px] text-sub">총 놓친 혜택</span>
+                <span class="text-[13px] text-sub">총 놓친 혜택</span>
                 <div class="flex shrink-0 items-center gap-1 text-muted-deep">
                   <button type="button" aria-label="이전 달" @click="shiftMonth(-1)">
-                    <ChevronLeft :size="14" />
+                    <ChevronLeft :size="16" />
                   </button>
-                  <strong class="text-[12px] font-bold text-sub">{{ monthLabel }}</strong>
+                  <strong class="text-[13px] font-bold text-sub">{{ monthLabel }}</strong>
                   <button
                     type="button"
                     aria-label="다음 달"
@@ -635,38 +689,57 @@ onBeforeUnmount(() => {
                     class="disabled:opacity-30"
                     @click="shiftMonth(1)"
                   >
-                    <ChevronRight :size="14" />
+                    <ChevronRight :size="16" />
                   </button>
                 </div>
               </div>
 
-              <strong class="mt-1 block text-[28px] leading-tight font-bold text-ink">
-                {{ won(totalMissed) }}
+              <strong class="mt-0.5 block text-[28px] leading-tight font-bold text-ink">
+                {{ currency(totalMissed) }}
               </strong>
               <img
                 :src="pigCryPeek"
                 alt=""
                 aria-hidden="true"
-                class="pointer-events-none absolute top-7 right-3 w-[62px]"
+                class="pointer-events-none absolute top-9 right-7 z-[1] w-[62px]"
               />
 
               <!--
-                이 두 줄은 요약 API 에 없다. `/report/benefit/missed` 가 주는 값이고
+                이 두 값은 요약 API 에 없다. `/report/benefit/missed` 가 주는 값이고
                 `lossType` 과 무관하게 늘 같다 (reportApi 주석 참고).
+
+                라벨 앞 아이콘은 두 손실의 성격을 구분한다 — 앱을 안 써서 놓친 것과
+                카드를 잘못 골라 놓친 것이다. 글자만으로는 나란히 놓였을 때 잘 안 갈린다.
               -->
-              <dl class="mt-3 space-y-1.5 text-[12px]">
-                <div class="flex items-center justify-between gap-2">
-                  <dt class="text-sub">앱 미사용 손실</dt>
-                  <dd class="font-bold text-danger">{{ won(missedDetail.appUnusedAmount) }}</dd>
+              <div class="mt-3 flex gap-3">
+                <div class="min-w-0 flex-1 rounded-xl bg-danger-bg px-3.5 py-3">
+                  <span class="flex items-center gap-1 text-[12px] text-sub">
+                    <Smartphone :size="14" class="shrink-0" />
+                    앱 미사용 손실
+                  </span>
+                  <strong class="mt-1.5 block text-[20px] leading-tight font-bold text-danger">
+                    {{ currency(missedDetail.appUnusedAmount) }}
+                  </strong>
                 </div>
-                <div class="flex items-center justify-between gap-2">
-                  <dt class="text-sub">카드 선택 손실</dt>
-                  <dd class="font-bold text-danger">{{ won(missedDetail.cardMismatchAmount) }}</dd>
+                <div class="min-w-0 flex-1 rounded-xl bg-danger-bg px-3.5 py-3">
+                  <span class="flex items-center gap-1 text-[12px] text-sub">
+                    <CreditCard :size="14" class="shrink-0" />
+                    카드 선택 손실
+                  </span>
+                  <strong class="mt-1.5 block text-[20px] leading-tight font-bold text-danger">
+                    {{ currency(missedDetail.cardMismatchAmount) }}
+                  </strong>
                 </div>
-              </dl>
+              </div>
             </div>
           </div>
         </section>
+
+        <!--
+          카드 혜택 현황. 홈에 있던 섹션을 통째로 옮겨왔다. 혜택을 보는 자리를 리포트 한 곳으로 모은다.
+          시트에서 `받은 혜택 리포트 보기` 를 누르면 라우터를 타지 않고 이 화면의 상세로 갈아탄다.
+        -->
+        <CardBenefitStatusSection @open-card-report="openCardReport" />
 
         <section class="report-panel recommendation-panel">
           <h2>카드 추천</h2>
