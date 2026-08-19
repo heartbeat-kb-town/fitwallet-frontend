@@ -369,62 +369,30 @@ function tierPercent(index) {
 }
 
 /**
- * 눈금을 픽셀 격자에 맞추기 위해 재는 바의 실제 너비와 화면 배율.
+ * 구간 점의 자리.
  *
- * `left: 33.333%` 처럼 소수점 좌표에 선을 그으면 브라우저가 이웃 픽셀까지 번지게 그린다.
- * **번지는 정도가 구간마다 달라서 굵기가 제각각으로 보인다.** CSS 로는 못 막는다 —
- * 너비를 재서 물리 픽셀 단위로 반올림한 좌표를 직접 넣어야 모든 눈금이 똑같이 그려진다.
+ * **아래 구간 라벨과 같은 규칙이다**(`tierLabelStyle`). 점과 라벨이 세로로 맞아야
+ * 어느 점이 어느 구간인지 읽힌다. 양 끝은 % 로 두면 원의 절반이 밖으로 나가므로
+ * 끝에 붙이고, 가운데만 중앙 정렬한다.
+ *
+ * 세로 가운데 맞춤(`translateY`)을 여기서 함께 준다 — 인라인 `transform` 이
+ * 유틸리티(`-translate-y-1/2`)를 덮어써서 둘로 나누면 한쪽이 죽는다.
+ *
+ * 예전 눈금은 픽셀 격자에 맞추려고 바 너비를 재고 `ResizeObserver` 까지 달았는데,
+ * 그건 **굵기가 있는 선**이라 소수점 좌표에서 번졌기 때문이다. 점은 번질 굵기가 없어
+ * % 좌표로 충분하다 — 그 장치를 통째로 걷어냈다.
  */
-const progressBarRef = ref(null)
-const barWidth = ref(0)
-const screenRatio = ref(1)
-
-/**
- * 눈금 두께. **CSS px 이 아니라 물리 픽셀 개수다.**
- * 배율이 1.25 면 2픽셀 = 1.6px 로 나간다. 정수 CSS px 로 잡으면 배율에 따라
- * 픽셀 경계에 안 떨어져 다시 번진다 — 굵기를 바꿀 때는 이 숫자만 만진다.
- */
-const TICK_DEVICE_PIXELS = 2
-
-let barObserver = null
-
-function measureProgressBar() {
-  barWidth.value = progressBarRef.value?.getBoundingClientRect().width ?? 0
-  // 배율은 브라우저 확대/축소로 바뀐다. 그때 너비도 같이 바뀌므로 여기서 함께 읽는다.
-  screenRatio.value = window.devicePixelRatio || 1
+function tierDotStyle(index) {
+  if (index === 0) return { top: '50%', left: '0', transform: 'translateY(-50%)' }
+  if (index === tiers.value.length - 1) {
+    return { top: '50%', right: '0', transform: 'translateY(-50%)' }
+  }
+  return {
+    top: '50%',
+    left: `${tierPercent(index)}%`,
+    transform: 'translate(-50%, -50%)',
+  }
 }
-
-// 바는 `v-if` 안에 있어 setup 시점엔 없다. 붙고 떨어질 때마다 관찰을 갈아끼운다.
-watch(progressBarRef, (element) => {
-  barObserver?.disconnect()
-  barObserver = null
-  if (!element) return
-  barObserver = new ResizeObserver(measureProgressBar)
-  barObserver.observe(element)
-  measureProgressBar()
-})
-
-onBeforeUnmount(() => barObserver?.disconnect())
-
-/**
- * 바 위에 그릴 구간 경계 눈금. 양 끝은 바의 끝이 곧 경계라 빼고 사이만 긋는다.
- * 너비를 재기 전에는 그리지 않는다 — 전부 0px 에 겹쳐 찍힌 게 한 번 보였다 사라진다.
- */
-const tierTicks = computed(() => {
-  if (barWidth.value <= 0) return []
-
-  const ratio = screenRatio.value
-  return tiers.value.slice(1, -1).map((tier, index) => {
-    const offset = (barWidth.value * tierPercent(index + 1)) / 100
-    return {
-      ...tier,
-      style: {
-        left: `${Math.round(offset * ratio) / ratio}px`,
-        width: `${TICK_DEVICE_PIXELS / ratio}px`,
-      },
-    }
-  })
-})
 
 /**
  * 구간 라벨 위치. 가운데 라벨만 눈금에 맞춰 중앙 정렬하고,
@@ -635,13 +603,17 @@ function dateLabel(date) {
             </button>
           </div>
 
+          <!--
+            금액 옆에 있던 `상세 보기` 를 뺐다 (#204). 아래 `최근 이용 내역` 의 `자세히` 와
+            **같은 화면**(`openView('transactions')`)으로 가는 버튼이라, 한 화면에서 같은 곳으로
+            가는 길이 둘이었다.
+          -->
           <div class="mycard-amount-row">
             <div>
               <span>{{ activeCard.amountLabel }}</span>
               <strong>{{ won(activeCard.amount) }}</strong>
               <small v-if="activeCard.account">{{ activeCard.account }}</small>
             </div>
-            <button type="button" @click="openView('transactions')">상세 보기</button>
           </div>
 
           <div class="mycard-dots">
@@ -861,25 +833,49 @@ function dateLabel(date) {
                 <strong>{{ won(performance) }} <ChevronRight :size="15" /></strong>
               </button>
               <div class="mycard-progress-wrap detail">
-                <!-- 눈금은 바 밖(relative 래퍼)에 둔다. `.mycard-progress > span` 규칙이
-                     안쪽 span 을 전부 노란 채움으로 칠해 버려서다. -->
-                <div ref="progressBarRef" class="relative">
+                <!--
+                  구간마다 점 하나씩이다 (#204). 예전에는 한 줄짜리 바에 노란 채움과 경계
+                  눈금을 그렸는데, **이 값은 금액 비례가 아니라 구간 순번 등분**이라
+                  (`tierPercent` 주석) 연속된 막대가 금액이 차오르는 것처럼 잘못 읽혔다.
+
+                  높이는 픽피 원(32px)이 정한다. 점은 그 안에서 세로 가운데에 놓인다.
+                -->
+                <!--
+                  바는 그대로다 — 채운 만큼 노랑, 나머지는 회색 트랙(`.mycard-progress`).
+                  **바뀐 것은 구간 표시다** (#204). 예전에는 검은 작대기를 그었는데
+                  피그마(`node-id=161-1365`)의 원으로 바꿨다.
+                -->
+                <div class="relative">
                   <div class="mycard-progress">
-                    <!-- 돼지 얼굴은 눈금보다 위에 있어야 한다. 눈금이 DOM 상 뒤라 z-index 없이는
-                         32px 얼굴 위로 작대기가 그어진다. -->
                     <span :style="{ width: `${progress}%` }"
-                      ><i class="z-10"><img :src="pigFace" alt="" /></i
+                      ><i class="z-10"
+                        ><!--
+                          픽피가 원 안에서 오른쪽으로 치우쳐 보인다. **상자는 이미 정중앙이다** —
+                          `pig-face.svg` 안에 든 512×512 PNG 에서 **그림 자체가** 캔버스 중심보다
+                          오른쪽에 그려져 있다. 알파 경계를 재 보니 가로로 +3.5% 였다.
+                          `object-position` 은 안 통한다 — 정사각 그림이 정사각 칸을 꽉 채워
+                          움직일 여백이 없다. 그래서 그림을 그만큼 되민다.
+                        --><img
+                          :src="pigFace"
+                          alt=""
+                          class="size-full -translate-x-[3.5%] object-contain" /></i
                     ></span>
                   </div>
-                  <!-- 바(10px)보다 조금 길게 빼서 위아래로 2px 씩 걸치게 둔다. 색은 ink 다 —
-                       회색은 노란 채움 위에서만 대비가 세게 잡혀 지나온 구간의 눈금만 굵어 보였다.
-                       가로 위치와 두께는 클래스가 아니라 `tierTicks` 가 계산한 px 값이다.
-                       %  로 두면 구간마다 번짐이 달라 굵기가 제각각으로 보인다. -->
+
+                  <!--
+                    아직 못 간 구간에만 원을 찍는다. 지나온 구간은 노란 채움이 이미 덮고 있어서
+                    원을 겹쳐 놓으면 채움 위에 자국만 남는다.
+
+                    흰 테두리는 피그마 원(10.4px, 안쪽 2.08px)을 따른 것이다 — `box-sizing`
+                    이 border-box 라 테두리가 안쪽으로 들어가 바깥 지름이 그대로 유지된다.
+                    회색 트랙 위에서 이 흰 테두리가 원을 트랙과 갈라 준다.
+                  -->
                   <span
-                    v-for="tick in tierTicks"
-                    :key="tick.tierOrder"
-                    class="absolute top-1/2 h-3.5 -translate-y-1/2 bg-ink"
-                    :style="tick.style"
+                    v-for="(tier, index) in tiers"
+                    v-show="index > currentTier"
+                    :key="tier.tierOrder"
+                    class="absolute size-[10px] rounded-full border-2 border-white bg-muted"
+                    :style="tierDotStyle(index)"
                   ></span>
                 </div>
                 <!-- 라벨은 바에 붙이고(12px) 아래를 넉넉히 띄운다(16px). 12px 은 돼지 얼굴이
