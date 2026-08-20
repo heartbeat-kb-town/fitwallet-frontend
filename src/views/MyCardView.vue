@@ -592,7 +592,8 @@ function dateLabel(date) {
   <section class="mycard-screen">
     <template v-if="view === 'main'">
       <header class="mycard-header">
-        <h1>내 카드</h1>
+        <!-- 하단 탭이 이 화면을 `카드 내역` 으로 부른다. 제목이 다르면 같은 곳인지 헷갈린다. -->
+        <h1>카드 내역</h1>
         <button class="icon-button" type="button" aria-label="메뉴 열기" @click="openMyPage()">
           <Menu :size="23" />
         </button>
