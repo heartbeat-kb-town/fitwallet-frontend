@@ -246,8 +246,9 @@ button {
   scrollbar-width: none;
 }
 .place-card {
+  /* 실제 너비를 정하는 건 max-width 다. flex-basis 는 390px 기준 346px 이라 늘 여기 걸린다. */
   flex: 0 0 calc(100% - 44px);
-  max-width: 280px;
+  max-width: 248px;
   overflow: hidden;
   padding: 0;
   text-align: left;
