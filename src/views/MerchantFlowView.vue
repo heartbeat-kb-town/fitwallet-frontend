@@ -416,11 +416,23 @@ function closePin() {
   pinMessage.value = ''
 }
 
+/**
+ * 6자리를 채우면 **자동으로 검증이 나간다** (#212).
+ *
+ * 6자리는 그 자체로 입력 완료 신호다. `완료` 를 한 번 더 누를 이유가 없어 버튼을 뺐다.
+ * 결제 화면이 먼저 이렇게 바뀌었고(#130), 같은 비밀번호를 받는 두 화면의 동작을 맞춘다.
+ */
 function addDigit(digit) {
-  if (pin.value.length < 6) pin.value.push(digit)
+  if (paymentStore.isVerifyingPin || pin.value.length >= 6) return
+
+  pin.value.push(digit)
+  if (pin.value.length === 6) confirmPin()
 }
 
 function deleteDigit() {
+  // 검증이 나간 뒤에는 지울 수 없다. 예전에는 `완료` 만 disabled 라 검증 중에도
+  // 자릿수를 고칠 수 있었는데, 자동 검증에서는 그게 보낸 값과 화면을 어긋나게 한다.
+  if (paymentStore.isVerifyingPin) return
   pin.value.pop()
 }
 
@@ -763,14 +775,13 @@ async function confirmPin() {
             </svg>
           </button>
           <button type="button" @click="addDigit(0)">0</button>
-          <button
-            class="payment-pin-confirm"
-            type="button"
-            :disabled="paymentStore.isVerifyingPin"
-            @click="confirmPin"
-          >
-            {{ paymentStore.isVerifyingPin ? '확인 중' : '완료' }}
-          </button>
+          <!--
+            `완료` 버튼을 뺐다 (#212). 6자리를 채우면 자동으로 검증이 나간다.
+            칸은 남긴다 — 3×4 격자라 없애면 `0` 이 가운데에서 밀린다.
+          -->
+          <span class="payment-pin-confirm grid place-items-center" aria-live="polite">
+            {{ paymentStore.isVerifyingPin ? '확인 중' : '' }}
+          </span>
         </div>
       </section>
     </div>
