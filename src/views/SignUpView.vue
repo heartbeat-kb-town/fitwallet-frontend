@@ -22,7 +22,22 @@ const password = ref('')
 const passwordConfirm = ref('')
 const passwordVisible = ref(false)
 const passwordConfirmVisible = ref(false)
-const agreed = ref(false)
+/**
+ * 약관 항목. `required` 가 화면과 동작을 함께 정한다 (#236).
+ *
+ * 예전에는 체크박스가 `전체 약관에 동의합니다` 하나뿐이라 **선택 항목을 거부할 방법이
+ * 없었다.** 전체 동의를 누르면 마케팅까지 동의한 것이 됐다.
+ *
+ * 백엔드 `SignUpRequest` 는 `marketingAgreed` 를 검증 없이 받고 필수 약관 동의 여부는
+ * 아예 받지 않는다. **필수를 안 채운 가입을 막는 것은 화면 몫이다.**
+ */
+const TERMS = [
+  { key: 'service', label: '서비스 이용약관 동의', required: true },
+  { key: 'privacy', label: '개인정보 수집 및 이용 동의', required: true },
+  { key: 'marketing', label: '마케팅 정보 수신 동의', required: false },
+]
+
+const agreements = ref({ service: false, privacy: false, marketing: false })
 
 // 400 INVALID_INPUT_VALUE 의 필드별 사유. 검증 실패는 토스트로 띄우지 않는다 —
 // 어느 입력창이 문제인지 알려주지 못한다 (CLAUDE.md "에러 처리").
@@ -33,6 +48,26 @@ const passwordTooShort = computed(
   () => Boolean(password.value) && password.value.length < PASSWORD_MIN_LENGTH,
 )
 
+/** 가입을 막는 기준. **필수만 본다** — 마케팅은 안 켜도 넘어간다. */
+const requiredAgreed = computed(() =>
+  TERMS.filter((term) => term.required).every((term) => agreements.value[term.key]),
+)
+
+/** `전체 약관에 동의합니다` 의 상태. 개별을 다 켜면 저절로 켜진다. */
+const allAgreed = computed(() => TERMS.every((term) => agreements.value[term.key]))
+
+function toggleTerm(key) {
+  agreements.value[key] = !agreements.value[key]
+}
+
+/** 전체 동의는 셋을 한꺼번에 뒤집는다. 하나라도 꺼져 있으면 전부 켠다. */
+function toggleAllTerms() {
+  const next = !allAgreed.value
+  TERMS.forEach((term) => {
+    agreements.value[term.key] = next
+  })
+}
+
 // phone 은 백엔드가 @NotBlank 로 요구한다. 여기서 안 막으면 400 을 받고서야 알게 된다.
 const canSubmit = computed(
   () =>
@@ -42,7 +77,7 @@ const canSubmit = computed(
     password.value &&
     !passwordTooShort.value &&
     passwordMatches.value &&
-    agreed.value,
+    requiredAgreed.value,
 )
 
 /**
@@ -112,9 +147,9 @@ async function submit() {
       phone: phone.value,
       password: password.value,
       passwordConfirm: passwordConfirm.value,
-      // 약관이 전체동의 하나뿐이라 동의하면 [선택] 마케팅까지 함께 동의한 것이 된다.
-      // 선택 항목을 분리하는 것은 별도 이슈다 (#109 본문 참고).
-      marketingAgreed: agreed.value,
+      // 항목별로 받으므로 마케팅 값을 그대로 보낸다. 예전에는 전체동의 하나뿐이라
+      // 동의하면 [선택] 마케팅까지 함께 동의한 것이 됐다 (#236).
+      marketingAgreed: agreements.value.marketing,
     })
     router.push({ name: 'pin-register' })
   } catch (error) {
@@ -213,9 +248,9 @@ async function submit() {
       </label>
 
       <section class="terms-card">
-        <button class="all-terms" type="button" @click="agreed = !agreed">
-          <span class="checkbox" :class="{ checked: agreed }">
-            <svg v-if="agreed" width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <button class="all-terms" type="button" @click="toggleAllTerms()">
+          <span class="checkbox" :class="{ checked: allAgreed }">
+            <svg v-if="allAgreed" width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path
                 d="M2 6l3 3 5-5"
                 stroke="#1A1A1A"
@@ -228,16 +263,32 @@ async function submit() {
           <b>전체 약관에 동의합니다</b>
         </button>
         <div class="terms-divider"></div>
-        <div
-          v-for="term in [
-            '[필수] 서비스 이용약관 동의',
-            '[필수] 개인정보 수집 및 이용 동의',
-            '[선택] 마케팅 정보 수신 동의',
-          ]"
-          :key="term"
-          class="term-row"
-        >
-          <span>{{ term }}</span>
+        <div v-for="term in TERMS" :key="term.key" class="term-row">
+          <!--
+            체크박스를 `.checkbox` 로 쓰되 크기만 줄인다. 전체 동의(22px)보다 작아야
+            주·부가 읽힌다. `size-[18px]!` 의 `!` 는 style.css 의 `.checkbox` 가 레이어
+            밖이라 필요하다 — 색은 `.term-row` 가 물려주므로 그대로 둔다.
+          -->
+          <button
+            class="flex flex-1 items-center gap-2.5 bg-transparent text-left text-sub"
+            type="button"
+            :aria-pressed="agreements[term.key]"
+            @click="toggleTerm(term.key)"
+          >
+            <span class="checkbox size-[18px]!" :class="{ checked: agreements[term.key] }">
+              <svg v-if="agreements[term.key]" width="10" height="10" viewBox="0 0 12 12">
+                <path
+                  d="M2 6l3 3 5-5"
+                  fill="none"
+                  stroke="#1A1A1A"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+            <span>[{{ term.required ? '필수' : '선택' }}] {{ term.label }}</span>
+          </button>
           <AppIcon name="chevron" :size="14" />
         </div>
       </section>
