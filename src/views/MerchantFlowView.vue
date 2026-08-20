@@ -611,8 +611,13 @@ async function confirmPin() {
               자세히 검색하려면 매장 검색 탭으로 이동하세요
             </small>
           </div>
+          <!--
+            글자는 위 거리 칩(`.merchant-distance`)과 같은 13px / 750 이다.
+            `!` 가 필요하다 — style.css 의 `button, a, input { font: inherit }` 가 레이어 밖이라
+            유틸리티를 이긴다. `font` 는 단축 속성이라 크기와 굵기를 한꺼번에 덮어쓴다.
+          -->
           <button
-            class="flex-none rounded-full bg-icon-bg px-3.5 py-2 text-[12px] font-semibold text-primary-dark"
+            class="flex-none rounded-full bg-icon-bg px-2.5 py-1.5 text-[13px]! font-[750]! text-primary-dark"
             type="button"
             @click="navigateTo('search')"
           >

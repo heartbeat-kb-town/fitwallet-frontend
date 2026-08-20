@@ -853,14 +853,20 @@ onBeforeUnmount(() => {
           type="button"
           @click="openNearbyStores()"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <!--
+            색을 하드코딩하지 않는다. 시안은 `#1A1A1A` + `#FFCC00` 인데 둘 다 토큰에 있다 —
+            바깥은 글자색을 그대로 따르게 `currentColor`, 안쪽 구멍은 버튼 배경과 같은
+            `fill-primary` 다. 버튼 색이 바뀌면 핀도 같이 따라간다.
+          -->
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path
-              d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"
-              stroke="currentColor"
-              stroke-width="1.9"
-              stroke-linejoin="round"
+              d="M9.99984 1.66669C6.77484 1.66669 4.1665 4.27502 4.1665 7.50002C4.1665 11.875 9.99984 18.3334 9.99984 18.3334C9.99984 18.3334 15.8332 11.875 15.8332 7.50002C15.8332 4.27502 13.2248 1.66669 9.99984 1.66669Z"
+              fill="currentColor"
             />
-            <circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="1.9" />
+            <path
+              class="fill-primary"
+              d="M9.99984 9.58335C11.1504 9.58335 12.0832 8.65061 12.0832 7.50002C12.0832 6.34943 11.1504 5.41669 9.99984 5.41669C8.84924 5.41669 7.9165 6.34943 7.9165 7.50002C7.9165 8.65061 8.84924 9.58335 9.99984 9.58335Z"
+            />
           </svg>
           최적의 카드 추천 받고 결제하기
         </button>
