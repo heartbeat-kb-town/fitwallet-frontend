@@ -13,10 +13,6 @@ const { showToast } = useToast()
 const agreed = ref(false)
 const isConnecting = ref(false)
 
-function goBack() {
-  router.push({ name: 'signup-complete' })
-}
-
 /**
  * 마이데이터 자산 연동.
  *
@@ -53,9 +49,12 @@ async function connect() {
 <template>
   <div class="screen asset-screen">
     <header class="flow-header centered-title">
-      <button type="button" aria-label="가입 완료로 돌아가기" @click="goBack()">
-        <AppIcon name="back" :size="22" />
-      </button>
+      <!--
+        가입 완료 → 자산 연결은 앞으로만 가는 흐름이라 뒤로 가기를 두지 않는다.
+        다만 `.centered-title` 이 space-between 이라 왼쪽 자리를 비우면 제목이 왼쪽으로
+        밀린다. 오른쪽과 같은 30px 스페이서를 남겨 가운데를 유지한다.
+      -->
+      <span></span>
       <h1>금융 자산 연결하기</h1>
       <span></span>
     </header>
