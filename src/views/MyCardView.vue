@@ -429,6 +429,10 @@ function toTransaction(item) {
     categoryImageUrl: item.categoryImageUrl,
     // 실적 미인정일 때만 배지를 띄운다.
     isExcluded: item.performanceIncluded === false,
+    // 승인취소 (#218). 매퍼가 performance_included 를
+    // `is_eligible = 1 AND transaction_status = 'APPROVED'` 로 계산해서
+    // **취소 건은 예외 없이 isExcluded 도 true 다.** 화면에서 취소를 먼저 본다.
+    isCanceled: item.transactionStatus === 'CANCELED',
   }
 }
 
@@ -654,9 +658,17 @@ function dateLabel(date) {
               </div>
               <div class="mycard-transaction-copy">
                 <strong>{{ transaction.merchant }}</strong>
-                <span>{{ transaction.date }}</span>
+                <!-- 상세와 같은 toTransaction() 을 쓰므로 취소 표시도 같이 간다 (#218). -->
+                <span
+                  >{{ transaction.date
+                  }}<template v-if="transaction.isCanceled">
+                    · <i class="not-italic text-danger">승인취소</i></template
+                  ></span
+                >
               </div>
-              <b>{{ won(transaction.amount) }}</b>
+              <b :class="{ 'text-muted-deeper line-through': transaction.isCanceled }">{{
+                won(transaction.amount)
+              }}</b>
             </div>
           </section>
 
@@ -1012,13 +1024,24 @@ function dateLabel(date) {
               </div>
               <div class="mycard-transaction-copy">
                 <strong>{{ transaction.merchant }}</strong>
+                <!--
+                  `승인취소` 를 span 안에 넣되 태그는 i 다. `.mycard-transaction-copy span` 이
+                  후손 선택자라 중첩 span 까지 #b0a89e 로 칠하는데, style.css 는 레이어 밖이라
+                  Tailwind 로 못 이긴다. i 는 그 선택자에 안 걸린다.
+                -->
                 <span
                   >{{ transaction.time
-                  }}<template v-if="transaction.detail"> · {{ transaction.detail }}</template></span
+                  }}<template v-if="transaction.detail"> · {{ transaction.detail }}</template
+                  ><template v-if="transaction.isCanceled">
+                    · <i class="not-italic text-danger">승인취소</i></template
+                  ></span
                 >
-                <em v-if="transaction.isExcluded">실적 미인정 건</em>
+                <!-- 취소 건은 늘 실적 미인정이다. 배지를 같이 띄우면 항상 두 개가 뜬다. -->
+                <em v-if="transaction.isExcluded && !transaction.isCanceled">실적 미인정 건</em>
               </div>
-              <b>{{ won(transaction.amount) }}</b>
+              <b :class="{ 'text-muted-deeper line-through': transaction.isCanceled }">{{
+                won(transaction.amount)
+              }}</b>
             </article>
           </div>
         </section>
