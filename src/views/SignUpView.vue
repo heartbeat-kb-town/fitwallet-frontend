@@ -5,6 +5,7 @@ import AppIcon from '@/components/AppIcon.vue'
 import PasswordEye from '@/components/PasswordEye.vue'
 import { useAuthStore, AutoLoginError } from '@/stores/authStore'
 import { useToast } from '@/composables/useToast'
+import { caretAfterDigits, formatPhoneNumber } from '@/utils/phoneNumber'
 
 // 백엔드 SignUpRequest 의 @Size(min = 8) 과 같은 값이다. 한쪽만 고치면 화면이 통과시킨 값을
 // 서버가 되돌려보낸다.
@@ -43,6 +44,27 @@ const canSubmit = computed(
     passwordMatches.value &&
     agreed.value,
 )
+
+/**
+ * 입력할 때마다 하이픈을 다시 채운다.
+ *
+ * `v-model` 을 못 쓰는 이유: 포맷 결과가 직전 값과 같으면(하이픈만 지웠을 때 등)
+ * Vue 가 다시 그리지 않아 입력창에는 사용자가 친 날것이 남는다. DOM 을 직접 되돌린다.
+ *
+ * DOM 에 값을 다시 쓰면 커서가 맨 끝으로 간다. 끝에 이어 칠 때는 티가 안 나지만
+ * 가운데를 고치면 다음 글자가 엉뚱한 자리에 들어가므로 커서도 같이 되돌린다.
+ */
+function onPhoneInput(event) {
+  const input = event.target
+  const caret = input.selectionStart ?? input.value.length
+  const digitsBeforeCaret = input.value.slice(0, caret).replace(/\D/g, '').length
+
+  const formatted = formatPhoneNumber(input.value)
+  phone.value = formatted
+  input.value = formatted
+  const nextCaret = caretAfterDigits(formatted, digitsBeforeCaret)
+  input.setSelectionRange(nextCaret, nextCaret)
+}
 
 function goToLogin() {
   router.push({ name: 'login' })
@@ -135,7 +157,14 @@ async function submit() {
         <span>휴대폰 번호</span>
         <div class="input-wrap" :class="{ error: fieldErrors.phone }">
           <AppIcon name="phone" />
-          <input v-model="phone" type="tel" placeholder="010-0000-0000" />
+          <input
+            :value="phone"
+            type="tel"
+            inputmode="numeric"
+            maxlength="13"
+            placeholder="010-0000-0000"
+            @input="onPhoneInput"
+          />
         </div>
         <small v-if="fieldErrors.phone" class="validation error-text">{{
           fieldErrors.phone
