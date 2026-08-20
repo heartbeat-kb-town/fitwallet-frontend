@@ -1033,15 +1033,6 @@ button {
   font-weight: 700;
 }
 
-.brand-copy > span {
-  display: block;
-  width: 40px;
-  height: 3px;
-  margin: 8px auto 0;
-  border-radius: 2px;
-  background: #ffcc00;
-}
-
 /* 로그인 타이틀 로고 (Pick pig 텍스트 → title.png 교체) */
 /* margin 위쪽(-) 값을 키우면 돼지와 더 가까워지고, 아래쪽 값을 키우면 멘트와 더 멀어져요 */
 .brand-copy .brand-logo {

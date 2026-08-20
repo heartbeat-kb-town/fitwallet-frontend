@@ -58,7 +58,6 @@ function goToSignUp() {
     <div class="brand-copy">
       <img :src="titleImage" class="brand-logo" alt="Pick pig" />
       <p>피그가 골라주는 카드, 픽피</p>
-      <span></span>
     </div>
 
     <div class="login-form">
