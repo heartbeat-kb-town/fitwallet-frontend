@@ -62,6 +62,11 @@ export const routes = [
     // 등록을 건너뛰고 주소창으로 바로 들어오면 확인할 대상이 없다.
     beforeEnter: () => (useSignupStore().registeredPin ? true : { name: 'pin-register' }),
   },
+  {
+    path: '/merchants/amount',
+    name: 'pick-amount',
+    component: () => import('@/views/PickAmountView.vue'),
+  },
 
   // 이관 중(#39): 아직 `views/` 로 옮기지 않은 화면 12개를 담는 임시 셸.
   // 셸 안에서 어느 화면을 볼지는 `?screen=` 으로 넘긴다 (이관이 끝나면 사라지는 임시 수단).

@@ -1,16 +1,19 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Menu } from 'lucide-vue-next'
+import { Info, Menu } from 'lucide-vue-next'
 import { categories } from '@/data'
 import * as benefitApi from '@/api/benefitApi'
 import { CARD_BENEFIT_STATUS } from '@/api/benefitApi'
 import * as storeApi from '@/api/storeApi'
+import BaseSpinner from '@/components/common/BaseSpinner.vue'
+import BaseLocationConsentSheet from '@/components/common/BaseLocationConsentSheet.vue'
 import { useAsyncState } from '@/composables/useAsyncState'
 import { CARD_RATIO, useCardImage } from '@/composables/useCardImage'
 import { useToast } from '@/composables/useToast'
 import { getCurrentCoordinates } from '@/utils/geolocation'
 import { usePaymentStore } from '@/stores/paymentStore'
+import { useLocationStore } from '@/stores/locationStore'
 
 /**
  * 화면 카테고리 id → 백엔드 `category.category_id`.
@@ -27,15 +30,21 @@ const BACKEND_CATEGORY_IDS = {
   gas: 6,
 }
 import storeSearchIcon from '@/assets/icons/category-store.svg'
+import storeNearbyIcon from '@/assets/icons/store-nearby.svg'
 import benefitGiftIcon from '@/assets/icons/category-benefit.svg'
+import pigPickIcon from '@/assets/icons/pig-pick.svg'
+import pickBubbleIcon from '@/assets/icons/pick-bubble.svg'
+import pickStorePinIcon from '@/assets/icons/pick-store-pin.svg'
+import pickWonIcon from '@/assets/icons/pick-won.svg'
 import iconHome from '@/assets/icons/home.svg'
-import iconPayment from '@/assets/icons/payment.svg'
+import iconSearchTab from '@/assets/icons/search-tab.svg'
 import iconMycard from '@/assets/icons/mycard.svg'
 import iconReport from '@/assets/icons/report.svg'
 
 const route = useRoute()
 const router = useRouter()
 const paymentStore = usePaymentStore()
+const locationStore = useLocationStore()
 const { showToast } = useToast()
 const { markCardImageOrientation, cardImageStyle } = useCardImage()
 
@@ -47,16 +56,33 @@ const str = (value, fallback = '') => (typeof value === 'string' ? value : fallb
 // 무엇을 보여줄지는 URL 이 정한다 (#59). 기본값은 기존 props default 그대로다.
 const request = computed(() => ({
   categoryId: str(route.query.categoryId, 'cafe'),
-  title: str(route.query.title, str(route.query.query) || '카페/디저트'),
+  title: str(
+    route.query.title,
+    route.query.nearby === '1' ? '내 주변 혜택 가맹점' : str(route.query.query) || '카페/디저트',
+  ),
   query: str(route.query.query),
 }))
 
 // 결제에서 뒤로 왔을 때 그 가게 화면으로 복원하기 위한 값 (기존 merchantReturnStore)
 const initialStoreName = computed(() => str(route.query.store))
 
-// 검색에서 들어왔으면 뒤로가기가 검색으로 간다. 아니면 홈(셸 기본 화면).
+/**
+ * 금액 입력 화면(#144)에서 넘어온 값.
+ *
+ * `storeId` 가 함께 오면 목록을 기다리지 않고 바로 PICK 을 그린다. 금액을 묻는 화면을
+ * 거치면서 이 화면이 다시 마운트되는데, 목록 조회가 끝날 때까지 PICK 을 못 그리면
+ * 가맹점을 고른 뒤 "찾는 중" 로더를 한 번 더 보게 된다.
+ *
+ * `amount` 는 없을 수도 있다 — 금액 입력 화면에서 `아니요` 를 고른 경우다.
+ * 그때는 `getExpectedBenefits` 가 쿼리에서 통째로 뺀다.
+ */
+const initialStoreId = computed(() => str(route.query.storeId))
+const requestedAmount = computed(() => str(route.query.amount))
+
+// 들어온 곳으로 되돌린다. 결제에서 온 경우가 #228 로 늘었다.
 function goBack() {
   if (route.query.from === 'search') router.push({ name: 'search' })
+  else if (route.query.from === 'payment') router.push({ name: 'payment' })
   else router.push({ name: 'home' })
 }
 
@@ -66,13 +92,24 @@ function openMyPage() {
 }
 
 function navigateTo(target) {
-  if (target === 'payment') {
+  // 검색 칸은 홈 화면(검색창·카테고리)을 연다. 라벨만 바뀌었고 가는 곳은 예전 그대로다.
+  if (target === 'search') {
+    router.push({ name: 'home' })
+    return
+  }
+  // 홈 칸은 결제 화면을 연다. 들어가면 카드 선택부터 시작한다 (#66).
+  if (target === 'home') {
     paymentStore.reset()
     router.push({ name: 'payment' })
     return
   }
   if (target === 'mycard') {
     router.push({ name: 'my-card' })
+    return
+  }
+  // `report` 분기가 없으면 마지막 줄로 떨어져 홈으로 간다. 탭 이름과 라우트 이름이 다르다.
+  if (target === 'report') {
+    router.push({ name: 'report' })
     return
   }
   router.push({ name: 'home' })
@@ -90,9 +127,17 @@ function payWith({ userCardId, store }) {
   router.push({ name: 'payment' })
 }
 
-const selectedStore = ref(null)
+// 금액 입력 화면에서 돌아왔으면 쿼리만으로 PICK 을 복원한다. PICK 이 쓰는 값은
+// `storeId` 와 `storeName` 둘뿐이라 목록의 원본 객체를 기다릴 이유가 없다.
+const selectedStore = ref(
+  initialStoreId.value && initialStoreName.value
+    ? { storeId: initialStoreId.value, storeName: initialStoreName.value }
+    : null,
+)
 const showPin = ref(false)
 const pendingPick = ref(null)
+/** 위치 동의 시트. 조회가 403 을 받았을 때만 뜬다. */
+const showConsent = ref(false)
 const pin = ref([])
 // PIN 시트 안에 띄우는 인라인 메시지. 시트가 화면을 덮고 있어 토스트는 가려진다.
 const pinMessage = ref('')
@@ -103,41 +148,98 @@ const category = computed(
 )
 const isSearch = computed(() => Boolean(request.value.query))
 
-const {
-  data: searchResult,
-  isLoading: isStoresLoading,
-  execute: fetchStores,
-} = useAsyncState(storeApi.getStoreSearch)
+/**
+ * 주변 조회 모드 (#228). 결제 화면의 `최적의 카드 추천 받고 결제하기` 가 여는 모습이다.
+ *
+ * 카테고리도 검색어도 없이 **좌표만으로** 조회한다. 백엔드가 이미 이 모드를 지원한다 —
+ * `DefaultStoreService.searchStores()` 가 "카테고리도 없는(= 좌표만 온) 요청" 을
+ * 주변 조회로 받는다. 막고 있던 것은 프론트였다.
+ */
+const isNearby = computed(() => route.query.nearby === '1')
+
+/** 앞에 세우는 아이콘. 주변 조회는 가게, 키워드 검색은 검색, 나머지는 카테고리 아이콘이다. */
+const leadingIcon = computed(() => {
+  if (isNearby.value) return storeNearbyIcon
+  return isSearch.value ? storeSearchIcon : category.value.icon
+})
+
+// 로딩 표시는 `isLoading` 이 아니라 아래 `isSearching` 이 맡는다 (최소 노출 시간 때문).
+const { data: searchResult, execute: fetchStores } = useAsyncState(storeApi.getStoreSearch)
 
 // 거리순 상위 5건 고정이다. 백엔드에 페이징이 없다.
 const stores = computed(() => searchResult.value?.stores ?? [])
 
 /**
+ * 목록을 채우는 동안 화면 가운데에 띄우는 로더.
+ *
+ * `isStoresLoading` 을 그대로 쓰지 않는 이유는 **응답이 너무 빨라서**다. 시드가 광진구
+ * 일대뿐이고 상위 5건 고정이라 조회가 순식간에 끝나는데, 그러면 안내가 한 프레임 깜빡이고
+ * 목록이 튀어나와 화면이 덜컥거린다. 최소 시간을 두면 "찾는 중 → 결과" 로 읽힌다.
+ *
+ * 응답이 더 오래 걸리면 그만큼 더 보여준다. 최소치이지 고정 지연이 아니다.
+ */
+const SEARCH_LOADER_MIN_MS = 1000
+const isSearching = ref(false)
+let searchLoaderTimer
+let searchStartedAt = 0
+
+function startSearchLoader() {
+  window.clearTimeout(searchLoaderTimer)
+  searchStartedAt = Date.now()
+  isSearching.value = true
+}
+
+function endSearchLoader() {
+  const remaining = SEARCH_LOADER_MIN_MS - (Date.now() - searchStartedAt)
+  window.clearTimeout(searchLoaderTimer)
+  searchLoaderTimer = window.setTimeout(
+    () => {
+      isSearching.value = false
+    },
+    Math.max(0, remaining),
+  )
+}
+
+// 로더가 남은 시간을 세는 도중에 화면을 떠날 수 있다.
+onBeforeUnmount(() => window.clearTimeout(searchLoaderTimer))
+
+/**
  * 가맹점을 조회한다.
  *
- * 검색어가 있으면 키워드 검색, 없으면 카테고리 주변 조회다.
- * 둘 다 비면 백엔드가 400 을 주므로 그 조합으로는 아예 부르지 않는다.
+ * 셋 중 하나다 — 검색어가 있으면 키워드 검색, 주변 조회 모드면 좌표만,
+ * 나머지는 카테고리 주변 조회다.
+ *
+ * 셋 다 아니면 백엔드가 400 을 주므로 그 조합으로는 아예 부르지 않는다.
+ * **주변 조회 모드는 좌표만 보내는 것이 정상이다** — 여기서 걸러내면 안 된다 (#228).
  *
  * **키워드 검색은 백엔드가 검색 기록에 남긴다.** 검색 화면의 최근 검색어가 여기서 쌓인다.
  */
 async function loadStores() {
   const keyword = request.value.query?.trim()
-  const categoryId = BACKEND_CATEGORY_IDS[category.value.id]
-  if (!keyword && !categoryId) return
+  const categoryId = isNearby.value ? null : BACKEND_CATEGORY_IDS[category.value.id]
+  if (!keyword && !categoryId && !isNearby.value) return
+
+  // 좌표를 구하는 동안에도 기다리는 것은 마찬가지다. 로더를 그 전에 켠다.
+  startSearchLoader()
 
   // 좌표는 필수다. 못 구하면 유틸이 시연용 기본 좌표를 준다 (실패하지 않는다).
   const { latitude, longitude } = await getCurrentCoordinates()
 
   try {
-    await fetchStores(
-      keyword ? { keyword, latitude, longitude } : { categoryId, latitude, longitude },
-    )
+    if (keyword) await fetchStores({ keyword, latitude, longitude })
+    else if (categoryId) await fetchStores({ categoryId, latitude, longitude })
+    else await fetchStores({ latitude, longitude })
   } catch (error) {
     if (error.code === 'LOCATION_AGREEMENT_REQUIRED') {
-      showToast('위치 정보 이용에 동의해 주세요')
+      // 예전에는 토스트만 띄웠다. 이 화면에 동의할 수단이 없어 막다른 길이었다 (#220).
+      // 기억한 값이 서버와 어긋났다는 뜻이므로 지우고 시트를 띄운다.
+      locationStore.forget()
+      showConsent.value = true
       return
     }
     showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
+  } finally {
+    endSearchLoader()
   }
 }
 
@@ -158,16 +260,25 @@ const {
 } = useAsyncState(benefitApi.getExpectedBenefits)
 
 /**
- * 상태 배지를 오른쪽 위로 옮기는 스타일.
+ * 카드 그림 위의 배지를 오른쪽 위로 옮기는 스타일. **순위든 사유든 전부 오른쪽이다.**
  *
  * `.pick-status` 는 `style.css` 에서 **왼쪽 위**에 붙는데, 카드 이미지의 카드명이
  * 딱 그 자리라 가려진다 (KB 이미지 기준 좌상단에 "KB 국민카드 / 청춘대로 | 톡톡").
+ *
+ * 종류마다 자리를 달리하면 카드를 훑을 때 배지를 두 군데서 찾게 된다. 한 줄로 세운다.
  *
  * 동결된 `style.css` 를 건드리지 않고 이 화면에서만 옮긴다.
  * Tailwind 유틸리티로는 안 된다 — `style.css` 규칙이 레이어 밖이라
  * `@layer utilities` 를 이긴다. 인라인만 확실히 덮는다.
  */
 const PICK_STATUS_STYLE = { left: 'auto', right: '0', borderRadius: '0 0 0 11px' }
+
+/**
+ * 선정 기준 설명 토글. 말풍선 옆 ⓘ 를 누를 때마다 열리고 닫힌다.
+ *
+ * 무엇을 보고 순위를 매겼는지가 화면 어디에도 없어서, 1위가 왜 1위인지 알 방법이 없었다.
+ */
+const isPickInfoOpen = ref(false)
 
 /**
  * 카드 그림 칸의 비율. 실제 카드 비율(약 1.58)에 맞춘다.
@@ -205,16 +316,25 @@ const PICK_VIEW = {
   [CARD_BENEFIT_STATUS.NO_BENEFIT]: { className: 'none', label: '혜택 없음' },
 }
 
+/** 원 단위 표기. 기대혜택액은 `BigDecimal` 이라 소수가 섞여 올 수 있다. */
+function won(value) {
+  return `${Math.round(Number(value)).toLocaleString('ko-KR')}원`
+}
+
 /**
  * 피그의 PICK 목록.
  *
  * **다시 정렬하지 않는다.** 백엔드가 AVAILABLE → CONDITION_NOT_MET → NO_BENEFIT
- * 순으로 이미 정렬해 준다. 화면이 또 정렬하면 그 기준이 두 곳에 생긴다.
+ * 순으로 이미 정렬해 준다. 금액을 보냈으면 그 안에서 기대혜택액 내림차순으로 한 번 더
+ * 정렬해서 준다. 화면이 또 정렬하면 그 기준이 두 곳에 생긴다.
  */
 const cardPicks = computed(() =>
   (expectedBenefits.value?.cards ?? []).map((card) => {
     const view = PICK_VIEW[card.status] ?? PICK_VIEW[CARD_BENEFIT_STATUS.NO_BENEFIT]
     const isAvailable = card.status === CARD_BENEFIT_STATUS.AVAILABLE
+
+    // 결제 예정 금액을 보냈을 때만 채워진다. 안 보냈으면 null 이다.
+    const expectedAmount = card.benefit?.expectedAmount
 
     return {
       // 결제로 넘길 때 이 id 를 그대로 쓴다. 추천 목록의 자리와 보유 카드의 자리는 다르다.
@@ -225,10 +345,37 @@ const cardPicks = computed(() =>
       status: view.className,
       statusLabel: view.label,
       benefit: card.benefit?.benefitName,
+      /**
+       * 혜택 이름 옆에 붙는 혜택 내용 (`20% 할인`).
+       *
+       * **금액을 보냈을 때만 붙인다.** 금액을 안 보내면 아래 `예상 혜택` 오른쪽이
+       * 곧 `displayText` 라(원화로 환산할 수가 없어서), 여기 또 적으면 같은 문구가 두 번 뜬다.
+       * 금액을 보내면 그 자리가 기대혜택액(원)으로 바뀌면서 혜택 내용이 갈 곳이 없어진다.
+       */
+      benefitDetail: expectedAmount != null ? (card.benefit?.displayText ?? null) : null,
       // 안내 문구는 서버가 사유마다 다르게 만들어 준다. 화면이 지어내지 않는다.
       reason: card.reason?.message,
-      // 받을 수 있을 때만 금액을 보여준다. 한도가 소진된 혜택은 benefit 이 와도 0원이다.
-      expected: isAvailable ? (card.benefit?.displayText ?? '0원') : '0원',
+      /**
+       * 이득 순위. **`AVAILABLE` 일 때만 숫자고 나머지는 null 이다.**
+       * 금액을 안 보냈으면 `AVAILABLE` 이어도 null 이다 — 무엇이 더 이득인지 잴 수 없어서다.
+       * 동점은 같은 순위를 주고 다음을 건너뛴다 (`1, 1, 3`).
+       */
+      rank: card.rank ?? null,
+      /**
+       * 받을 수 있을 때만 보여준다. 한도가 소진된 혜택은 `benefit` 이 와도 0원이다.
+       *
+       * **금액을 보냈으면 기대혜택액(원)을, 아니면 혜택 설명("20% 할인")을 쓴다.**
+       * 가맹점만 고르고 금액을 건너뛴 경로가 있어서 둘 다 대비해야 한다.
+       *
+       * ⚠️ **`expectedAmount` 를 화면에서 계산하지 않는다.** 건당 캡과 결제금액 상한이
+       * 이미 반영된 값이라 `결제금액 × 할인율` 과 다르다 — 30,000원에 "20% 할인" 인데
+       * 4,000원이 온다(6,000원이 아니다). 직접 곱하면 사용자에게 못 받을 금액을 약속하게 된다.
+       */
+      expected: isAvailable
+        ? expectedAmount != null
+          ? won(expectedAmount)
+          : (card.benefit?.displayText ?? '0원')
+        : '0원',
     }
   }),
 )
@@ -237,14 +384,50 @@ const cardPicks = computed(() =>
 const hasNoCard = computed(() => expectedBenefits.value?.hasCard === false)
 
 // 가맹점을 고르면 그 가맹점 기준으로 보유 카드를 판정받는다. 가맹점을 바꾸면 다시 받는다.
-watch(selectedStore, async (store) => {
-  if (!store) return
-  try {
-    await fetchExpectedBenefits(store.storeId)
-  } catch (error) {
-    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
-  }
-})
+// 쿼리로 복원된 경우에도 그려지자마자 판정을 받아야 하므로 immediate 다.
+watch(
+  selectedStore,
+  async (store) => {
+    if (!store) return
+    try {
+      await fetchExpectedBenefits(store.storeId, requestedAmount.value)
+    } catch (error) {
+      showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
+    }
+  },
+  { immediate: true },
+)
+
+/**
+ * 가맹점을 고르면 금액을 먼저 묻는다 (#144).
+ *
+ * 돌아올 주소를 통째로 넘긴다 — 화면 이름만으로는 카테고리·검색어를 복원할 수 없다.
+ */
+function selectStore(store) {
+  router.push({
+    name: 'pick-amount',
+    query: {
+      storeId: String(store.storeId),
+      store: store.storeName,
+      returnTo: route.fullPath,
+    },
+  })
+}
+
+/**
+ * PICK 에서 목록으로 돌아간다.
+ *
+ * `selectedStore` 만 비우면 안 된다. 쿼리에 `store` 가 남아 있으면 아래 `watch(stores)`
+ * 가 곧바로 다시 채워 PICK 으로 되튕긴다. 복원용 쿼리를 걷어내고 목록 주소로 바꾼다.
+ */
+function backToList() {
+  selectedStore.value = null
+  const { store, storeId, amount, ...rest } = route.query
+  void store
+  void storeId
+  void amount
+  router.replace({ path: route.path, query: rest })
+}
 
 function formatDistance(distance) {
   return distance >= 1000 ? `${(distance / 1000).toFixed(1)}km` : `${distance}m`
@@ -257,6 +440,12 @@ function chooseCard(pick) {
   showPin.value = true
 }
 
+/** 동의를 받았으니 막혔던 조회를 그대로 다시 돌린다. */
+function onConsentAgreed() {
+  showConsent.value = false
+  loadStores()
+}
+
 function closePin() {
   showPin.value = false
   pendingPick.value = null
@@ -264,11 +453,23 @@ function closePin() {
   pinMessage.value = ''
 }
 
+/**
+ * 6자리를 채우면 **자동으로 검증이 나간다** (#212).
+ *
+ * 6자리는 그 자체로 입력 완료 신호다. `완료` 를 한 번 더 누를 이유가 없어 버튼을 뺐다.
+ * 결제 화면이 먼저 이렇게 바뀌었고(#130), 같은 비밀번호를 받는 두 화면의 동작을 맞춘다.
+ */
 function addDigit(digit) {
-  if (pin.value.length < 6) pin.value.push(digit)
+  if (paymentStore.isVerifyingPin || pin.value.length >= 6) return
+
+  pin.value.push(digit)
+  if (pin.value.length === 6) confirmPin()
 }
 
 function deleteDigit() {
+  // 검증이 나간 뒤에는 지울 수 없다. 예전에는 `완료` 만 disabled 라 검증 중에도
+  // 자릿수를 고칠 수 있었는데, 자동 검증에서는 그게 보낸 값과 화면을 어긋나게 한다.
+  if (paymentStore.isVerifyingPin) return
   pin.value.pop()
 }
 
@@ -334,7 +535,7 @@ async function confirmPin() {
           </button>
           <div class="merchant-heading">
             <span class="merchant-leading-icon">
-              <img :src="isSearch ? storeSearchIcon : category.icon" alt="" />
+              <img :src="leadingIcon" alt="" />
             </span>
             <h1>{{ request.title }}</h1>
           </div>
@@ -354,22 +555,67 @@ async function confirmPin() {
       </header>
 
       <div class="merchant-divider"></div>
-      <p v-if="isStoresLoading" class="py-8 text-center text-[13px] text-sub">
-        주변 가맹점을 찾고 있어요
-      </p>
+      <!--
+        `.merchant-flow` 가 flex column 이라 `flex-1` 로 남은 높이를 통째로 받는다.
+        그래야 목록이 있을 자리 한가운데에 놓인다.
+      -->
+      <div
+        v-if="isSearching"
+        class="flex flex-1 flex-col items-center justify-center gap-3 text-sub"
+      >
+        <BaseSpinner size="lg" label="주변 가맹점을 찾는 중" />
+        <p class="text-[13px]">주변 가맹점을 찾고 있어요</p>
+      </div>
+
       <p v-else-if="!stores.length" class="py-8 text-center text-[13px] text-sub">
         근처에 조건에 맞는 가맹점이 없어요
       </p>
-      <div class="merchant-list">
+      <div v-else class="merchant-list">
+        <!--
+          주변 조회는 거리순 상위 5건만 온다 (백엔드에 페이징이 없다). 찾는 가게가
+          그 안에 없을 때 빠져나갈 길을 준다 — 매장 검색 화면으로 보낸다 (#228).
+
+          **목록 맨 위에 둔다.** 아래에 두면 5건을 다 내려야 보이는데, "내가 찾는 가게가
+          여기 없다" 는 것은 목록을 다 읽기 전에 이미 안다. 조회 범위 안내를 목록 위로
+          올린 것과 같은 이유다 (#137).
+
+          카테고리·키워드로 들어온 목록에는 띄우지 않는다. 그쪽은 이미 좁힌 결과다.
+        -->
+        <div
+          v-if="isNearby"
+          class="flex items-center gap-3 rounded-2xl border border-line bg-white px-4 py-3.5"
+        >
+          <div class="min-w-0 flex-1">
+            <strong class="block text-[13px] font-semibold text-ink">
+              찾으시는 매장이 없으신가요?
+            </strong>
+            <small class="mt-0.5 block text-[11px] text-muted-deep">
+              자세히 검색하려면 매장 검색 탭으로 이동하세요
+            </small>
+          </div>
+          <!--
+            글자는 아래 거리 칩(`.merchant-distance`)과 같은 13px / 750 이다.
+            `!` 가 필요하다 — style.css 의 `button, a, input { font: inherit }` 가 레이어 밖이라
+            유틸리티를 이긴다. `font` 는 단축 속성이라 크기와 굵기를 한꺼번에 덮어쓴다.
+          -->
+          <button
+            class="flex-none rounded-full bg-icon-bg px-2.5 py-1.5 text-[13px]! font-[750]! text-primary-dark"
+            type="button"
+            @click="navigateTo('search')"
+          >
+            이동하기
+          </button>
+        </div>
+
         <button
           v-for="store in stores"
           :key="store.storeId"
           class="merchant-card"
           type="button"
-          @click="selectedStore = store"
+          @click="selectStore(store)"
         >
           <span class="merchant-store-icon">
-            <img :src="isSearch ? storeSearchIcon : category.icon" alt="" />
+            <img :src="leadingIcon" alt="" />
           </span>
           <span class="merchant-store-info">
             <strong>{{ store.storeName }}</strong>
@@ -388,7 +634,7 @@ async function confirmPin() {
 
     <template v-else>
       <header class="pick-header">
-        <button type="button" aria-label="가맹점 목록으로" @click="selectedStore = null">
+        <button type="button" aria-label="가맹점 목록으로" @click="backToList()">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
         </button>
         <h1>피그의 PICK</h1>
@@ -397,12 +643,71 @@ async function confirmPin() {
         </button>
       </header>
 
-      <div class="pick-store-name">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z" />
-          <circle cx="12" cy="10" r="3" />
-        </svg>
-        <strong>{{ selectedStore.storeName }}</strong>
+      <!--
+        피그가 말을 거는 자리. 시안대로 캐릭터 + 말풍선 + ⓘ 다.
+        말풍선은 꼬리까지 그려진 한 장이라 그림 위에 글자를 얹는다.
+        `style.css` 가 동결이라 Tailwind 유틸리티로만 짠다.
+      -->
+      <div class="flex flex-none items-center gap-2 bg-white px-5 pt-4">
+        <img :src="pigPickIcon" alt="" width="61" height="46" class="flex-none" />
+        <span class="relative grid flex-none place-items-center">
+          <img :src="pickBubbleIcon" alt="" width="200" height="38" />
+          <strong class="absolute text-[13px] font-bold text-ink">
+            제가 추천하는 최적의 카드입니다
+          </strong>
+        </span>
+        <!--
+          Preflight 를 빼둔 프로젝트라 버튼 기본 배경을 직접 지운다.
+          안 지우면 브라우저 기본 회색 알약이 그대로 보인다.
+        -->
+        <button
+          type="button"
+          class="flex-none bg-transparent p-0 text-muted transition-colors hover:text-sub"
+          :aria-expanded="isPickInfoOpen"
+          aria-label="어떤 기준으로 골랐는지 보기"
+          @click="isPickInfoOpen = !isPickInfoOpen"
+        >
+          <Info :size="15" />
+        </button>
+      </div>
+
+      <!--
+        선정 기준. ⓘ 를 누를 때마다 열리고 닫힌다.
+        문구는 시안의 `최적의 카드 추천 로직 설명` 그대로다.
+        **세 문단으로 끊는다** — 무엇을 보고 골랐나 / 적립은 어떻게 견주나 / 무엇이 빠졌나 다.
+        붙여 놓으면 셋이 한 덩어리로 보여서, 목록에 안 뜨는 카드가 왜 없는지가 끝에 묻힌다.
+      -->
+      <Transition name="expand">
+        <div
+          v-if="isPickInfoOpen"
+          class="mx-5 mt-2 flex-none rounded-xl bg-icon-bg px-3 py-2.5 text-[12px] leading-relaxed text-sub"
+        >
+          <p class="m-0">
+            이 가맹점에 적용되는 혜택인지, 지난달 사용액과 이번 결제 금액이 조건을 채우는지, 남은
+            혜택 한도가 있는지를 고려해서 선정했어요.
+          </p>
+          <p class="mt-2 mb-0">적립은 포인트를 원으로 환산해 할인과 같은 기준으로 비교합니다.</p>
+          <p class="mt-2 mb-0">
+            이 가맹점 대상이 아니거나, 지난달 사용액·결제 금액 조건에 못 미치거나, 혜택 한도를 모두
+            사용한 혜택은 선정에서 제외되었어요.
+          </p>
+        </div>
+      </Transition>
+
+      <!--
+        가맹점과 결제 예정 금액을 한 줄에 둔다. 둘 다 "이 추천이 무엇을 전제로 하는가" 라서다.
+        가게 이름이 길면 그쪽이 잘리고 금액은 남는다(`shrink-0`) — 금액이 잘리면 액수를 오해한다.
+        금액 화면에서 "아니요" 를 고른 경로에서는 아예 숨긴다. 0원으로 적으면 "0원짜리 결제" 로 읽힌다.
+      -->
+      <div class="flex flex-none items-center gap-2 bg-white px-5 py-4 text-[13px]">
+        <img :src="pickStorePinIcon" alt="" width="15" height="15" class="flex-none" />
+        <strong class="min-w-0 truncate font-bold text-ink">{{ selectedStore.storeName }}</strong>
+        <template v-if="requestedAmount">
+          <img :src="pickWonIcon" alt="" width="15" height="15" class="ml-auto flex-none" />
+          <span class="flex-none text-sub">
+            결제 예정 금액 <b class="font-bold text-ink">{{ won(Number(requestedAmount)) }}</b>
+          </span>
+        </template>
       </div>
 
       <div class="pick-list">
@@ -428,7 +733,15 @@ async function confirmPin() {
               :style="pickImageStyle(pick)"
               @load="markCardImageOrientation"
             />
-            <span class="pick-status" :class="pick.status" :style="PICK_STATUS_STYLE">
+            <!--
+              배지는 **하나만** 붙고 자리는 **오른쪽 위 한 곳**이다 (`PICK_STATUS_STYLE`).
+              순위를 아는 카드는 받을 수 있다는 뜻이라 "추천" 을 덧붙일 이유가 없다.
+              종류마다 자리를 달리하면 카드를 훑을 때 배지를 두 군데서 찾게 된다.
+            -->
+            <span v-if="pick.rank" class="pick-status" :style="PICK_STATUS_STYLE">
+              {{ pick.rank }}위
+            </span>
+            <span v-else class="pick-status" :class="pick.status" :style="PICK_STATUS_STYLE">
               {{ pick.statusLabel }}
             </span>
             <!-- 카드 이미지가 있으면 카드 앞면에 이름이 이미 찍혀 있다. 글자를 겹쳐 쓰지 않는다. -->
@@ -439,9 +752,16 @@ async function confirmPin() {
           </button>
 
           <div class="pick-card-info">
+            <!--
+              혜택 이름과 혜택 내용을 한 줄에. 이름이 길면 이름이 잘리고 내용은 남긴다
+              (`20% 할인` 이 잘리면 얼마를 받는지가 사라진다).
+            -->
             <div v-if="pick.status === 'recommended'" class="pick-benefit">
               <img :src="benefitGiftIcon" alt="" />
-              <strong>{{ pick.benefit }}</strong>
+              <strong class="min-w-0 truncate">{{ pick.benefit }}</strong>
+              <span v-if="pick.benefitDetail" class="ml-auto flex-none font-bold">
+                {{ pick.benefitDetail }}
+              </span>
             </div>
             <p v-else-if="pick.status === 'none'" class="pick-no-benefit">
               <span>혜택없음</span>{{ pick.reason }}
@@ -466,19 +786,29 @@ async function confirmPin() {
     </template>
 
     <nav class="bottom-nav merchant-bottom-nav">
+      <button type="button" @click="navigateTo('search')">
+        <img :src="iconSearchTab" alt="" width="22" height="22" /><span>매장 검색</span>
+      </button>
       <button type="button" @click="navigateTo('home')">
-        <img :src="iconHome" alt="" width="22" height="22" /><span>홈</span>
+        <img :src="iconHome" alt="" width="22" height="22" /><span>결제</span>
       </button>
-      <button type="button" @click="navigateTo('payment')">
-        <img :src="iconPayment" alt="" width="22" height="22" /><span>결제</span>
+      <!-- 두 버튼에 핸들러가 없어 이 화면에서 나가는 길이 뒤로가기뿐이었다 (#196). -->
+      <button type="button" @click="navigateTo('mycard')">
+        <img :src="iconMycard" alt="" width="22" height="22" /><span>카드 내역</span>
       </button>
-      <button type="button">
-        <img :src="iconMycard" alt="" width="22" height="22" /><span>내 카드</span>
-      </button>
-      <button type="button">
-        <img :src="iconReport" alt="" width="22" height="22" /><span>리포트</span>
+      <button type="button" @click="navigateTo('report')">
+        <img :src="iconReport" alt="" width="22" height="22" /><span>혜택</span>
       </button>
     </nav>
+
+    <Transition name="fade">
+      <BaseLocationConsentSheet
+        v-if="showConsent"
+        :subject="request.title"
+        @agreed="onConsentAgreed"
+        @close="showConsent = false"
+      />
+    </Transition>
 
     <div v-if="showPin" class="payment-flow-layer">
       <button
@@ -527,14 +857,13 @@ async function confirmPin() {
             </svg>
           </button>
           <button type="button" @click="addDigit(0)">0</button>
-          <button
-            class="payment-pin-confirm"
-            type="button"
-            :disabled="paymentStore.isVerifyingPin"
-            @click="confirmPin"
-          >
-            {{ paymentStore.isVerifyingPin ? '확인 중' : '완료' }}
-          </button>
+          <!--
+            `완료` 버튼을 뺐다 (#212). 6자리를 채우면 자동으로 검증이 나간다.
+            칸은 남긴다 — 3×4 격자라 없애면 `0` 이 가운데에서 밀린다.
+          -->
+          <span class="payment-pin-confirm grid place-items-center" aria-live="polite">
+            {{ paymentStore.isVerifyingPin ? '확인 중' : '' }}
+          </span>
         </div>
       </section>
     </div>

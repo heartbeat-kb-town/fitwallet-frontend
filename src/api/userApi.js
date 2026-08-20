@@ -80,3 +80,32 @@ export const postSignup = ({ loginId, password, passwordConfirm, name, phone, ma
  */
 export const postPaymentPin = ({ pin, pinConfirm }) =>
   client.post('/user/payment-pin', { pin, pinConfirm })
+
+/**
+ * 결제 PIN 변경.
+ *
+ * 등록(`postPaymentPin`)과 달리 **현재 PIN 을 함께 보내야 한다.**
+ * 백엔드가 저장된 해시와 대조해서 본인 확인을 대신한다 (`PinUpdateRequest`).
+ * 세 값 모두 숫자 6자리 문자열이고, 성공 응답의 알맹이는 비어 있다.
+ *
+ *   - 400 INVALID_INPUT_VALUE             : 6자리 숫자가 아니다
+ *   - 400 INVALID_CURRENT_PAYMENT_PIN     : 현재 PIN 이 틀렸다
+ *   - 400 NEW_PAYMENT_PIN_CONFIRM_MISMATCH: 새 PIN 과 확인값이 다르다
+ *
+ * **남은 시도 횟수는 오지 않는다.** 결제 PIN 검증(`PIN_MISMATCH`)은 실패 횟수를 세지만
+ * 변경은 세지 않는다 (백엔드 #205 에서 응답에서 제거했다). 몇 번 남았는지 표시하지 않는다.
+ *
+ * PIN 을 등록한 적이 없는 사용자도 별도 코드가 없다. 저장된 해시가 없으면 대조가 실패해
+ * INVALID_CURRENT_PAYMENT_PIN 으로 떨어진다.
+ */
+export const patchPaymentPin = ({ currentPin, newPin, newPinConfirm }) =>
+  client.patch('/user/payment-pin', { currentPin, newPin, newPinConfirm })
+
+/**
+ * 현재 결제 PIN 이 맞는지만 확인한다.
+ *
+ *   - 400 INVALID_INPUT_VALUE         : 6자리 숫자가 아니다
+ *   - 400 INVALID_CURRENT_PAYMENT_PIN : 현재 PIN 이 틀렸다
+ */
+export const verifyCurrentPaymentPin = ({ currentPin }) =>
+  client.post('/user/payment-pin/verify', { currentPin })

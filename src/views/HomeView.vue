@@ -1,50 +1,34 @@
-<script>
-// 같은 세션에서 동의 시트를 두 번 띄우지 않기 위한 캐시. 홈에 다시 들어와도 유지된다.
-//
-// **동의의 진짜 상태는 서버에 있다** (`users.is_location_agreed`). 이건 요청을 아끼는 용도일 뿐이다.
-// 새로고침하면 false 로 돌아가 시트가 다시 뜨는데, 그때 동의를 한 번 더 저장한다.
-// 멱등한 요청이라 문제 없다. 서버 값을 읽어 시트 노출을 정하려면 `GET /user/me` 가 필요한데
-// 백엔드에 아직 없다 (#117).
-let locationConsented = false
-</script>
-
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Menu, X } from 'lucide-vue-next'
+import { Menu } from 'lucide-vue-next'
+// 헤더 로고. 로그인 화면(`LoginView`)과 같은 파일을 쓴다 — 그림을 두 벌로 두지 않는다.
+import titleImage from '@/assets/title.png'
 import iconSearch from '@/assets/icons/search.svg'
+import iconPigPeek from '@/assets/icons/pig-peek.svg'
+import iconSpeechBubble from '@/assets/icons/speech-bubble.svg'
 import iconHomeActive from '@/assets/icons/click-home.svg'
 import iconHome from '@/assets/icons/home.svg'
-import iconPayment from '@/assets/icons/payment.svg'
-import iconPaymentActive from '@/assets/icons/payment-selected.svg'
+// 하단 탭 첫 칸의 검색 아이콘. 검색창이 쓰는 `search.svg` 와 그림은 같고 색만 다르다 —
+// 비활성은 다른 탭과 같은 회색(#9B948D), 활성은 노랑(#FFCC00)이다.
+import iconSearchTab from '@/assets/icons/search-tab.svg'
+import iconSearchTabActive from '@/assets/icons/search-tab-selected.svg'
 import iconMycard from '@/assets/icons/mycard.svg'
 import iconMycardActive from '@/assets/icons/mycard-selected.svg'
 import iconReport from '@/assets/icons/report.svg'
 import iconReportActive from '@/assets/icons/report-selected.svg'
-import iconLocation from '@/assets/icons/location.svg'
-import { categories, benefitIcons } from '@/data'
-import * as cardApi from '@/api/cardApi'
+import { categories } from '@/data'
+import { CATEGORY_PHOTOS } from '@/constants/categoryPhotos'
+import BaseLocationConsentSheet from '@/components/common/BaseLocationConsentSheet.vue'
 import * as userApi from '@/api/userApi'
-import BaseSpinner from '@/components/common/BaseSpinner.vue'
+import { vDragScroll } from '@/directives/dragScroll'
 import { useAsyncState } from '@/composables/useAsyncState'
-import { useCardImage } from '@/composables/useCardImage'
-import { useToast } from '@/composables/useToast'
-import { useCardStore } from '@/stores/cardStore'
 import { usePaymentStore } from '@/stores/paymentStore'
+import { useLocationStore } from '@/stores/locationStore'
 
 const router = useRouter()
 const paymentStore = usePaymentStore()
-const cardStore = useCardStore()
-const { showToast } = useToast()
-const { markCardImageOrientation, cardImageStyle } = useCardImage()
-
-/**
- * 보유 카드. 목데이터가 아니라 `cardStore` 에서 온다 (#101).
- *
- * 예전에는 `src/data.js` 의 목 카드를 그렸는데, 거기 뜨는 `KB Gold & More` 는
- * 사용자가 갖고 있지도 않은 카드였다. 보유 카드의 유일한 출처는 store 다 (#76).
- */
-const cards = computed(() => cardStore.cards)
+const locationStore = useLocationStore()
 
 /**
  * 자주 찾는 장소. 목데이터가 아니라 API 에서 온다 (#114).
@@ -77,25 +61,37 @@ const places = computed(() =>
       category: place.categoryName,
       categoryId: category?.id,
       icon: category?.icon,
+      // 그 가게의 사진이 아니라 카테고리 대표 사진이다. `constants/categoryPhotos` 주석 참고.
+      photo: CATEGORY_PHOTOS[place.categoryName],
     }
   }),
 )
 
-onMounted(() => {
-  cardStore.ensureCardsWithImages()
+/**
+ * 로드에 실패한 사진 주소. 카테고리 사진은 외부(Unsplash)에서 받아오므로 오프라인이거나
+ * 주소가 죽으면 깨진 이미지가 남는다. 실패한 것만 기억해 두고 카테고리 아이콘으로 되돌린다.
+ */
+const brokenPhotos = ref(new Set())
 
+function markPhotoBroken(url) {
+  brokenPhotos.value = new Set(brokenPhotos.value).add(url)
+}
+
+onMounted(() => {
   // 실패해도 홈의 나머지는 그대로 그린다. 이 섹션만 비워 두면 된다.
   fetchFrequentPlaces().catch(() => {})
 })
 
-// 결제 탭으로 들어가면 카드 선택부터 시작한다 (기존 navigateTo('payment') 의 초기화).
+// 홈 화면 위쪽 검색창. 최근·인기 검색어 화면으로 들어간다.
+// **하단 탭의 `검색` 칸과 다른 곳이다** — 그 칸은 이 화면 자체를 가리킨다 (#198).
+function openSearch() {
+  router.push({ name: 'search' })
+}
+
+// 하단 탭 `홈` 칸. 결제 화면을 연다. 들어가면 카드 선택부터 시작한다 (#66).
 function openPayment() {
   paymentStore.reset()
   router.push({ name: 'payment' })
-}
-
-function openSearch() {
-  router.push({ name: 'search' })
 }
 
 // 돌아올 주소를 통째로 넘긴다 (#61).
@@ -107,6 +103,34 @@ function openMerchants({ categoryId, title, query = '' }) {
   router.push({ name: 'merchants', query: { categoryId, title, query } })
 }
 
+/**
+ * 자주 찾는 장소를 고르면 **금액 입력 화면으로 간다** (#194).
+ *
+ * 예전에는 가맹점 목록으로 보냈는데, 이 카드는 어느 가게인지 이미 정해 놓고 누르는 자리다.
+ * 목록으로 보내면 방금 고른 가게를 목록에서 한 번 더 찾아야 했다. 가맹점 화면에서 가게를
+ * 고른 뒤의 흐름(`MerchantFlowView.selectStore`, #144)과 같은 자리로 바로 붙인다.
+ *
+ * ⚠️ **`returnTo` 는 뒤로 가기 주소만이 아니다.** `PickAmountView.goToPick` 이 금액을 넣은 뒤
+ * **PICK 을 그릴 주소**로도 쓴다 — 그 주소에 `store` · `storeId` · `amount` 를 실어 보내고
+ * `MerchantFlowView` 가 그 쿼리로 PICK 을 복원한다. 그래서 홈 주소를 넣으면 안 된다.
+ * 금액을 입력해도 홈으로 돌아오고 PICK 이 뜨지 않는다.
+ *
+ * 그래서 `returnTo` 에는 가맹점 목록 주소를 넣고, **뒤로 갈 곳은 `backTo` 로 따로 넘긴다.**
+ * 홈에서 들어왔으니 뒤로 가면 홈이어야 한다.
+ */
+function openPlaceAmount(place) {
+  const returnTo = router.resolve({
+    name: 'merchants',
+    query: { categoryId: place.categoryId, title: place.name, query: place.name },
+  }).fullPath
+
+  router.push({
+    name: 'pick-amount',
+    // `place.id` 는 응답의 `storeId` 다 (`places` computed 참고). 쿼리는 문자열로 넘긴다.
+    query: { storeId: String(place.id), store: place.name, returnTo, backTo: '/home' },
+  })
+}
+
 function goToMyCard() {
   router.push({ name: 'my-card' })
 }
@@ -115,276 +139,65 @@ function openReport(cardId = '') {
   router.push({ name: 'report', query: cardId ? { cardId } : {} })
 }
 
-// 하단 내비게이션 탭: icon(비활성/회색), iconActive(활성/노랑)
+/**
+ * 하단 내비게이션 탭: icon(비활성/회색), iconActive(활성/노랑).
+ *
+ * **라벨과 아이콘만 바뀌었고 가는 곳은 예전 그대로다** (#198 · #223).
+ * 첫 칸 `매장 검색` 은 예전 `홈` 칸이라 이 화면(`/home`, 검색창·카테고리)을 가리키고,
+ * 둘째 칸 `결제` 는 결제 화면(`/payment`)을 가리킨다.
+ *
+ * 둘째 칸은 #198 에서 `결제` → `홈` 으로 적었다가 다시 `결제` 로 돌아왔다.
+ * 가는 곳이 결제 화면이라 아이콘도 카드 모양이고, 라벨이 `홈` 이면 셋이 따로 놀았다.
+ */
 const navItems = [
-  { label: '홈', icon: iconHome, iconActive: iconHomeActive },
-  { label: '결제', icon: iconPayment, iconActive: iconPaymentActive },
-  { label: '내 카드', icon: iconMycard, iconActive: iconMycardActive },
-  { label: '리포트', icon: iconReport, iconActive: iconReportActive },
+  { label: '매장 검색', icon: iconSearchTab, iconActive: iconSearchTabActive },
+  { label: '결제', icon: iconHome, iconActive: iconHomeActive },
+  { label: '카드 내역', icon: iconMycard, iconActive: iconMycardActive },
+  { label: '혜택', icon: iconReport, iconActive: iconReportActive },
 ]
 
-// 가로 스크롤 영역을 마우스로 잡아끌 수 있게 해주는 커스텀 디렉티브 (v-drag-scroll)
-// 터치·트랙패드는 브라우저 기본 스크롤을 그대로 쓰고, 마우스일 때만 동작해요.
-const vDragScroll = {
-  mounted(el) {
-    let pointerId = null
-    let startX = 0
-    let startScrollLeft = 0
-    let dragged = false
-
-    const onPointerDown = (event) => {
-      if (event.pointerType !== 'mouse' || event.button !== 0) return
-      pointerId = event.pointerId
-      startX = event.clientX
-      startScrollLeft = el.scrollLeft
-      dragged = false
-    }
-
-    const onPointerMove = (event) => {
-      if (pointerId === null || event.pointerId !== pointerId) return
-      const deltaX = event.clientX - startX
-      if (!dragged && Math.abs(deltaX) > 6) {
-        dragged = true
-        el.setPointerCapture(pointerId)
-        el.style.scrollSnapType = 'none'
-        el.classList.add('dragging')
-      }
-      if (dragged) {
-        el.scrollLeft = startScrollLeft - deltaX
-        event.preventDefault()
-      }
-    }
-
-    const endDrag = (event) => {
-      if (pointerId === null || event.pointerId !== pointerId) return
-      pointerId = null
-      el.classList.remove('dragging')
-      el.style.scrollSnapType = ''
-      // 드래그 직후 발생하는 클릭 한 번을 막은 뒤 상태를 초기화해요
-      window.setTimeout(() => {
-        dragged = false
-      }, 0)
-    }
-
-    const onClickCapture = (event) => {
-      if (dragged) {
-        event.preventDefault()
-        event.stopPropagation()
-      }
-    }
-
-    el.addEventListener('pointerdown', onPointerDown)
-    el.addEventListener('pointermove', onPointerMove)
-    el.addEventListener('pointerup', endDrag)
-    el.addEventListener('pointercancel', endDrag)
-    el.addEventListener('click', onClickCapture, true)
-
-    el._dragScrollCleanup = () => {
-      el.removeEventListener('pointerdown', onPointerDown)
-      el.removeEventListener('pointermove', onPointerMove)
-      el.removeEventListener('pointerup', endDrag)
-      el.removeEventListener('pointercancel', endDrag)
-      el.removeEventListener('click', onClickCapture, true)
-    }
-  },
-  unmounted(el) {
-    el._dragScrollCleanup?.()
-  },
-}
+/** 이 화면은 검색 칸이 가리키는 곳이므로 첫 칸이 켜져 있다. */
+const SEARCH_TAB_INDEX = 0
 
 const selectedCategory = ref(null)
 const consentCategory = ref(null)
-const isSavingConsent = ref(false)
-const benefitCard = ref(null)
+const activeTab = ref(SEARCH_TAB_INDEX)
+
+// 이 화면의 자체 토스트는 없앴다. 유일한 사용처가 "이 탭은 제외했어요" 였는데 네 칸이 전부
+// 실제 화면으로 이어지면서 부를 일이 사라졌다. 에러 토스트는 공용 `useToast` 가 맡는다.
 
 /**
- * 카드 이벤트 시트 (#125).
+ * 카테고리를 고르면 가맹점 목록으로 간다.
  *
- * 예전에는 "준비 중이에요" 토스트만 띄웠다. 백엔드에 이벤트 도메인이 없어서
- * 목데이터로 채우지 않고 자리만 남겨뒀던 것인데, 이제 API 가 생겼다.
+ * 동의를 아직 안 받았으면 시트를 먼저 띄운다. **저장하고 나서 넘어간다** — 가맹점 조회가
+ * `users.is_location_agreed` 를 보고 403 으로 막으므로(`DefaultStoreService.searchStores`),
+ * 먼저 넘어가면 빈 화면을 보여주게 된다.
+ *
+ * 동의 여부는 이제 `locationStore` 가 새로고침 뒤에도 기억한다 (#220).
  */
-const eventCard = ref(null)
-
-const {
-  data: cardEvents,
-  isLoading: isEventsLoading,
-  execute: fetchCardEvents,
-} = useAsyncState(cardApi.getCardEvents)
-
-/**
- * 화면이 쓰는 모양으로 옮긴다.
- *
- * `daysRemaining` 과 기간은 백엔드가 준 값을 그대로 쓴다 — 날짜를 다시 계산하지 않는다.
- */
-const events = computed(() =>
-  (cardEvents.value?.events ?? []).map((event) => ({
-    id: event.eventId,
-    summary: event.summary,
-    // 이 카드 전용인지 카드사 전체인지 구분한다. 사용자에게 의미가 다르다.
-    scope: event.targetType === 'ISSUER' ? '카드사 전체' : '이 카드',
-    period: `${event.startsAt} ~ ${event.endsAt}`,
-    daysRemaining: event.daysRemaining,
-    // detailAvailable 이 false 면 링크를 걸지 않는다. URL 이 있어도 마찬가지다.
-    detailUrl: event.detailAvailable ? event.detailUrl : null,
-  })),
-)
-const activeTab = ref(0)
-const toast = ref('')
-let toastTimer
-
-/**
- * 혜택 현황 시트의 내용. 카드별 이용 실적에서 온다 (#101).
- *
- * **예전 시트는 목데이터라서 보여줄 수 있던 것이 더 많았다.** 카테고리별 한도·사용액·건수와
- * 브랜드별 혜택이 있었는데 `/card/{id}/usage` 는 그것들을 주지 않는다.
- * 지어내지 않고, 실제로 오는 것(실적 금액·구간·구간별 혜택)만 보여준다.
- *
- * 카테고리별 사용액이 오게 되면 그때 예전 모양으로 되돌린다 (#101 의 A안).
- */
-const {
-  data: usage,
-  isLoading: isUsageLoading,
-  execute: fetchUsage,
-} = useAsyncState(cardApi.getCardUsage)
-
-/** 이번 달 실적 인정 금액. 실적 미달이어도 0 이 아니라 쌓인 만큼 온다. */
-const recognizedAmount = computed(() => Number(usage.value?.usageSummary?.recognizedAmount) || 0)
-
-/** 다음 구간 기준액. 최고 구간이거나 실적 조건이 없으면 null 이라 화면에서 분기한다. */
-const nextTierAmount = computed(() => {
-  const amount = usage.value?.nextTier?.minimumAmount
-  return amount == null ? null : Number(amount)
-})
-
-/** 실적 진행률. 백엔드가 계산해서 준다 — 화면에서 다시 구하지 않는다. */
-const progress = computed(() =>
-  Math.min(100, Math.round(Number(usage.value?.tierProgressRate) || 0)),
-)
-
-/** 헤더에 한 줄로 뜨는 실적 상태. */
-const tierLabel = computed(() => {
-  if (!usage.value) return ''
-
-  const current = usage.value.currentTier?.tierName
-  const until = usage.value.amountUntilNextTier
-  if (until != null && usage.value.nextTier) {
-    return `${current ?? '실적 구간'} 적용 중 · 다음 구간까지 ${won(Number(until))}`
-  }
-  return current ? `${current} 적용 중 (최고 구간)` : '실적 조건이 없는 카드예요'
-})
-
-/**
- * 구간별 혜택을 한 줄로 편다.
- *
- * 실적 조건이 없는 카드는 `tiers` 가 비고 혜택이 `defaultBenefits` 로 온다 (cardApi 주석).
- * 두 경우를 한 목록으로 합쳐 화면이 분기하지 않게 한다.
- */
-const tierBenefits = computed(() => {
-  if (!usage.value) return []
-
-  const fromTiers = (usage.value.tiers ?? []).flatMap((tier) =>
-    (tier.benefits ?? []).map((benefit) => ({
-      key: `${tier.tierOrder}-${benefit.benefitId}`,
-      name: benefit.benefitName,
-      value: benefit.valueLabel,
-      // 적립과 할인은 사용자에게 다른 혜택이다. 뭉뚱그리지 않는다.
-      kind: benefit.benefitType === 'ACCUMULATE' ? '적립' : '할인',
-      tierName: tier.tierName,
-      reached: tier.achieved || tier.current,
-    })),
-  )
-
-  const fromDefault = (usage.value.defaultBenefits ?? []).map((benefit) => ({
-    key: `default-${benefit.benefitId}`,
-    name: benefit.benefitName,
-    value: benefit.valueLabel,
-    kind: benefit.benefitType === 'ACCUMULATE' ? '적립' : '할인',
-    tierName: '기본 혜택',
-    reached: true,
-  }))
-
-  return [...fromTiers, ...fromDefault]
-})
-
-function won(value) {
-  return `${value.toLocaleString('ko-KR')}원`
-}
-
-function notify(message) {
-  toast.value = message
-  clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => {
-    toast.value = ''
-  }, 2200)
-}
-
 function chooseCategory(category) {
   selectedCategory.value = category.id
-  if (locationConsented) {
+  if (locationStore.isAgreed) {
     openMerchants({ categoryId: category.id, title: category.name })
     return
   }
   consentCategory.value = category
 }
 
-/**
- * 위치 정보 이용 동의.
- *
- * **서버에 저장하고 나서 넘어간다.** 가맹점 조회가 `users.is_location_agreed` 를 보고
- * 403 으로 막으므로(`DefaultStoreService`), 먼저 넘어가면 빈 화면을 보여주게 된다.
- *
- * 예전에는 모듈 변수만 세우고 서버에 알리지 않아, 동의를 눌러도 목록이 뜨지 않았다 (#117).
- */
-async function confirmLocation() {
-  if (isSavingConsent.value) return
-
+function onConsentAgreed() {
   const category = consentCategory.value
-  isSavingConsent.value = true
-
-  try {
-    await userApi.patchLocationAgreement({ agreed: true })
-  } catch (error) {
-    // 시트를 닫지 않는다. 닫으면 사용자가 다시 동의할 방법이 없다.
-    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
-    return
-  } finally {
-    isSavingConsent.value = false
-  }
-
-  locationConsented = true
   consentCategory.value = null
-
-  if (category) {
-    openMerchants({ categoryId: category.id, title: category.name })
-  }
+  if (category) openMerchants({ categoryId: category.id, title: category.name })
 }
 
-async function openBenefit(card) {
-  benefitCard.value = card
-  try {
-    // yearMonth 를 생략하면 현재 월이다 (cardApi 주석).
-    await fetchUsage(card.id)
-  } catch (error) {
-    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
-    benefitCard.value = null
-  }
-}
-
-async function openEvents(card) {
-  eventCard.value = card
-  try {
-    await fetchCardEvents(card.id)
-  } catch (error) {
-    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
-    eventCard.value = null
-  }
-}
-
-function categoryIcon(name) {
-  return Object.entries(benefitIcons).find(([key]) => name.includes(key))?.[1] ?? iconPayment
-}
-
-function selectTab(index, label) {
+/**
+ * 하단 탭 이동. 자리는 `navItems` 순서와 같다 (검색 · 홈 · 카드 내역 · 혜택).
+ *
+ * 첫 칸(검색)은 이미 이 화면이라 아무 데도 가지 않는다. 예전에는 여기에
+ * "이 탭은 제외했어요" 토스트가 있었는데, 네 칸이 전부 실제 화면으로 이어지면서
+ * 닿을 수 없는 가지가 됐다.
+ */
+function selectTab(index) {
   activeTab.value = index
   if (index === 1) {
     openPayment()
@@ -396,38 +209,95 @@ function selectTab(index, label) {
   }
   if (index === 3) {
     openReport()
-    return
-  }
-  if (index !== 0) {
-    notify(`${label} 탭은 홈 화면 변환본에서 제외했어요.`)
-    requestAnimationFrame(() => {
-      activeTab.value = 0
-    })
   }
 }
 </script>
 
 <template>
-  <header class="header">
-    <div class="profile">
-      <img src="/pickpig-face.png" alt="" class="pig-face" />
-      <div>
-        <p>안녕하세요</p>
-        <strong>김지연님</strong>
-      </div>
-    </div>
-    <button class="icon-button" aria-label="마이페이지 열기" @click="openMyPage()">
+  <!--
+    헤더와 본문을 가르는 선. 픽피가 스크롤로 내려가면서 헤더가 흰 띠만 남아, 아래 내용이
+    헤더 밑으로 지나갈 때 경계가 보이지 않았다.
+
+    색은 토큰(`border-line` = `#e9e4dc`)이고 리포트 헤더(`.report-header`)가 쓰는 선과 같다 —
+    화면마다 다른 회색을 쓰지 않는다. `style.css` 는 동결이라 유틸리티로 얹는다.
+  -->
+  <header class="header border-b border-line">
+    <!--
+      픽피와 말풍선은 아래 스크롤 영역으로 내려갔다 (#192). 그 자리에 서비스 로고를 둔다.
+
+      **로그인 화면이 쓰는 `assets/title.png` 를 그대로 쓴다.** 같은 그림을 파일 두 벌로
+      두면 한쪽만 바뀌었을 때 화면끼리 로고가 달라진다.
+
+      원본은 700×200(3.5:1)이다. 헤더가 80px 이고 위 패딩이 13px 이라 34px 로 잡으면
+      아래로 넉넉히 남는다. `width` 는 비율대로 따라오게 `h-*` 만 준다.
+
+      장식이 아니라 **서비스 이름**이므로 `alt` 를 채운다.
+    -->
+    <!--
+      `self-end` 로 아래에 붙인다. 헤더는 `padding: 13px 20px 0` 이라 가운데 정렬하면 위 패딩
+      때문에 로고가 위쪽으로 치우쳐 보인다. 오른쪽 마이페이지 버튼도 `self-end` 라 둘의
+      아래 선이 맞는다.
+    -->
+    <img :src="titleImage" alt="PickPIG" class="mb-2 h-[34px] w-auto self-end" />
+
+    <button class="icon-button mb-1 self-end" aria-label="마이페이지 열기" @click="openMyPage()">
       <Menu :size="23" />
     </button>
   </header>
 
   <div class="scroll-content">
+    <!--
+      디자인상 인사말("안녕하세요 김지연님") 자리를 대신하는 픽피와 말풍선이다.
+
+      **스크롤에 실려야 한다** (#192). 예전에는 헤더 안에 있었는데, 헤더가 80px 고정 밴드라
+      본문을 내려도 픽피만 그 자리에 남았다. 걸쳐 있던 검색창은 올라가는데 픽피는 허공에
+      뜬 것처럼 보였다. 스크롤 영역의 첫 요소로 옮겨 검색창과 같이 움직인다.
+
+      겹침은 **음수 아래 마진**으로 만든다. 헤더에 있을 때는 `translate-y-2` 로 밴드 밖으로
+      흘려보냈지만, `translate` 는 레이아웃을 밀지 않아 흐름 안에서는 아래 요소를 끌어오지
+      못한다. `-mb-2` 가 검색창을 8px 끌어올려 같은 겹침을 만든다.
+
+      8px 은 에셋 여백까지 계산한 값이다. `pig-peek.svg` 는 55×60 캔버스 안에서 그림이
+      y 15~57.3 에만 있어 **아래로 2.7px 이 비어 있다.** 8px 을 끌어올리면 실제 그림은
+      검색창을 5px 파고든다 — 디자인의 겹침과 같다.
+
+      `relative z-[1]` 이 없으면 뒤에 오는 검색창이 위에 그려져 픽피 아랫부분이 가려진다.
+      헤더의 `z-index: 2` 가 하던 일을 대신하는 것이다.
+      왼쪽 `pl-3`(12px)은 헤더에 있을 때와 같은 자리다 — 헤더 패딩 20px 에 `-ml-2` 였다.
+    -->
+    <div class="relative z-[1] -mb-2 flex items-end pl-3">
+      <img :src="iconPigPeek" alt="" width="55" height="60" class="shrink-0" />
+      <!--
+        말풍선은 디자이너가 준 도형(120×26)이고 글자가 들어 있지 않다. 이미지를 깔고 그 위에
+        실제 텍스트를 얹는다 — 글자를 이미지로 구우면 읽히지도, 확대에도 견디지 못한다.
+
+        몸통은 y 0~25 구간이고 꼬리가 26까지 내려오므로 글자는 25px 안에서 가운데 정렬한다.
+        몸통이 x=4 부터라 `pl-1` 로 그만큼 밀어 준다.
+      -->
+      <div class="relative mb-4 h-[26px] w-[120px] shrink-0">
+        <img :src="iconSpeechBubble" alt="" width="120" height="26" class="absolute inset-0" />
+        <span
+          class="absolute inset-x-0 top-0 flex h-[25px] items-center justify-center pl-1 text-[10px] font-bold"
+        >
+          <!-- 디자인의 강조색은 #E8AC04 다. 토큰 primary-dark(#E6A800) 와 육안 구분이 안 된다. -->
+          <span class="text-primary-dark">최대 혜택</span><span class="text-ink">으로 빠르게</span>
+        </span>
+      </div>
+    </div>
+
     <div class="search-wrap">
       <button class="search-bar" @click="openSearch()">
         <img :src="iconSearch" alt="" width="19" height="19" />
-        <span>어떤 혜택을 찾으시나요?</span>
+        <span>매장명을 검색하고 최적의 카드로 혜택을 받으세요</span>
       </button>
     </div>
+
+    <!--
+      디자인에 있는 섹션 제목. `.home-section h2` 를 쓰지 않는 이유는 그 규칙이 `.home-section`
+      안에서만 먹고, 카테고리 그리드는 그 래퍼 밖에 있어서다. Preflight 를 빼둔 프로젝트라
+      브라우저 기본 h2 여백·크기가 그대로 남으므로 `m-0` 과 크기를 직접 지정한다.
+    -->
+    <h2 class="m-0 mb-3 pl-5 text-base font-bold text-ink">매장 카테고리</h2>
 
     <div class="category-grid">
       <button
@@ -438,7 +308,7 @@ function selectTab(index, label) {
         @click="chooseCategory(category)"
       >
         <span class="category-icon">
-          <img :src="category.icon" :alt="category.name" width="26" height="26" />
+          <img :src="category.icon" :alt="category.name" width="22" height="22" />
         </span>
         <span>{{ category.name }}</span>
       </button>
@@ -452,24 +322,32 @@ function selectTab(index, label) {
           v-for="place in places"
           :key="place.id"
           class="place-card"
-          @click="
-            openMerchants({
-              categoryId: place.categoryId,
-              title: place.name,
-              query: place.name,
-            })
-          "
+          @click="openPlaceAmount(place)"
         >
           <!--
-            백엔드가 가게 사진을 주지 않아 카테고리 아이콘을 그린다.
-            목 사진을 그대로 두면 `HD현대오일뱅크직영 효진주유소` 에 블루보틀 사진이 붙는다.
+            백엔드가 가게 사진을 주지 않아 **카테고리 대표 사진**을 그린다.
+            그 가게의 사진이 아니다 — 카페면 커피 사진, 주유소면 주유소 사진이다.
+
+            예전 목 사진은 가게마다 고정이라 `HD현대오일뱅크직영 효진주유소` 에 블루보틀
+            사진이 붙었다. 카테고리로 고르면 적어도 종류는 맞는다.
+
+            사진이 없는 카테고리이거나 로드에 실패하면 카테고리 아이콘으로 되돌린다.
 
             `.place-image` 를 쓰지 않고 Tailwind 로 새로 짠다. style.css 4700줄은 레이어 밖에
             있어서 `.place-image img { object-fit: cover }` 가 유틸리티를 이긴다 —
             클래스를 그대로 두면 아이콘이 칸에 맞춰 늘어난다.
           -->
           <div class="flex h-[130px] items-center justify-center bg-icon-bg">
-            <img v-if="place.icon" :src="place.icon" alt="" class="size-12 object-contain" />
+            <img
+              v-if="place.photo && !brokenPhotos.has(place.photo)"
+              :src="place.photo"
+              alt=""
+              loading="lazy"
+              draggable="false"
+              class="size-full object-cover"
+              @error="markPhotoBroken(place.photo)"
+            />
+            <img v-else-if="place.icon" :src="place.icon" alt="" class="size-12 object-contain" />
           </div>
           <div class="place-info">
             <strong>{{ place.name }}</strong>
@@ -479,39 +357,7 @@ function selectTab(index, label) {
       </div>
     </section>
 
-    <section class="home-section cards-section">
-      <h2>카드 혜택 현황</h2>
-      <div v-drag-scroll class="horizontal-scroll">
-        <article v-for="card in cards" :key="card.id" class="benefit-card">
-          <div class="card-visual" :class="{ 'bg-muted-softer': !card.cardImageUrl }">
-            <img
-              v-if="card.cardImageUrl"
-              :src="card.cardImageUrl"
-              alt=""
-              draggable="false"
-              :style="cardImageStyle(card.cardImageUrl)"
-              @load="markCardImageOrientation"
-            />
-            <!-- 이미지가 있으면 카드 앞면에 카드명이 이미 찍혀 있다. 글자를 겹쳐 쓰지 않는다. -->
-            <template v-else>
-              <div class="card-top">
-                <div>
-                  <strong>{{ card.name }}</strong>
-                  <small>{{ card.issuer }}</small>
-                </div>
-              </div>
-              <span class="chip"></span>
-              <p>**** **** **** {{ card.last4 }}</p>
-            </template>
-          </div>
-          <div class="card-actions">
-            <button @click="openBenefit(card)">혜택 현황</button>
-            <span></span>
-            <button @click="openEvents(card)">이벤트</button>
-          </div>
-        </article>
-      </div>
-    </section>
+    <!-- `카드 혜택 현황` 은 리포트로 옮겼다. 혜택을 보는 자리를 리포트 한 곳으로 모은다. -->
   </div>
 
   <nav class="bottom-nav">
@@ -519,7 +365,7 @@ function selectTab(index, label) {
       v-for="(item, index) in navItems"
       :key="item.label"
       :class="{ active: activeTab === index }"
-      @click="selectTab(index, item.label)"
+      @click="selectTab(index)"
     >
       <img
         :src="activeTab === index ? item.iconActive : item.icon"
@@ -532,153 +378,13 @@ function selectTab(index, label) {
   </nav>
 
   <Transition name="fade">
-    <div v-if="consentCategory" class="sheet-layer">
-      <button class="scrim" aria-label="닫기" @click="consentCategory = null"></button>
-      <section class="sheet consent-sheet">
-        <span class="handle"></span>
-        <span class="consent-icon">
-          <img :src="iconLocation" alt="" width="32" height="32" />
-        </span>
-        <div class="consent-copy">
-          <h2>내 주변 {{ consentCategory.name }} 혜택을 볼까요?</h2>
-          <p>가까운 매장과 지금 받을 수 있는 카드 혜택을 찾기 위해 위치 정보가 필요해요.</p>
-        </div>
-        <button class="primary-button" :disabled="isSavingConsent" @click="confirmLocation">
-          {{ isSavingConsent ? '저장 중…' : '위치 정보 동의하고 보기' }}
-        </button>
-        <button class="text-button" :disabled="isSavingConsent" @click="consentCategory = null">
-          다음에 할게요
-        </button>
-      </section>
-    </div>
+    <BaseLocationConsentSheet
+      v-if="consentCategory"
+      :subject="consentCategory.name"
+      @agreed="onConsentAgreed"
+      @close="consentCategory = null"
+    />
   </Transition>
 
-  <Transition name="fade">
-    <div v-if="benefitCard" class="sheet-layer fixed-layer">
-      <button class="scrim" aria-label="혜택 현황 닫기" @click="benefitCard = null"></button>
-      <section class="sheet status-sheet">
-        <div class="sheet-head">
-          <span class="handle"></span>
-          <button class="sheet-close" aria-label="닫기" @click="benefitCard = null">
-            <X :size="18" />
-          </button>
-          <h2>{{ benefitCard.name }}</h2>
-          <p>{{ benefitCard.issuer }}</p>
-          <div class="progress-title">
-            <span>이번 달 실적</span>
-            <strong>
-              <em>{{ won(recognizedAmount) }}</em>
-              <template v-if="nextTierAmount"> / {{ won(nextTierAmount) }}</template>
-            </strong>
-          </div>
-          <div class="progress"><span :style="{ width: `${progress}%` }"></span></div>
-          <p class="tier">{{ tierLabel }}</p>
-        </div>
-        <div class="sheet-scroll">
-          <div v-if="isUsageLoading" class="flex justify-center py-16 text-sub">
-            <BaseSpinner size="lg" label="이용 실적을 불러오는 중" />
-          </div>
-
-          <template v-else>
-            <p class="limit-caption">실적 구간에 따라 <b>적용되는</b> 혜택</p>
-            <h3>구간별 혜택</h3>
-            <div v-if="tierBenefits.length" class="benefit-list">
-              <div v-for="item in tierBenefits" :key="item.key" class="benefit-row">
-                <span class="mini-icon"
-                  ><img :src="categoryIcon(item.name)" alt="" width="16" height="16"
-                /></span>
-                <div class="benefit-body">
-                  <div class="row-title">
-                    <strong>{{ item.name }}</strong>
-                    <span v-if="!item.reached" class="exhausted">미달성</span>
-                    <small>{{ item.tierName }}</small>
-                  </div>
-                  <div class="row-discount">
-                    <span>{{ item.kind }}</span>
-                    <strong
-                      ><em :class="{ muted: !item.reached }">{{ item.value }}</em></strong
-                    >
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div v-else class="py-6 text-center text-xs text-sub">
-              이 카드에 등록된 혜택 정보가 없어요
-            </div>
-
-            <button class="primary-button" @click="openReport(benefitCard.id)">
-              받은 혜택 리포트 보기
-            </button>
-          </template>
-        </div>
-      </section>
-    </div>
-  </Transition>
-
-  <!-- 카드 이벤트 시트 (#125). 혜택 현황 시트와 같은 구조를 쓴다. -->
-  <Transition name="sheet">
-    <div v-if="eventCard" class="sheet-layer fixed-layer">
-      <button class="scrim" aria-label="이벤트 닫기" @click="eventCard = null"></button>
-      <section class="sheet status-sheet">
-        <div class="sheet-head">
-          <span class="handle"></span>
-          <button class="sheet-close" aria-label="닫기" @click="eventCard = null">
-            <X :size="18" />
-          </button>
-          <h2>{{ eventCard.name }}</h2>
-          <p>{{ eventCard.issuer }}</p>
-        </div>
-
-        <div class="sheet-scroll">
-          <div v-if="isEventsLoading" class="flex justify-center py-16 text-sub">
-            <BaseSpinner size="lg" label="이벤트를 불러오는 중" />
-          </div>
-
-          <template v-else>
-            <h3>진행 중인 이벤트</h3>
-
-            <div v-if="events.length" class="flex flex-col gap-3">
-              <article
-                v-for="event in events"
-                :key="event.id"
-                class="rounded-2xl border border-line p-4"
-              >
-                <div class="mb-2 flex items-center gap-2">
-                  <span class="rounded-full bg-icon-bg px-2 py-0.5 text-[11px] text-sub">
-                    {{ event.scope }}
-                  </span>
-                  <!-- 남은 일수는 백엔드가 계산해 준다. 화면에서 날짜를 다시 빼지 않는다. -->
-                  <span v-if="event.daysRemaining != null" class="text-[11px] font-bold text-ink">
-                    D-{{ event.daysRemaining }}
-                  </span>
-                </div>
-
-                <p class="text-[13px] leading-snug text-ink">{{ event.summary }}</p>
-                <p class="mt-2 text-[11px] text-sub">{{ event.period }}</p>
-
-                <!-- 카드사 페이지로 나가는 외부 링크다. -->
-                <a
-                  v-if="event.detailUrl"
-                  :href="event.detailUrl"
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  class="mt-2 inline-block text-[12px] font-bold text-primary-dark underline"
-                >
-                  자세히 보기
-                </a>
-              </article>
-            </div>
-
-            <div v-else class="py-6 text-center text-xs text-sub">
-              지금 진행 중인 이벤트가 없어요
-            </div>
-          </template>
-        </div>
-      </section>
-    </div>
-  </Transition>
-
-  <Transition name="toast">
-    <div v-if="toast" class="toast">{{ toast }}</div>
-  </Transition>
+  <!-- 혜택 현황·이벤트 시트는 `CardBenefitStatusSection` 과 함께 리포트로 옮겼다. -->
 </template>

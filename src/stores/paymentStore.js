@@ -33,8 +33,14 @@ export const usePaymentStore = defineStore('payment', () => {
   )
 
   /**
-   * PIN 검증으로 받은 인증 표. QR 을 만들 때 한 번 내고 소모된다(백엔드가 used 로 찍는다).
-   * TTL 180초라 오래 들고 있으면 QR 생성에서 PIN_AUTH_ID_INVALID 가 난다.
+   * PIN 검증으로 받은 인증 표.
+   *
+   * **백엔드가 이 표를 소모하는 시점은 결제 완료다** (backend#185).
+   * 예전에는 QR 생성·매장 QR 스캔 순간에 `used` 로 찍혀서, CPM QR 을 띄운 것만으로 표가
+   * 사라지고 스캔으로 갈아탈 때 PIN 을 한 번 더 받아야 했다. 지금은 두 결제수단을 오가도
+   * 같은 표를 계속 쓴다. 그래서 **화면 전환마다 비우지 않는다** — 비우면 재입력이 되살아난다.
+   *
+   * TTL 180초라 오래 들고 있으면 PIN_AUTH_ID_INVALID 가 난다.
    *
    * 가맹점에서 PIN 을 입력하고 결제 화면으로 넘어가는 경로가 있어서
    * 화면 하나 안에 두지 못하고 여기에 둔다.
@@ -54,6 +60,10 @@ export const usePaymentStore = defineStore('payment', () => {
     execute: runCreateQr,
   } = useAsyncState(paymentApi.postQr)
 
+  const { isLoading: isScanningStoreQr, execute: runScanStoreQr } = useAsyncState(
+    paymentApi.postQrScan,
+  )
+
   /**
    * 결제 비밀번호 검증. 성공하면 `pinAuthId` 를 채운다.
    *
@@ -67,15 +77,42 @@ export const usePaymentStore = defineStore('payment', () => {
   }
 
   /**
-   * QR 세션 생성. 검증에서 받은 `pinAuthId` 를 소모한다.
+   * QR 세션 생성. 인증표를 함께 낸다.
+   *
+   * **여기서 표를 비우지 않는다.** 백엔드가 이 시점에 `used` 로 찍지 않기 때문이다
+   * (backend#185). 비우면 스캔으로 갈아탈 때 PIN 재입력이 되살아난다.
    *
    * @returns `{ qrToken, status, expiresIn }`
    */
   async function createQr(userCardId) {
-    const session = await runCreateQr({ userCardId, pinAuthId: pinAuthId.value })
-    // 백엔드가 used 로 찍었으니 이 표는 더 못 쓴다. 남겨두면 다음 결제에서 재사용하려다 400 이 난다.
+    return runCreateQr({ userCardId, pinAuthId: pinAuthId.value })
+  }
+
+  /**
+   * 매장 QR 스캔(MPM). `createQr` 과 **같은 인증표를 낸다.**
+   *
+   * `users.pin_auth_id` 가 컬럼 하나라 사용자당 표는 여전히 하나뿐이지만,
+   * 소모 시점이 결제 완료로 옮겨져서 CPM 으로 QR 을 이미 만들었어도 그대로 쓸 수 있다.
+   *
+   * @returns `{ paymentId, storeId, storeName, amount }`
+   */
+  async function scanStoreQr({ storeQrToken, userCardId, amount }) {
+    return runScanStoreQr({
+      storeQrToken,
+      pinAuthId: pinAuthId.value,
+      userCardId,
+      amount,
+    })
+  }
+
+  /**
+   * 결제가 끝났다. 표를 버린다.
+   *
+   * 백엔드가 결제 완료 시점에 `used` 로 찍으므로(backend#185) 이 표는 더 못 쓴다.
+   * 남겨두면 다음 결제에서 재사용하려다 `PIN_AUTH_ID_INVALID` 가 난다.
+   */
+  function clearPinAuth() {
     pinAuthId.value = ''
-    return session
   }
 
   // 가맹점에서 카드를 고르고 비밀번호까지 입력한 경우 — QR 단계부터 시작한다.
@@ -104,10 +141,13 @@ export const usePaymentStore = defineStore('payment', () => {
     qrSession,
     isVerifyingPin,
     isCreatingQr,
+    isScanningStoreQr,
     pinError,
     qrError,
     verifyPin,
     createQr,
+    scanStoreQr,
+    clearPinAuth,
     startFromMerchant,
     reset,
   }

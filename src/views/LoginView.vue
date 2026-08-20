@@ -24,7 +24,9 @@ async function login() {
 
   try {
     await authStore.login({ loginId: id.value, password: password.value })
-    router.push({ name: 'home' })
+    // 로그인 첫 화면은 결제다 (#226). `home` 은 매장 검색 화면이라 앱을 열자마자
+    // 검색부터 하게 됐다. 하단 탭에서도 결제가 가운데 서 있는 기본 자리다.
+    router.push({ name: 'payment' })
   } catch (error) {
     // 검증 실패는 토스트로 띄우지 않는다. 어느 입력창이 문제인지 알려주지 못한다.
     if (error.code === 'INVALID_INPUT_VALUE') {
@@ -42,11 +44,6 @@ async function login() {
   }
 }
 
-// TODO: 카카오 소셜 인증이 아직 없다. 기존 프로토타입처럼 그냥 통과시킨다.
-function loginWithKakao() {
-  router.push({ name: 'home' })
-}
-
 function goToSignUp() {
   router.push({ name: 'signup' })
 }
@@ -61,7 +58,6 @@ function goToSignUp() {
     <div class="brand-copy">
       <img :src="titleImage" class="brand-logo" alt="Pick pig" />
       <p>피그가 골라주는 카드, 픽피</p>
-      <span></span>
     </div>
 
     <div class="login-form">
@@ -94,22 +90,6 @@ function goToSignUp() {
 
       <button class="primary-button" type="button" :disabled="authStore.isLoading" @click="login()">
         {{ authStore.isLoading ? '로그인 중…' : '로그인' }}
-      </button>
-
-      <div class="social-divider">
-        <span></span>
-        <p>또는 소셜 계정으로 로그인</p>
-        <span></span>
-      </div>
-
-      <button class="kakao-button" type="button" @click="loginWithKakao()">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <path
-            d="M12 3C6.48 3 2 6.69 2 11.25c0 2.91 1.87 5.47 4.69 6.94L5.5 21l4.13-2.13c.77.11 1.56.17 2.37.17 5.52 0 10-3.69 10-8.25S17.52 3 12 3z"
-            fill="#1A1A1A"
-          />
-        </svg>
-        카카오로 로그인하기
       </button>
 
       <div class="login-links">

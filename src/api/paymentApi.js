@@ -37,6 +37,36 @@ export const postQr = ({ userCardId, pinAuthId }) =>
   client.post('/payment/qr', { userCardId, pinAuthId })
 
 /**
+ * 매장 QR 스캔 (MPM). 내 QR 을 보여주는 대신 **매장에 붙은 QR 을 내가 찍는** 결제다.
+ *
+ * CPM(`postQr`)과 달리 폴링이 없다. 이 한 번의 호출로 세션이 곧장 `SCANNED` 로 만들어지고
+ * (`insertScannedPaymentSession`), 이어서 `getPaymentResult` 가 결제를 굴린다.
+ *
+ * @param payload `{ storeQrToken, pinAuthId, userCardId, amount }`
+ *
+ *   - `storeQrToken` 은 `FITWALLET-QR-#####` 형식이다. 백엔드가 정규식으로 막는다
+ *   - ⚠️ **`amount` 를 프론트가 보낸다.** 백엔드는 응답의 `amount` 에 **보낸 값을 그대로
+ *     돌려준다.** 검증하지도, 조회하지도 않는다.
+ *     이 값은 **매장 QR 이 싣고 온 금액**이다 — QR 페이로드가
+ *     `{"storeQrToken":"FITWALLET-QR-00020","amount":4500}` 형태다 (`utils/storeQr.js`).
+ *     금액이 빠진 옛 평문 QR 을 만났을 때만 사용자에게 받는다.
+ *     ⚠️ 그래서 **QR 을 위조하면 결제 금액을 바꿀 수 있다.** 백엔드가 토큰으로 결제 요청
+ *     금액을 조회해야 맞지만 지금 계약에는 그 경로가 없다
+ *   - ⚠️ **`pinAuthId` 를 소모한다.** `postQr` 과 **같은 표를 태운다**
+ *     (`users.pin_auth_id` 컬럼 하나다). 둘 중 하나만 쓸 수 있다
+ *
+ * @returns `{ paymentId, storeId, storeName, amount }`
+ *   `storeName` 은 백엔드가 QR 토큰으로 조회한 **진짜 가맹점명**이다.
+ *
+ *   - 400 QR_TOKEN_INVALID : 형식이 맞지 않는다
+ *   - 400 PIN_AUTH_ID_INVALID : 인증이 만료됐거나 이미 썼다
+ *   - 404 CARD_NOT_FOUND : 내 카드가 아니다
+ *   - 404 STORE_NOT_FOUND : 그 토큰을 쓰는 가맹점이 없다
+ */
+export const postQrScan = ({ storeQrToken, pinAuthId, userCardId, amount }) =>
+  client.post('/payment/qr/scan', { storeQrToken, pinAuthId, userCardId, amount })
+
+/**
  * QR 세션 상태 조회. 결제가 진행됐는지 폴링으로 확인한다.
  *
  * @returns `{ status, paymentId }`

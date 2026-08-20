@@ -15,6 +15,11 @@ import client from './client'
  *   `String` 으로 받는다. 숫자로 보내도 쿼리 문자열이라 동작은 같지만,
  *   계약이 문자열이므로 여기서 맞춰 둔다.
  *
+ * @param amount 결제 예정 금액. **선택**이고, 있을 때만 쿼리에 싣는다.
+ *   생략하면 백엔드가 기대혜택액을 계산하지 않는다. 빈 문자열이나 0 을 실어 보내면
+ *   400 `AMOUNT_INVALID` 라 "금액을 안 물어본 것" 과 "0 원" 이 같은 취급을 받지 않는다.
+ *   `storeId` 와 같은 이유로 문자열이다.
+ *
  * @returns `{ store, hasCard, cards }`
  *   - `cards` 는 `AVAILABLE` → `CONDITION_NOT_MET` → `NO_BENEFIT` 순으로 **정렬돼 온다.**
  *     화면이 다시 정렬하지 않는다
@@ -22,10 +27,16 @@ import client from './client'
  *     (카드가 없어도 200 이고 `store` 는 채워진다)
  *
  *   - 400 STORE_ID_REQUIRED : storeId 가 없거나 숫자가 아니다
+ *   - 400 AMOUNT_INVALID : amount 가 숫자가 아니거나 0 이하다
  *   - 404 STORE_NOT_FOUND : 없는 가맹점
  */
-export const getExpectedBenefits = (storeId) =>
-  client.get('/benefit/expected', { params: { storeId: String(storeId) } })
+export const getExpectedBenefits = (storeId, amount) =>
+  client.get('/benefit/expected', {
+    params: {
+      storeId: String(storeId),
+      ...(Number(amount) > 0 ? { amount: String(amount) } : {}),
+    },
+  })
 
 /** 카드 한 장의 판정 결과. 화면 분기의 기준이라 문자열을 흩어놓지 않는다. */
 export const CARD_BENEFIT_STATUS = {

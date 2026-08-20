@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, ChevronRight, Menu } from 'lucide-vue-next'
 import iconHome from '@/assets/icons/home.svg'
-import iconPayment from '@/assets/icons/payment.svg'
+import iconSearchTab from '@/assets/icons/search-tab.svg'
 import iconMycardActive from '@/assets/icons/mycard-selected.svg'
 import iconReport from '@/assets/icons/report.svg'
 import iconCafe from '@/assets/icons/category-cafe.svg'
@@ -36,16 +36,21 @@ const { showToast } = useToast()
 const CARD_PHOTO_RATIO = 322 / 203 //  .mycard-card-photo
 const COMPACT_PHOTO_RATIO = 80 / 50 //  .mycard-compact-card
 
-onMounted(() => cardStore.ensureCardsWithImages())
+onMounted(async () => {
+  await cardStore.ensureCardsWithImages()
+  // 목록이 있어야 카드별로 부를 수 있다. 실패해도 화면은 그대로 뜬다 (store 주석 참고).
+  cardStore.ensureLastUsedAt()
+})
 
+// 홈 칸은 결제 화면을 연다 (#198). 들어가면 카드 선택부터 시작한다 (#66).
 function goHome() {
-  router.push({ name: 'home' })
-}
-
-// 결제 탭으로 들어가면 카드 선택부터 시작한다 (#66).
-function openPayment() {
   paymentStore.reset()
   router.push({ name: 'payment' })
+}
+
+// 검색 칸은 홈 화면(검색창·카테고리)을 연다. 라벨만 바뀌었고 가는 곳은 예전 그대로다.
+function openSearch() {
+  router.push({ name: 'home' })
 }
 
 // 돌아올 주소를 통째로 넘긴다 (#61).
@@ -97,14 +102,24 @@ const CATEGORY_ICONS = {
 const activeIndex = ref(0)
 const view = ref('main')
 const monthIndex = ref(0)
-const selectedTier = ref(0)
+/**
+ * 사용자가 직접 누른 구간. `null` 이면 아직 안 눌렀다는 뜻이고, 그때는 달성 구간을 보여준다.
+ *
+ * 기본값을 `0` 으로 두지 않는 이유: 응답이 오기 전에는 달성 구간을 모른다.
+ * 0 으로 시작하면 늘 `0구간`(실적 미달 구간) 혜택이 먼저 보인다 (#225).
+ */
+const pickedTier = ref(null)
 const touchStartX = ref(0)
 
 /**
- * 조회할 수 있는 최근 3개월. 최신이 앞이다 (`['2026-08', '2026-07', '2026-06']`).
+ * 조회할 수 있는 월. 최신이 앞이다 (`['2026-08', '2026-07', '2026-06', ...]`).
  *
  * 백엔드가 응답에 실어 주므로 화면이 정하지 않는다. 첫 조회는 `yearMonth` 없이 보내고
  * (백엔드가 현재 월을 쓴다) 그때 받은 목록으로 월 선택기를 채운다.
+ *
+ * **개수가 정해져 있지 않다.** 백엔드는 이번 달부터 그 카드의 최초 거래 월까지 거래가 없는
+ * 달까지 포함해 전부 내려준다 (`CardMonthlyPeriodResolver.createAvailableYearMonths`).
+ * 예전에는 3개월로 잘려 있어서 화면에 "최근 3개월" 안내가 붙어 있었다.
  */
 const months = ref([])
 
@@ -158,11 +173,57 @@ function applyTransactionPage(detail, { append }) {
   nextCursor.value = page?.nextCursor ?? null
 }
 
-const cards = computed(() => cardStore.cards)
+/**
+ * 이 화면의 카드 순서는 **최근에 쓴 순**이다 (#176).
+ *
+ * store 가 주는 순서는 `displayOrder`(또는 카드관리에서 바꾼 순서)라 "요즘 쓰는 카드" 와
+ * 관계가 없다. 이 화면이 보여주는 것(이용 실적·최근 이용 내역)은 방금 쓴 카드일수록
+ * 궁금한 정보라, 여기서만 다시 세운다.
+ *
+ * **`cardStore.cards` 자체는 건드리지 않는다.** 그 배열은 결제·가맹점 화면도 함께 보고,
+ * `paymentStore` 가 순서 변경을 watch 해서 미리 골라둔 카드를 무효로 만든다.
+ * 여기서 정렬을 store 에 밀어 넣으면 가맹점에서 고르고 넘어온 카드가 결제 화면에서 풀린다.
+ *
+ * 마지막 사용 시각을 모르는 카드(이번 달 결제가 없거나 조회 실패)는 뒤로 보낸다.
+ * `sort` 는 안정 정렬이라 그 카드들끼리는 원래 순서가 그대로 남는다.
+ */
+const cards = computed(() => {
+  const lastUsedAt = cardStore.lastUsedAt
 
-// 목록이 줄어들면(카드 해지 등) 펼쳐둔 자리가 목록 밖으로 나갈 수 있다.
-watch(cards, (list) => {
-  if (activeIndex.value >= list.length) activeIndex.value = 0
+  return [...cardStore.cards].sort((a, b) => {
+    // ISO 문자열이라 문자열 비교로 시각 순서가 나온다 (store 주석 참고).
+    const left = lastUsedAt[a.id] ?? ''
+    const right = lastUsedAt[b.id] ?? ''
+    if (left === right) return 0
+    return left < right ? 1 : -1
+  })
+})
+
+/**
+ * 사용자가 직접 카드를 넘겼는지. 넘긴 뒤에는 화면이 자리를 다시 옮기지 않는다.
+ *
+ * 마지막 사용 시각은 카드마다 따로 받아오느라 **화면이 뜬 뒤에 늦게 도착하고**,
+ * 도착하는 순간 위 정렬이 다시 돌아 목록이 통째로 재배치된다.
+ * 그때 자리(index)를 그대로 두면 보던 카드가 다른 카드로 바뀐다.
+ */
+const hasPickedCard = ref(false)
+
+/**
+ * 목록이 바뀔 때 보던 카드를 놓치지 않는다.
+ *
+ * - 사용자가 고르기 전이면 맨 앞(= 가장 최근에 쓴 카드)을 편다
+ * - 고른 뒤라면 **그 카드가 옮겨간 자리**를 찾아 따라간다
+ * - 카드가 사라졌으면(해지 등) 맨 앞으로 돌아간다
+ */
+watch(cards, (list, previous) => {
+  if (!hasPickedCard.value) {
+    activeIndex.value = 0
+    return
+  }
+
+  const pickedId = previous?.[activeIndex.value]?.id
+  const moved = pickedId ? list.findIndex((card) => card.id === pickedId) : -1
+  activeIndex.value = moved >= 0 ? moved : 0
 })
 
 /** 펼쳐 놓은 카드 한 장. 목록이 아직 안 왔으면 빈 카드로 그린다. */
@@ -223,18 +284,33 @@ async function loadMoreTransactions() {
   }
 }
 
-// 카드를 바꾸면 그 카드의 실적·내역을 다시 받는다. 월 선택과 구간 선택도 처음으로 돌린다.
+/**
+ * 카드를 바꾸면 그 카드의 실적·내역을 다시 받는다. 월 선택과 구간 선택도 처음으로 돌린다.
+ *
+ * **`immediate` 가 반드시 필요하다.** `cardStore` 는 목록을 캐시하므로(`ensureCards`),
+ * 다른 화면이 먼저 받아둔 뒤 이 화면에 들어오면 `activeCard.id` 가 setup 시점에 이미
+ * 채워져 있다. 그러면 값이 "변하지" 않아 watcher 가 안 돌고 첫 진입이 빈 화면이 된다.
+ * 목록을 여기서 처음 받는 경로에서는 `'' → id` 로 바뀌어 우연히 동작했다 (#140).
+ *
+ * 첫 실행에서 목록이 아직 없으면 `cardId` 가 빈 문자열이라 아래 가드에 걸려 그냥 나가고,
+ * 목록이 도착할 때 다시 돈다.
+ */
 watch(
   () => activeCard.value.id,
   (cardId) => {
     if (!cardId) return
     monthIndex.value = 0
-    selectedTier.value = 0
+    pickedTier.value = null
     loadCardDetail()
   },
+  { immediate: true },
 )
 
-watch(monthIndex, loadCardDetail)
+watch(monthIndex, () => {
+  // 달이 바뀌면 달성 구간도 바뀐다. 이전 달에서 누른 구간을 그대로 들고 가지 않는다.
+  pickedTier.value = null
+  loadCardDetail()
+})
 
 // ── 이용 실적 ──────────────────────────────────────────────────────────
 // tierType 이 화면 분기의 기준이다. 예전에는 목데이터의 noRequirement / singleTier
@@ -256,8 +332,30 @@ const remaining = computed(() => Number(usage.value?.amountUntilNextTier ?? 0))
 const progress = computed(() => Number(usage.value?.tierProgressRate ?? 0))
 const tiers = computed(() => usage.value?.tiers ?? [])
 
+/**
+ * `구간별 혜택 내용` 이 펼쳐 보일 구간.
+ *
+ * 누르기 전에는 **지금 달성한 구간**이다. 사용자가 궁금한 것은 지금 받고 있는 혜택인데,
+ * 늘 `0구간` 부터 보여주면 매번 자기 구간을 찾아 눌러야 했다 (#225).
+ *
+ * **`tiers` 의 배열 인덱스와 `tierOrder` 가 같아서** 변환하지 않는다
+ * (`tiers[0].tierOrder === 0`). 미달성이면 `tierOrder` 가 0 이라 예전처럼 `0구간` 이 보인다.
+ *
+ * 응답보다 먼저 읽히면 `currentTier` 가 0 이지만, 도착하면 computed 가 다시 돌아
+ * 저절로 달성 구간으로 옮겨간다 — 그래서 watch 로 맞출 필요가 없다.
+ */
+const selectedTier = computed({
+  get: () => pickedTier.value ?? currentTier.value,
+  set: (index) => {
+    pickedTier.value = index
+  },
+})
+
 const achievementTitle = computed(() => {
   if (isSingleTier.value) return isAchieved.value ? '전월 실적 달성!' : '실적이 조금 부족해요'
+  // 구간이 여럿인데 아직 첫 구간도 못 넘었다. **"0구간 실적 달성!" 은 달성한 것이 없다는 뜻**이라
+  // 축하하는 문구가 될 수 없다. 기준이 하나인 카드가 못 채웠을 때와 같은 말을 쓴다.
+  if (currentTier.value === 0) return '실적이 조금 부족해요'
   return `${currentTier.value}구간 실적 달성!`
 })
 
@@ -286,6 +384,68 @@ const shownBenefits = computed(() => {
   return list.map((benefit) => [benefit.benefitName, benefit.valueLabel].filter(Boolean).join(' '))
 })
 
+/**
+ * 실적 바에서 `index` 번째 구간이 놓이는 가로 위치(%).
+ *
+ * **금액 비례가 아니라 순번 등분이다.** 백엔드가 내려주는 `tierProgressRate` 자체가
+ * 구간 사이를 같은 너비로 나눠 계산하기 때문이다
+ * (`CardUsageTierStateCalculator.calculateProgressRate` — `currentIndex/intervalCount` 기준).
+ * 여기서 금액으로 위치를 잡으면 눈금과 돼지 얼굴이 서로 다른 좌표계에 놓여 어긋난다.
+ */
+function tierPercent(index) {
+  const intervals = tiers.value.length - 1
+  return intervals > 0 ? (index / intervals) * 100 : 0
+}
+
+/**
+ * 구간 점의 자리.
+ *
+ * **아래 구간 라벨과 같은 규칙이다**(`tierLabelStyle`). 점과 라벨이 세로로 맞아야
+ * 어느 점이 어느 구간인지 읽힌다. 양 끝은 % 로 두면 원의 절반이 밖으로 나가므로
+ * 끝에 붙이고, 가운데만 중앙 정렬한다.
+ *
+ * 세로 가운데 맞춤(`translateY`)을 여기서 함께 준다 — 인라인 `transform` 이
+ * 유틸리티(`-translate-y-1/2`)를 덮어써서 둘로 나누면 한쪽이 죽는다.
+ *
+ * 예전 눈금은 픽셀 격자에 맞추려고 바 너비를 재고 `ResizeObserver` 까지 달았는데,
+ * 그건 **굵기가 있는 선**이라 소수점 좌표에서 번졌기 때문이다. 점은 번질 굵기가 없어
+ * % 좌표로 충분하다 — 그 장치를 통째로 걷어냈다.
+ */
+function tierDotStyle(index) {
+  if (index === 0) return { top: '50%', left: '0', transform: 'translateY(-50%)' }
+  if (index === tiers.value.length - 1) {
+    return { top: '50%', right: '0', transform: 'translateY(-50%)' }
+  }
+  return {
+    top: '50%',
+    left: `${tierPercent(index)}%`,
+    transform: 'translate(-50%, -50%)',
+  }
+}
+
+/**
+ * 구간 라벨 위치. 가운데 라벨만 눈금에 맞춰 중앙 정렬하고,
+ * 양 끝은 바 밖으로 삐져나가지 않게 끝에 붙인다.
+ */
+function tierLabelStyle(index) {
+  if (index === 0) return { left: '0' }
+  if (index === tiers.value.length - 1) return { right: '0' }
+  return { left: `${tierPercent(index)}%`, transform: 'translateX(-50%)' }
+}
+
+/**
+ * 이미 지나온 구간인가. 실적 바에서 픽피 왼쪽에 놓인 눈금들이다 (#249).
+ *
+ * **인덱스를 `currentTier` 와 그대로 견준다.** `tiers` 는 배열 인덱스와 `tierOrder` 가
+ * 같아서(`tiers[0].tierOrder === 0`) 변환이 필요 없다.
+ *
+ * 미달성이면 `currentTier` 가 0 이라 `0구간` 하나만 지나온 것이 된다 — 바의 채움도
+ * 0 눈금을 막 지난 지점이므로 맞는 표현이다.
+ */
+function isTierPassed(index) {
+  return index <= currentTier.value
+}
+
 /** 구간 버튼 아래 표시할 금액 범위. 최고 구간은 위쪽이 열려 있다. */
 function tierRangeLabel(tier) {
   if (!tier) return ''
@@ -311,6 +471,10 @@ function toTransaction(item) {
     categoryImageUrl: item.categoryImageUrl,
     // 실적 미인정일 때만 배지를 띄운다.
     isExcluded: item.performanceIncluded === false,
+    // 승인취소 (#218). 매퍼가 performance_included 를
+    // `is_eligible = 1 AND transaction_status = 'APPROVED'` 로 계산해서
+    // **취소 건은 예외 없이 isExcluded 도 true 다.** 화면에서 취소를 먼저 본다.
+    isCanceled: item.transactionStatus === 'CANCELED',
   }
 }
 
@@ -385,8 +549,10 @@ function won(value) {
 
 function selectCard(index) {
   if (index < 0 || index >= cards.value.length) return
+  // 사용자가 고른 자리는 늦게 도착한 응답이 덮지 않는다 (`hasPickedCard` 주석 참고).
+  hasPickedCard.value = true
   activeIndex.value = index
-  selectedTier.value = 0
+  pickedTier.value = null
 }
 
 function onTouchStart(event) {
@@ -401,6 +567,8 @@ function onTouchEnd(event) {
 
 function openView(nextView) {
   monthIndex.value = 0
+  // 들어갈 때는 늘 달성 구간부터 보여준다. 지난번에 눌러 둔 구간을 들고 오지 않는다 (#225).
+  pickedTier.value = null
   view.value = nextView
 }
 
@@ -437,7 +605,8 @@ function dateLabel(date) {
   <section class="mycard-screen">
     <template v-if="view === 'main'">
       <header class="mycard-header">
-        <h1>내 카드</h1>
+        <!-- 하단 탭이 이 화면을 `카드 내역` 으로 부른다. 제목이 다르면 같은 곳인지 헷갈린다. -->
+        <h1>카드 내역</h1>
         <button class="icon-button" type="button" aria-label="메뉴 열기" @click="openMyPage()">
           <Menu :size="23" />
         </button>
@@ -483,13 +652,17 @@ function dateLabel(date) {
             </button>
           </div>
 
+          <!--
+            금액 옆에 있던 `상세 보기` 를 뺐다 (#204). 아래 `최근 이용 내역` 의 `자세히` 와
+            **같은 화면**(`openView('transactions')`)으로 가는 버튼이라, 한 화면에서 같은 곳으로
+            가는 길이 둘이었다.
+          -->
           <div class="mycard-amount-row">
             <div>
               <span>{{ activeCard.amountLabel }}</span>
               <strong>{{ won(activeCard.amount) }}</strong>
               <small v-if="activeCard.account">{{ activeCard.account }}</small>
             </div>
-            <button type="button" @click="openView('transactions')">상세 보기</button>
           </div>
 
           <div class="mycard-dots">
@@ -530,9 +703,17 @@ function dateLabel(date) {
               </div>
               <div class="mycard-transaction-copy">
                 <strong>{{ transaction.merchant }}</strong>
-                <span>{{ transaction.date }}</span>
+                <!-- 상세와 같은 toTransaction() 을 쓰므로 취소 표시도 같이 간다 (#218). -->
+                <span
+                  >{{ transaction.date
+                  }}<template v-if="transaction.isCanceled">
+                    · <i class="not-italic text-danger">승인취소</i></template
+                  ></span
+                >
               </div>
-              <b>- {{ won(transaction.amount) }}</b>
+              <b :class="{ 'text-muted-deeper line-through': transaction.isCanceled }">{{
+                won(transaction.amount)
+              }}</b>
             </div>
           </section>
 
@@ -597,17 +778,17 @@ function dateLabel(date) {
       </div>
 
       <nav class="bottom-nav">
-        <button type="button" @click="goHome()">
-          <img :src="iconHome" alt="" width="22" height="22" /><span>홈</span>
+        <button type="button" @click="openSearch()">
+          <img :src="iconSearchTab" alt="" width="22" height="22" /><span>매장 검색</span>
         </button>
-        <button type="button" @click="openPayment()">
-          <img :src="iconPayment" alt="" width="22" height="22" /><span>결제</span>
+        <button type="button" @click="goHome()">
+          <img :src="iconHome" alt="" width="22" height="22" /><span>결제</span>
         </button>
         <button class="active" type="button">
-          <img :src="iconMycardActive" alt="" width="22" height="22" /><span>내 카드</span>
+          <img :src="iconMycardActive" alt="" width="22" height="22" /><span>카드 내역</span>
         </button>
         <button type="button" @click="openReport()">
-          <img :src="iconReport" alt="" width="22" height="22" /><span>리포트</span>
+          <img :src="iconReport" alt="" width="22" height="22" /><span>혜택</span>
         </button>
       </nav>
     </template>
@@ -709,13 +890,72 @@ function dateLabel(date) {
                 <strong>{{ won(performance) }} <ChevronRight :size="15" /></strong>
               </button>
               <div class="mycard-progress-wrap detail">
-                <div class="mycard-progress">
-                  <span :style="{ width: `${progress}%` }"
-                    ><i><img :src="pigFace" alt="" /></i
+                <!--
+                  구간마다 점 하나씩이다 (#204). 예전에는 한 줄짜리 바에 노란 채움과 경계
+                  눈금을 그렸는데, **이 값은 금액 비례가 아니라 구간 순번 등분**이라
+                  (`tierPercent` 주석) 연속된 막대가 금액이 차오르는 것처럼 잘못 읽혔다.
+
+                  높이는 픽피 원(32px)이 정한다. 점은 그 안에서 세로 가운데에 놓인다.
+                -->
+                <!--
+                  바는 그대로다 — 채운 만큼 노랑, 나머지는 회색 트랙(`.mycard-progress`).
+                  **바뀐 것은 구간 표시다** (#204). 예전에는 검은 작대기를 그었는데
+                  피그마(`node-id=161-1365`)의 원으로 바꿨다.
+                -->
+                <div class="relative">
+                  <div class="mycard-progress">
+                    <span :style="{ width: `${progress}%` }"
+                      ><i class="z-10"
+                        ><!--
+                          픽피가 원 안에서 오른쪽으로 치우쳐 보인다. **상자는 이미 정중앙이다** —
+                          `pig-face.svg` 안에 든 512×512 PNG 에서 **그림 자체가** 캔버스 중심보다
+                          오른쪽에 그려져 있다. 알파 경계를 재 보니 가로로 +3.5% 였다.
+                          `object-position` 은 안 통한다 — 정사각 그림이 정사각 칸을 꽉 채워
+                          움직일 여백이 없다. 그래서 그림을 그만큼 되민다.
+                        --><img
+                          :src="pigFace"
+                          alt=""
+                          class="size-full -translate-x-[3.5%] object-contain" /></i
+                    ></span>
+                  </div>
+
+                  <!--
+                    아직 못 간 구간에만 원을 찍는다. 지나온 구간은 노란 채움이 이미 덮고 있어서
+                    원을 겹쳐 놓으면 채움 위에 자국만 남는다.
+
+                    흰 테두리는 피그마 원(10.4px, 안쪽 2.08px)을 따른 것이다 — `box-sizing`
+                    이 border-box 라 테두리가 안쪽으로 들어가 바깥 지름이 그대로 유지된다.
+                    회색 트랙 위에서 이 흰 테두리가 원을 트랙과 갈라 준다.
+                  -->
+                  <span
+                    v-for="(tier, index) in tiers"
+                    v-show="index > currentTier"
+                    :key="tier.tierOrder"
+                    class="absolute size-[10px] rounded-full border-2 border-white bg-muted"
+                    :style="tierDotStyle(index)"
                   ></span>
                 </div>
-                <div class="mycard-tier-labels">
-                  <span v-for="tier in tiers" :key="tier.tierOrder">{{ tier.tierName }}</span>
+                <!-- 라벨은 바에 붙이고(12px) 아래를 넉넉히 띄운다(16px). 12px 은 돼지 얼굴이
+                     바 아래로 내려오는 11px 을 겨우 비키는 값이라 더 줄이면 겹친다. -->
+                <div class="relative mt-3 mb-4 h-[15px]">
+                  <!--
+                    지나온 구간은 노랑이다 (#249). 바가 이미 지나온 만큼을 노랑으로
+                    채우고 있으니 라벨도 같은 규칙을 따라야 둘이 한 이야기를 한다.
+
+                    바 채움색(`primary`)이 아니라 `primary-dark` 를 쓴다 — `#ffcc00` 을
+                    11px 글자에 그대로 주면 흰 배경에서 거의 안 읽힌다. 이 프로젝트가
+                    노란 글자에 쓰는 색이 `primary-dark` 다 (`.merchant-distance` 등).
+                  -->
+                  <span
+                    v-for="(tier, index) in tiers"
+                    :key="tier.tierOrder"
+                    class="absolute text-[11px] leading-[15px] whitespace-nowrap"
+                    :class="
+                      isTierPassed(index) ? 'font-semibold text-primary-dark' : 'text-muted-deep'
+                    "
+                    :style="tierLabelStyle(index)"
+                    >{{ tier.tierName }}</span
+                  >
                 </div>
               </div>
               <div class="mycard-achievement">
@@ -727,6 +967,7 @@ function dateLabel(date) {
               ※ 실적 인정 금액은 전표 접수 시간에 따라 바뀔 수 있으며, 할인된 등록 혜택은 이용
               실적에서 제외될 수 있습니다.
             </p>
+            <p class="mycard-notice">※ 거래가 있는 달부터 이번 달까지 볼 수 있습니다.</p>
           </section>
 
           <section class="mycard-panel benefit-tier-panel">
@@ -787,13 +1028,10 @@ function dateLabel(date) {
           <div class="mycard-summary-copy">
             <strong>{{ activeCard.issuer }} {{ activeCard.name }}</strong>
             <span>****{{ activeCard.last4 }}</span>
-            <div class="mycard-mini-dots">
-              <i
-                v-for="(_, index) in months"
-                :key="index"
-                :class="{ active: index === monthIndex }"
-              ></i>
-            </div>
+            <!--
+              월 표시 점을 뺐다 (#216). 바로 옆 월 선택기가 `2026.07` 로 같은 것을 말하고,
+              점 개수가 availableYearMonths 길이라 월이 늘수록 카드 번호 밑을 채웠다.
+            -->
           </div>
           <div class="mycard-month-selector compact">
             <button type="button" :disabled="monthIndex >= months.length - 1" @click="moveMonth(1)">
@@ -809,6 +1047,16 @@ function dateLabel(date) {
             <strong>{{ won(totalAmount) }}</strong>
           </div>
         </section>
+
+        <!--
+          조회 범위 안내. **목록 위에 둔다** (#137). 예전에는 목록 맨 아래에 있었는데,
+          "왜 더 예전 게 없지" 를 궁금해하는 시점은 목록을 다 읽은 뒤가 아니라 읽기 시작할 때다.
+          내역이 많으면 끝까지 내려야 보여서 사실상 안 보였다.
+
+          목록 끝 표시가 아니라 이 화면이 무엇을 보여주는지에 대한 안내라서,
+          불러오는 중이든 내역이 없든 조건 없이 보여준다.
+        -->
+        <p class="mycard-history-notice">거래가 있는 달부터 이번 달까지 제공합니다.</p>
 
         <p v-if="isTransactionsLoading" class="py-6 text-center text-[13px] text-sub">
           불러오는 중이에요
@@ -829,13 +1077,24 @@ function dateLabel(date) {
               </div>
               <div class="mycard-transaction-copy">
                 <strong>{{ transaction.merchant }}</strong>
+                <!--
+                  `승인취소` 를 span 안에 넣되 태그는 i 다. `.mycard-transaction-copy span` 이
+                  후손 선택자라 중첩 span 까지 #b0a89e 로 칠하는데, style.css 는 레이어 밖이라
+                  Tailwind 로 못 이긴다. i 는 그 선택자에 안 걸린다.
+                -->
                 <span
                   >{{ transaction.time
-                  }}<template v-if="transaction.detail"> · {{ transaction.detail }}</template></span
+                  }}<template v-if="transaction.detail"> · {{ transaction.detail }}</template
+                  ><template v-if="transaction.isCanceled">
+                    · <i class="not-italic text-danger">승인취소</i></template
+                  ></span
                 >
-                <em v-if="transaction.isExcluded">실적 미인정 건</em>
+                <!-- 취소 건은 늘 실적 미인정이다. 배지를 같이 띄우면 항상 두 개가 뜬다. -->
+                <em v-if="transaction.isExcluded && !transaction.isCanceled">실적 미인정 건</em>
               </div>
-              <b>{{ won(transaction.amount) }}</b>
+              <b :class="{ 'text-muted-deeper line-through': transaction.isCanceled }">{{
+                won(transaction.amount)
+              }}</b>
             </article>
           </div>
         </section>
@@ -851,10 +1110,6 @@ function dateLabel(date) {
         >
           {{ isLoadingMore ? '더 불러오는 중이에요' : '더 보기' }}
         </button>
-
-        <p v-if="!isTransactionsLoading && !hasNextTransactions" class="mycard-history-notice">
-          최근 3개월 내역을 제공합니다.
-        </p>
       </div>
     </template>
   </section>

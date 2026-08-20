@@ -4,6 +4,7 @@ import { defineStore } from 'pinia'
 import * as userApi from '@/api/userApi'
 import { setAccessToken, clearAccessToken, getAccessToken } from '@/api/client'
 import { useAsyncState } from '@/composables/useAsyncState'
+import { useLocationStore } from '@/stores/locationStore'
 
 /**
  * 가입은 됐는데 뒤이은 자동 로그인이 실패했다.
@@ -83,6 +84,9 @@ export const useAuthStore = defineStore('auth', () => {
   function logout() {
     clearAccessToken()
     loginResult.value = null
+    // 위치 동의는 계정마다 다르다. 지우지 않으면 다음 사람이 시트를 못 보고 403 에 부딪힌다.
+    // (locationStore 는 authStore 를 참조하지 않는다 — 한 방향이라 순환이 아니다.)
+    useLocationStore().forget()
   }
 
   return { isLoggedIn, isLoading, error, isSignupLoading, signupError, login, signup, logout }
