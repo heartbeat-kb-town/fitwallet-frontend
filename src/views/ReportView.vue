@@ -89,8 +89,14 @@ const missedTab = ref('APP_UNUSED')
 const expanded = ref(new Set())
 const selectedCard = ref(0)
 
-/** 받은 혜택 설명을 펼쳤나. 이 화면 안에서만 쓰는 상태라 store 로 올리지 않는다. */
+/**
+ * 각 카드의 설명을 펼쳤나. 이 화면 안에서만 쓰는 상태라 store 로 올리지 않는다.
+ *
+ * 둘을 따로 둔다. 하나로 묶으면 한쪽을 열 때 다른 쪽이 닫혀, 두 카드를 나란히
+ * 견줘 보려는 사람이 계속 다시 눌러야 한다.
+ */
 const isBenefitInfoOpen = ref(false)
+const isMissedInfoOpen = ref(false)
 const toast = ref('')
 let toastTimer
 
@@ -744,7 +750,18 @@ onBeforeUnmount(() => {
 
         <section class="report-panel">
           <div class="flex items-center justify-between gap-2">
-            <h2>놓친 혜택</h2>
+            <div class="flex min-w-0 items-center gap-1.5">
+              <h2>놓친 혜택</h2>
+              <button
+                type="button"
+                class="flex shrink-0 items-center bg-transparent text-muted"
+                :aria-expanded="isMissedInfoOpen"
+                aria-label="놓친 혜택 설명"
+                @click="isMissedInfoOpen = !isMissedInfoOpen"
+              >
+                <Info :size="15" />
+              </button>
+            </div>
             <!--
               이 링크만 빨강이다 (#202). 받은 혜택 쪽은 primary 를 쓰지만, 이 줄이 여는 것은
               빨간 카드와 빨간 상세 화면이라 노랑이면 색이 가리키는 곳과 어긋난다.
@@ -757,6 +774,19 @@ onBeforeUnmount(() => {
               세부 내역 보기 <ChevronRight :size="14" />
             </button>
           </div>
+
+          <!--
+            받은 혜택과 같은 이유로 물어본 사람에게만 보여준다 (#243).
+            배경만 `danger-bg` 다 — 이 카드 계열색이 빨강이라 노란 배경을 쓰면
+            바로 위 `세부 내역 보기` 를 빨강으로 가른 것과 어긋난다.
+          -->
+          <p
+            v-if="isMissedInfoOpen"
+            class="mt-2.5 rounded-xl bg-danger-bg px-3.5 py-2.5 text-[12px] leading-[1.7] text-sub"
+          >
+            앱 미사용 손실과 카드 선택 손실을 더한 금액입니다. 세부 내역에서 각각 나눠 볼 수
+            있습니다.
+          </p>
 
           <!-- 받은 혜택 카드와 같은 골격이다 (피그마 `node-id=1478-708`). 윗줄 색과 두 칸만 다르다. -->
           <div class="mt-3 overflow-hidden rounded-2xl border border-line">
