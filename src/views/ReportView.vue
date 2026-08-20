@@ -863,10 +863,15 @@ onBeforeUnmount(() => {
         <section class="report-panel recommendation-panel">
           <h2>카드 추천</h2>
           <!--
-            추천 기준을 그대로 적는다. 백엔드가 최근 3개월 예상 지출 기반 엔진으로
-            바뀌었다 (backend#273). `혜택 비중` 은 뜻도 모호하고 실제 기준도 아니었다.
+            ⚠️ **문구의 기간과 실제 동작이 다르다** (#251, 요청에 따른 문구다).
+            백엔드는 최근 **3개월** 지출의 중앙값으로 예상 월 지출을 잡는다 —
+            `CardRecommendationEngine.PROJECTION_MONTHS = 3` (backend#273).
+
+            #230 에서 `최근 3개월` 로 맞췄던 것을 되돌린 셈이라, 다음에 이 줄을 볼 때
+            "코드를 안 보고 적은 문구" 로 오해하지 않도록 남긴다. 기간을 다시 맞추려면
+            `PROJECTION_MONTHS` 를 먼저 확인한다.
           -->
-          <p>최근 3개월 소비 패턴을 분석해 추천해 드려요.</p>
+          <p>1개월 소비 패턴을 분석해 추천해 드려요.</p>
           <article
             v-for="card in recommendations"
             :key="card.cardProductId"
