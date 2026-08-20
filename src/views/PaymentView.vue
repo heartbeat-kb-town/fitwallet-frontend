@@ -66,6 +66,16 @@ function openReport() {
   router.push({ name: 'report' })
 }
 
+/**
+ * `최적의 카드 추천 받고 결제하기` (#228).
+ *
+ * 가맹점 화면을 주변 조회 모드로 연다. 카테고리를 고르는 단계를 건너뛰고 지금 있는 곳의
+ * 가맹점을 바로 보여준다. 가게를 고르면 그 뒤는 기존 PICK 추천 흐름 그대로다.
+ */
+function openNearbyStores() {
+  router.push({ name: 'merchants', query: { nearby: '1', from: 'payment' } })
+}
+
 // 가맹점에서 진입한 결제 → 결제했던 가게의 피그의 PICK 화면으로 복원.
 function backToMerchant() {
   const target = router.resolve(paymentReturnTo || { name: 'merchants' })
@@ -828,6 +838,27 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="payment-qr-area">
+        <!--
+          주된 동작이라 위에 두고 노랑을 준다 (#228). 아래 `QR 결제하기` 는 회색으로
+          내렸다 — 두 개가 다 노랑이면 어느 쪽이 기본인지 알 수 없다.
+          `.payment-qr-area` 는 레이어 밖이라 여백만 여기서 Tailwind 로 더한다.
+        -->
+        <button
+          class="mb-2.5 flex h-[58px] w-full items-center justify-center gap-2 rounded-2xl bg-primary text-[15px] font-bold text-ink transition-transform active:scale-[0.985]"
+          type="button"
+          @click="openNearbyStores()"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linejoin="round"
+            />
+            <circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="1.9" />
+          </svg>
+          최적의 카드 추천 받고 결제하기
+        </button>
         <button class="payment-qr-button" type="button" @click="openPin">
           <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
             <rect

@@ -36,6 +36,11 @@
      muted-deep(#b0a89e) 는 시각·카테고리 줄과 같은 색이라 금액이 그 줄보다 흐려 보인다. */
   --color-muted-deeper: #9a9186;
 
+  /* line 보다 한 단계 진한 베이지. .login-links > span · .sheet-handle span 이 이미
+     쓰던 값이다. 결제 화면에서 주된 동작(노랑) 아래에 놓이는 보조 버튼이 이 색을 쓴다 —
+     line(#e9e4dc) 은 흰 배경 위에서 버튼으로 안 보인다. */
+  --color-line-deep: #e0ddd8;
+
   /* 에러 표시용. 기존 화면(.pick-ineligible 등)이 쓰던 값을 그대로 토큰화했다.
      검증 실패 인라인 메시지와 토스트가 이 색을 쓴다. */
   --color-danger: #d62828;
@@ -2240,7 +2245,8 @@ input[type='search']::-webkit-search-cancel-button {
   gap: 8px;
   color: #1a1a1a;
   border-radius: 14px;
-  background: #ffcc00;
+  /* 주된 동작이 위의 `최적의 카드 추천 받고 결제하기` 로 올라가면서 보조 버튼이 됐다 (#228). */
+  background: #e0ddd8;
   font-size: 15px;
   font-weight: 700;
   transition:
@@ -2250,7 +2256,7 @@ input[type='search']::-webkit-search-cancel-button {
 
 .payment-qr-button:active {
   transform: scale(0.985);
-  background: #f5c300;
+  background: #d5d1cb;
 }
 
 /* ==================== QR 결제 흐름 ==================== */
