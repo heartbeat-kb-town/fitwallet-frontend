@@ -102,7 +102,13 @@ const CATEGORY_ICONS = {
 const activeIndex = ref(0)
 const view = ref('main')
 const monthIndex = ref(0)
-const selectedTier = ref(0)
+/**
+ * 사용자가 직접 누른 구간. `null` 이면 아직 안 눌렀다는 뜻이고, 그때는 달성 구간을 보여준다.
+ *
+ * 기본값을 `0` 으로 두지 않는 이유: 응답이 오기 전에는 달성 구간을 모른다.
+ * 0 으로 시작하면 늘 `0구간`(실적 미달 구간) 혜택이 먼저 보인다 (#225).
+ */
+const pickedTier = ref(null)
 const touchStartX = ref(0)
 
 /**
@@ -294,13 +300,17 @@ watch(
   (cardId) => {
     if (!cardId) return
     monthIndex.value = 0
-    selectedTier.value = 0
+    pickedTier.value = null
     loadCardDetail()
   },
   { immediate: true },
 )
 
-watch(monthIndex, loadCardDetail)
+watch(monthIndex, () => {
+  // 달이 바뀌면 달성 구간도 바뀐다. 이전 달에서 누른 구간을 그대로 들고 가지 않는다.
+  pickedTier.value = null
+  loadCardDetail()
+})
 
 // ── 이용 실적 ──────────────────────────────────────────────────────────
 // tierType 이 화면 분기의 기준이다. 예전에는 목데이터의 noRequirement / singleTier
@@ -321,6 +331,25 @@ const currentTier = computed(() => usage.value?.currentTier?.tierOrder ?? 0)
 const remaining = computed(() => Number(usage.value?.amountUntilNextTier ?? 0))
 const progress = computed(() => Number(usage.value?.tierProgressRate ?? 0))
 const tiers = computed(() => usage.value?.tiers ?? [])
+
+/**
+ * `구간별 혜택 내용` 이 펼쳐 보일 구간.
+ *
+ * 누르기 전에는 **지금 달성한 구간**이다. 사용자가 궁금한 것은 지금 받고 있는 혜택인데,
+ * 늘 `0구간` 부터 보여주면 매번 자기 구간을 찾아 눌러야 했다 (#225).
+ *
+ * **`tiers` 의 배열 인덱스와 `tierOrder` 가 같아서** 변환하지 않는다
+ * (`tiers[0].tierOrder === 0`). 미달성이면 `tierOrder` 가 0 이라 예전처럼 `0구간` 이 보인다.
+ *
+ * 응답보다 먼저 읽히면 `currentTier` 가 0 이지만, 도착하면 computed 가 다시 돌아
+ * 저절로 달성 구간으로 옮겨간다 — 그래서 watch 로 맞출 필요가 없다.
+ */
+const selectedTier = computed({
+  get: () => pickedTier.value ?? currentTier.value,
+  set: (index) => {
+    pickedTier.value = index
+  },
+})
 
 const achievementTitle = computed(() => {
   if (isSingleTier.value) return isAchieved.value ? '전월 실적 달성!' : '실적이 조금 부족해요'
@@ -510,7 +539,7 @@ function selectCard(index) {
   // 사용자가 고른 자리는 늦게 도착한 응답이 덮지 않는다 (`hasPickedCard` 주석 참고).
   hasPickedCard.value = true
   activeIndex.value = index
-  selectedTier.value = 0
+  pickedTier.value = null
 }
 
 function onTouchStart(event) {
@@ -525,6 +554,8 @@ function onTouchEnd(event) {
 
 function openView(nextView) {
   monthIndex.value = 0
+  // 들어갈 때는 늘 달성 구간부터 보여준다. 지난번에 눌러 둔 구간을 들고 오지 않는다 (#225).
+  pickedTier.value = null
   view.value = nextView
 }
 

@@ -24,7 +24,9 @@ async function login() {
 
   try {
     await authStore.login({ loginId: id.value, password: password.value })
-    router.push({ name: 'home' })
+    // 로그인 첫 화면은 결제다 (#226). `home` 은 매장 검색 화면이라 앱을 열자마자
+    // 검색부터 하게 됐다. 하단 탭에서도 결제가 가운데 서 있는 기본 자리다.
+    router.push({ name: 'payment' })
   } catch (error) {
     // 검증 실패는 토스트로 띄우지 않는다. 어느 입력창이 문제인지 알려주지 못한다.
     if (error.code === 'INVALID_INPUT_VALUE') {
