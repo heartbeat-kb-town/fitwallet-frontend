@@ -1253,20 +1253,75 @@ onBeforeUnmount(() => {
                 v-if="expanded.has(category.categoryId)"
                 class="report-transactions missed-transactions"
               >
+                <!--
+                  거래 한 건을 **두 카드를 견주는 모양**으로 그린다 (#253).
+                  한 줄에 눌러 담으면 무엇을 썼고 무엇을 썼어야 했는지 견주기 어렵다.
+
+                  글자 크기는 예전 행 그대로다 — 가맹점 13px bold / 메타 11px `sub` /
+                  금액 13px 800. 상자만 새로 얹었지 이 목록의 서체는 바꾸지 않는다.
+
+                  ⚠️ 시안의 `받은 혜택` · `최대 혜택` 두 금액은 응답에 없다. DB 에는
+                  `pt.alternative_discount_amount` 가 있지만 매퍼가 `discountRate`(정수 %)
+                  로만 가공해 버려서, 금액으로 되살리면 반올림 때문에 실제와 어긋난다.
+                  **금액을 화면에서 지어내지 않는다** — 있는 값(결제액·할인율)을 그 자리에 쓴다.
+                -->
                 <div
                   v-for="(item, index) in category.transactions"
                   :key="`${item.approvedAt}-${index}`"
+                  class="!block !px-4 !py-3.5"
                 >
-                  <span>{{ transactionDate(item.approvedAt) }}</span>
-                  <p>
-                    <strong>{{ storeLabel(item.storeName) }}</strong>
-                    <small>{{ item.usedCardName }} · 결제 {{ won(item.paidAmount) }}</small>
-                    <small
-                      ><b>혜택 카드</b> {{ item.alternativeCardName }} ·
-                      {{ missedRateLabel(item) }}</small
-                    >
-                  </p>
-                  <em>{{ currency(item.diffAmount) }}</em>
+                  <div class="flex items-baseline justify-between gap-2">
+                    <strong class="min-w-0 truncate text-[13px] font-bold text-ink">
+                      {{ storeLabel(item.storeName) }}
+                    </strong>
+                    <span class="shrink-0 text-[11px] text-muted-deep">
+                      {{ transactionDate(item.approvedAt) }} · {{ won(item.paidAmount) }}
+                    </span>
+                  </div>
+
+                  <div class="mt-2.5 grid grid-cols-2 gap-[7px]">
+                    <!-- 결제 금액은 윗줄에 이미 있어서 여기서는 뺐다. 두 상자 다 두 줄이다. -->
+                    <div class="rounded-xl bg-chip px-3 py-2.5">
+                      <small class="block text-[11px] text-muted-deep">실제 결제한 카드</small>
+                      <strong class="mt-1 block truncate text-[12px] font-bold text-ink">
+                        {{ item.usedCardName }}
+                      </strong>
+                    </div>
+
+                    <!--
+                      이쪽만 노란 면과 테두리를 준다. 어느 카드를 썼어야 했는지가 이 행의
+                      요점이라, 두 상자가 같은 무게면 견줄 대상이 드러나지 않는다.
+                      테두리 `primary/50` 은 시안의 옅은 노랑(#FFE58A)을 기존 토큰으로 낸 것이다.
+                    -->
+                    <div class="rounded-xl border border-primary/50 bg-icon-bg px-3 py-2.5">
+                      <!--
+                        할인율은 **라벨 줄 오른쪽**이다. 카드명 옆에 붙이면 이름이 쓸 폭을
+                        빼앗아 `신한카드 Pic…` 로 잘리고, 아래로 내리면 이 상자만 세 줄이 돼
+                        왼쪽과 높이가 어긋난다. 라벨 줄이 비어 있어 여기가 제자리다.
+                      -->
+                      <div class="flex items-baseline justify-between gap-1.5">
+                        <small class="text-[11px] text-muted-deep">최적의 카드였던</small>
+                        <small class="shrink-0 text-[11px] font-bold text-primary-dark">
+                          {{ missedRateLabel(item) }}
+                        </small>
+                      </div>
+                      <strong class="mt-1 block truncate text-[12px] font-bold text-ink">
+                        {{ item.alternativeCardName }}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <!--
+                    두 상자와 결론 사이를 가는 선으로 끊는다. 상자로 감싸면 셋이 나란한
+                    항목으로 읽히는데, 이 줄은 위 둘을 견준 **결과**다.
+                  -->
+                  <div class="mt-3 flex items-center justify-between border-t border-line pt-3">
+                    <span class="text-[12px] font-semibold text-danger">놓친 혜택</span>
+                    <!-- `.report-transactions em` 이 13px 을 걸어두고 레이어 밖이라 `!` 가 필요하다. -->
+                    <em class="!p-0 !text-[15px] !font-extrabold !text-danger not-italic">
+                      {{ currency(item.diffAmount) }}
+                    </em>
+                  </div>
                 </div>
               </div>
             </Transition>
