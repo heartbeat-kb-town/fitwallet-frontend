@@ -13,8 +13,18 @@ const { showToast } = useToast()
 const agreed = ref(false)
 const isConnecting = ref(false)
 
+/**
+ * 한 칸(`signup-complete`)이 아니라 회원가입까지 되돌린다.
+ *
+ * 가입 완료 화면은 자산 연결로 넘어가는 징검다리라, 거기로 돌아가도 할 수 있는 게
+ * 자산 연결뿐이다.
+ *
+ * ⚠️ 여기 오는 시점에는 **가입이 끝나고 로그인까지 된 상태**다. 그래서 이 버튼은
+ * 로그인한 사용자를 회원가입 화면에 데려다 놓는다. 로그인 상태에서 `signup` 진입을
+ * 막을지는 별도로 본다 (#210).
+ */
 function goBack() {
-  router.push({ name: 'signup-complete' })
+  router.push({ name: 'signup' })
 }
 
 /**
@@ -53,7 +63,7 @@ async function connect() {
 <template>
   <div class="screen asset-screen">
     <header class="flow-header centered-title">
-      <button type="button" aria-label="가입 완료로 돌아가기" @click="goBack()">
+      <button type="button" aria-label="회원가입으로 돌아가기" @click="goBack()">
         <AppIcon name="back" :size="22" />
       </button>
       <h1>금융 자산 연결하기</h1>
