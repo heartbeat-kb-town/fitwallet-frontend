@@ -728,7 +728,7 @@ async function confirmPin() {
 
     <nav class="bottom-nav merchant-bottom-nav">
       <button type="button" @click="navigateTo('search')">
-        <img :src="iconSearchTab" alt="" width="22" height="22" /><span>검색</span>
+        <img :src="iconSearchTab" alt="" width="22" height="22" /><span>매장 검색</span>
       </button>
       <button type="button" @click="navigateTo('home')">
         <img :src="iconHome" alt="" width="22" height="22" /><span>홈</span>

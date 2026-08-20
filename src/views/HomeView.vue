@@ -148,7 +148,7 @@ function openReport(cardId = '') {
  * 둘째 칸의 아이콘은 예전 홈 칸이 쓰던 것을 그대로 가져왔다.
  */
 const navItems = [
-  { label: '검색', icon: iconSearchTab, iconActive: iconSearchTabActive },
+  { label: '매장 검색', icon: iconSearchTab, iconActive: iconSearchTabActive },
   { label: '홈', icon: iconHome, iconActive: iconHomeActive },
   { label: '카드 내역', icon: iconMycard, iconActive: iconMycardActive },
   { label: '혜택', icon: iconReport, iconActive: iconReportActive },

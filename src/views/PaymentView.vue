@@ -877,7 +877,7 @@ onBeforeUnmount(() => {
         -->
         <button type="button" @click="openSearch()">
           <img :src="iconSearchTab" alt="" width="22" height="22" />
-          <span>검색</span>
+          <span>매장 검색</span>
         </button>
         <button class="active" type="button">
           <img :src="iconHomeActive" alt="" width="22" height="22" />
