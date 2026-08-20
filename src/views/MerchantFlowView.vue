@@ -571,6 +571,42 @@ async function confirmPin() {
         근처에 조건에 맞는 가맹점이 없어요
       </p>
       <div v-else class="merchant-list">
+        <!--
+          주변 조회는 거리순 상위 5건만 온다 (백엔드에 페이징이 없다). 찾는 가게가
+          그 안에 없을 때 빠져나갈 길을 준다 — 매장 검색 화면으로 보낸다 (#228).
+
+          **목록 맨 위에 둔다.** 아래에 두면 5건을 다 내려야 보이는데, "내가 찾는 가게가
+          여기 없다" 는 것은 목록을 다 읽기 전에 이미 안다. 조회 범위 안내를 목록 위로
+          올린 것과 같은 이유다 (#137).
+
+          카테고리·키워드로 들어온 목록에는 띄우지 않는다. 그쪽은 이미 좁힌 결과다.
+        -->
+        <div
+          v-if="isNearby"
+          class="flex items-center gap-3 rounded-2xl border border-line bg-white px-4 py-3.5"
+        >
+          <div class="min-w-0 flex-1">
+            <strong class="block text-[13px] font-semibold text-ink">
+              찾으시는 매장이 없으신가요?
+            </strong>
+            <small class="mt-0.5 block text-[11px] text-muted-deep">
+              자세히 검색하려면 매장 검색 탭으로 이동하세요
+            </small>
+          </div>
+          <!--
+            글자는 아래 거리 칩(`.merchant-distance`)과 같은 13px / 750 이다.
+            `!` 가 필요하다 — style.css 의 `button, a, input { font: inherit }` 가 레이어 밖이라
+            유틸리티를 이긴다. `font` 는 단축 속성이라 크기와 굵기를 한꺼번에 덮어쓴다.
+          -->
+          <button
+            class="flex-none rounded-full bg-icon-bg px-2.5 py-1.5 text-[13px]! font-[750]! text-primary-dark"
+            type="button"
+            @click="navigateTo('search')"
+          >
+            이동하기
+          </button>
+        </div>
+
         <button
           v-for="store in stores"
           :key="store.storeId"
@@ -593,37 +629,6 @@ async function confirmPin() {
           </span>
           <span class="merchant-distance">{{ formatDistance(store.distanceMeters) }}</span>
         </button>
-
-        <!--
-          주변 조회는 거리순 상위 5건만 온다 (백엔드에 페이징이 없다). 찾는 가게가
-          그 안에 없을 때 빠져나갈 길을 준다 — 매장 검색 화면으로 보낸다 (#228).
-          카테고리·키워드로 들어온 목록에는 띄우지 않는다. 그쪽은 이미 좁힌 결과다.
-        -->
-        <div
-          v-if="isNearby"
-          class="flex items-center gap-3 rounded-2xl border border-line bg-white px-4 py-3.5"
-        >
-          <div class="min-w-0 flex-1">
-            <strong class="block text-[13px] font-semibold text-ink">
-              찾으시는 매장이 없으신가요?
-            </strong>
-            <small class="mt-0.5 block text-[11px] text-muted-deep">
-              자세히 검색하려면 매장 검색 탭으로 이동하세요
-            </small>
-          </div>
-          <!--
-            글자는 위 거리 칩(`.merchant-distance`)과 같은 13px / 750 이다.
-            `!` 가 필요하다 — style.css 의 `button, a, input { font: inherit }` 가 레이어 밖이라
-            유틸리티를 이긴다. `font` 는 단축 속성이라 크기와 굵기를 한꺼번에 덮어쓴다.
-          -->
-          <button
-            class="flex-none rounded-full bg-icon-bg px-2.5 py-1.5 text-[13px]! font-[750]! text-primary-dark"
-            type="button"
-            @click="navigateTo('search')"
-          >
-            이동하기
-          </button>
-        </div>
       </div>
     </template>
 

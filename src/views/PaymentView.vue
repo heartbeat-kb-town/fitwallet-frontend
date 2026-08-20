@@ -14,11 +14,13 @@ import pickPig from '@/assets/icons/pig-pickcard.svg'
 import * as paymentApi from '@/api/paymentApi'
 import { QR_STATUS } from '@/api/paymentApi'
 import BaseModal from '@/components/common/BaseModal.vue'
+import BaseLocationConsentSheet from '@/components/common/BaseLocationConsentSheet.vue'
 import { useCardImage } from '@/composables/useCardImage'
 import { useQrScanner } from '@/composables/useQrScanner'
 import { useToast } from '@/composables/useToast'
 import { useCardStore } from '@/stores/cardStore'
 import { usePaymentStore } from '@/stores/paymentStore'
+import { useLocationStore } from '@/stores/locationStore'
 import { parseStoreQr } from '@/utils/storeQr'
 
 // QR 만료가 180초인데 그 안에 스캔을 놓치면 안 된다. 백엔드가 3초 뒤 스캔된 척 바꿔주므로
@@ -31,11 +33,19 @@ const cardStore = useCardStore()
 
 const { markCardImageOrientation, cardImageStyle } = useCardImage()
 
-// `.payment-card` 는 344×198 이라 실제 카드(약 1.58)보다 넓다.
-// 세로 이미지를 눕힐 때는 카드가 아니라 **칸** 의 비율을 기준으로 키워야 칸이 채워진다.
-const PAYMENT_CARD_RATIO = 344 / 198
+// `.payment-card` 의 칸 비율. 세로 이미지를 눕힐 때는 카드가 아니라 **칸** 의 비율을
+// 기준으로 키워야 칸이 채워진다.
+//
+// 예전에는 344×198(1.737)이라 실제 카드(약 1.586)보다 넓었고, 가로 이미지의 위아래가
+// 9%씩 잘려 카드에 인쇄된 상품명이 윗변에 붙어 보였다. 314×198 로 맞췄다.
+// **style.css 의 `.payment-card` 와 같이 고쳐야 한다.**
+const PAYMENT_CARD_RATIO = 314 / 198
 const paymentStore = usePaymentStore()
+const locationStore = useLocationStore()
 const { showToast } = useToast()
+
+/** 위치 동의 시트. `최적의 카드 추천 받고 결제하기` 를 눌렀는데 아직 동의가 없을 때 뜬다. */
+const showConsent = ref(false)
 
 // 진입 시점의 맥락을 고정한다. 화면이 떠 있는 동안 store 가 바뀌어도 흔들리지 않게.
 const merchantName = paymentStore.merchantName
@@ -71,8 +81,22 @@ function openReport() {
  *
  * 가맹점 화면을 주변 조회 모드로 연다. 카테고리를 고르는 단계를 건너뛰고 지금 있는 곳의
  * 가맹점을 바로 보여준다. 가게를 고르면 그 뒤는 기존 PICK 추천 흐름 그대로다.
+ *
+ * **넘어가기 전에 위치 동의를 받는다.** 주변 조회도 백엔드가 동의를 요구하므로
+ * (`DefaultStoreService.searchStores`), 안 받고 넘어가면 빈 목록을 보여주게 된다.
+ * 동의 여부는 홈·검색과 같은 `locationStore` 를 본다 — 여기서 한 번 누르면 다른 곳에서도
+ * 다시 묻지 않는다 (#220).
  */
 function openNearbyStores() {
+  if (!locationStore.isAgreed) {
+    showConsent.value = true
+    return
+  }
+  router.push({ name: 'merchants', query: { nearby: '1', from: 'payment' } })
+}
+
+function onConsentAgreed() {
+  showConsent.value = false
   router.push({ name: 'merchants', query: { nearby: '1', from: 'payment' } })
 }
 
@@ -1271,5 +1295,14 @@ onBeforeUnmount(() => {
         </button>
       </template>
     </BaseModal>
+
+    <!-- 홈·검색과 같은 시트를 쓴다. 여기서 동의하면 저쪽에서도 다시 묻지 않는다 (#220). -->
+    <Transition name="fade">
+      <BaseLocationConsentSheet
+        v-if="showConsent"
+        @agreed="onConsentAgreed"
+        @close="showConsent = false"
+      />
+    </Transition>
   </section>
 </template>

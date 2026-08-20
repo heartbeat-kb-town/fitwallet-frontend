@@ -2136,7 +2136,10 @@ input[type='search']::-webkit-search-cancel-button {
   position: absolute;
   top: 148px;
   left: 50%;
-  width: 344px;
+  /* 카드 이미지 비율(약 1.586)에 맞춘 칸이다. 예전 344×198(1.737)은 칸이 더 넓어서
+     object-fit: cover 가 위아래를 9%씩 잘라냈고, 카드에 인쇄된 상품명이 윗변에
+     붙어 보였다. 높이를 늘리면 카드 더미 전체가 밀리므로 폭을 줄여 맞춘다. */
+  width: 314px;
   height: 198px;
   opacity: 1;
   transform-origin: center;
