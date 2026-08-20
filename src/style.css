@@ -31,6 +31,11 @@
      muted(#d4c4ab) 는 바의 노란 채움(#ffcc00) 위에서 거의 안 보인다. */
   --color-muted-deep: #b0a89e;
 
+  /* muted-deep 보다 또 한 단계 진한 회갈색. .row-total · .empty-brand 등이 이미 쓰던
+     값을 그대로 토큰화했다. 승인취소 거래의 취소선 그은 금액이 이 색을 쓴다 —
+     muted-deep(#b0a89e) 는 시각·카테고리 줄과 같은 색이라 금액이 그 줄보다 흐려 보인다. */
+  --color-muted-deeper: #9a9186;
+
   /* 에러 표시용. 기존 화면(.pick-ineligible 등)이 쓰던 값을 그대로 토큰화했다.
      검증 실패 인라인 메시지와 토스트가 이 색을 쓴다. */
   --color-danger: #d62828;
