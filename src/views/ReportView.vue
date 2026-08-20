@@ -832,7 +832,11 @@ onBeforeUnmount(() => {
 
         <section class="report-panel recommendation-panel">
           <h2>카드 추천</h2>
-          <p>내 소비 패턴과 혜택 비중에 따라 추천해 드려요</p>
+          <!--
+            추천 기준을 그대로 적는다. 백엔드가 최근 3개월 예상 지출 기반 엔진으로
+            바뀌었다 (backend#273). `혜택 비중` 은 뜻도 모호하고 실제 기준도 아니었다.
+          -->
+          <p>최근 3개월 소비 패턴을 분석해 추천해 드려요.</p>
           <article
             v-for="card in recommendations"
             :key="card.cardProductId"
