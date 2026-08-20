@@ -2906,18 +2906,23 @@ input[type='search']::-webkit-search-cancel-button {
   cursor: default;
 }
 
+/* 예전에는 왼쪽 금액 + 오른쪽 `상세 보기` 두 덩어리라 space-between 이었다.
+   #204 에서 버튼을 빼면서 한 덩어리만 남아 왼쪽에 치우쳐 있었다 — 위 카드 이미지와
+   아래 점 표시가 가운데라 축이 어긋났다 (#247). */
 .mycard-amount-row {
   margin-top: 0;
   padding: 14px 0 4px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   border-top: 1px solid #f6f6f8;
 }
 
+/* 라벨·금액·계좌명의 길이가 제각각이라 안쪽도 맞춰야 가운데로 보인다. */
 .mycard-amount-row > div {
   display: flex;
   flex-direction: column;
+  align-items: center;
 }
 
 .mycard-amount-row span {
@@ -2937,18 +2942,16 @@ input[type='search']::-webkit-search-cancel-button {
   font-size: 11px;
 }
 
-.mycard-amount-row > button {
-  padding: 7px 14px;
-  border-radius: 10px;
-  background: #f6f6f8;
-  color: #60584c;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.mycard-dots,
+/*
+  ⚠️ `display: flex` 가 반드시 있어야 한다. 예전에는 `.mycard-dots, .mycard-mini-dots`
+  한 규칙이 이 셋을 함께 줬는데, #217 에서 `.mycard-mini-dots` 를 걷어내며 규칙째
+  지워져 점들이 왼쪽으로 흘렀다. justify-content 만 남으면 아무 일도 하지 않는다.
+*/
 .mycard-dots {
+  display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 5px;
   padding: 10px 0 16px;
 }
 
