@@ -1238,10 +1238,10 @@ onBeforeUnmount(() => {
 
     <nav class="bottom-nav report-bottom-nav">
       <button type="button" @click="navigate('search')">
-        <img :src="iconSearchTab" alt="" /><span>검색</span>
+        <img :src="iconSearchTab" alt="" /><span>매장 검색</span>
       </button>
       <button type="button" @click="navigate('home')">
-        <img :src="iconHome" alt="" /><span>홈</span>
+        <img :src="iconHome" alt="" /><span>결제</span>
       </button>
       <button type="button" @click="navigate('mycard')">
         <img :src="iconMycard" alt="" /><span>카드 내역</span>

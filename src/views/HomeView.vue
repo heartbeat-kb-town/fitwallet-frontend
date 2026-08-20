@@ -142,14 +142,16 @@ function openReport(cardId = '') {
 /**
  * 하단 내비게이션 탭: icon(비활성/회색), iconActive(활성/노랑).
  *
- * **라벨과 아이콘만 바뀌었고 가는 곳은 예전 그대로다** (#198).
- * 첫 칸 `검색` 은 예전 `홈` 칸이라 이 화면(`/home`, 검색창·카테고리)을 가리키고,
- * 둘째 칸 `홈` 은 예전 `결제` 칸이라 결제 화면(`/payment`)을 가리킨다.
- * 둘째 칸의 아이콘은 예전 홈 칸이 쓰던 것을 그대로 가져왔다.
+ * **라벨과 아이콘만 바뀌었고 가는 곳은 예전 그대로다** (#198 · #223).
+ * 첫 칸 `매장 검색` 은 예전 `홈` 칸이라 이 화면(`/home`, 검색창·카테고리)을 가리키고,
+ * 둘째 칸 `결제` 는 결제 화면(`/payment`)을 가리킨다.
+ *
+ * 둘째 칸은 #198 에서 `결제` → `홈` 으로 적었다가 다시 `결제` 로 돌아왔다.
+ * 가는 곳이 결제 화면이라 아이콘도 카드 모양이고, 라벨이 `홈` 이면 셋이 따로 놀았다.
  */
 const navItems = [
-  { label: '검색', icon: iconSearchTab, iconActive: iconSearchTabActive },
-  { label: '홈', icon: iconHome, iconActive: iconHomeActive },
+  { label: '매장 검색', icon: iconSearchTab, iconActive: iconSearchTabActive },
+  { label: '결제', icon: iconHome, iconActive: iconHomeActive },
   { label: '카드 내역', icon: iconMycard, iconActive: iconMycardActive },
   { label: '혜택', icon: iconReport, iconActive: iconReportActive },
 ]
