@@ -324,8 +324,24 @@ function openPin(purpose = 'qr') {
  *
  * 표는 실패 시점에 이미 버렸으므로(`pollPaymentResult` 의 FAILED 분기) 새로 받아야 한다.
  */
+/**
+ * 실패 팝업을 닫았다.
+ *
+ * **어디서 시작한 결제냐에 따라 갈린다** (#239). 가맹점(피그의 PICK)에서 들어왔으면
+ * 그 화면으로 돌려보낸다 — 여기서 비밀번호를 다시 물으면 카드 선택 화면 위에 남는데,
+ * 그 화면은 이 사용자가 거쳐온 곳이 아니다. 카드는 이미 PICK 에서 골랐다.
+ *
+ * 결제 탭에서 시작한 결제는 카드 선택 화면이 제자리이므로 그대로 비밀번호를 다시 묻는다.
+ * 같은 구분을 `qrBack()` 이 이미 하고 있다.
+ */
 function closePaymentFailure() {
   isPaymentFailed.value = false
+
+  if (startPhase === 'qr') {
+    backToMerchant()
+    return
+  }
+
   openPin()
 }
 
