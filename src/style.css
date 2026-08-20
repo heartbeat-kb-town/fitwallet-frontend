@@ -2942,19 +2942,12 @@ input[type='search']::-webkit-search-cancel-button {
 }
 
 .mycard-dots,
-.mycard-mini-dots {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
 .mycard-dots {
   justify-content: center;
   padding: 10px 0 16px;
 }
 
-.mycard-dots button,
-.mycard-mini-dots i {
+.mycard-dots button {
   width: 6px;
   height: 6px;
   padding: 0;
@@ -2963,8 +2956,7 @@ input[type='search']::-webkit-search-cancel-button {
   transition: 0.25s ease;
 }
 
-.mycard-dots button.active,
-.mycard-mini-dots i.active {
+.mycard-dots button.active {
   width: 22px;
   background: #ffcc00;
 }
@@ -3386,20 +3378,6 @@ input[type='search']::-webkit-search-cancel-button {
   margin-top: 2px;
   color: #b0a89e;
   font-size: 12px;
-}
-
-.mycard-mini-dots {
-  margin-top: 6px;
-  gap: 4px;
-}
-
-.mycard-mini-dots i {
-  width: 5px;
-  height: 5px;
-}
-
-.mycard-mini-dots i.active {
-  width: 16px;
 }
 
 .mycard-month-selector.compact {
