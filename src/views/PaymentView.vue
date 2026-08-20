@@ -1096,16 +1096,26 @@ onBeforeUnmount(() => {
 
       <div class="payment-qr-view">
         <div class="payment-qr-frame">
-          <!-- 카메라 미리보기. 프레임을 꽉 채우고 스캐너 장식을 그 위에 얹는다. -->
+          <!--
+            카메라 미리보기와 조준 틀을 **같은 칸에 겹친다** (#241).
+
+            `.payment-qr-frame` 이 `display: grid` 인데 둘을 그냥 두면 각각 다른 암시적
+            행에 놓여 세로로 나뉜다 — 카메라가 칸을 못 채우고 틀이 그 아래에 그려졌다.
+            `col-start-1 row-start-1` 로 한 칸에 모으면 DOM 순서대로 겹쳐 쌓인다.
+
+            `size-full` 로 늘리는 이유: 프레임의 `place-items: center` 가 늘어나는 것을
+            막아서, 칸을 채우려면 크기를 직접 줘야 한다. `.payment-scanner` 는 반대로
+            `width: 60%` 를 유지해야 조준 틀 크기가 그대로다 — 그래서 늘리지 않는다.
+          -->
           <video
             v-show="!scannedToken"
             ref="videoRef"
-            class="h-full w-full rounded-[18px] object-cover"
+            class="col-start-1 row-start-1 size-full rounded-[18px] object-cover"
             muted
             playsinline
           ></video>
 
-          <div v-if="!scannedToken" class="payment-scanner">
+          <div v-if="!scannedToken" class="payment-scanner col-start-1 row-start-1">
             <i class="corner top-left"></i>
             <i class="corner top-right"></i>
             <i class="corner bottom-left"></i>
