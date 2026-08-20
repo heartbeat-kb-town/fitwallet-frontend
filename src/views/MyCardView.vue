@@ -960,13 +960,10 @@ function dateLabel(date) {
           <div class="mycard-summary-copy">
             <strong>{{ activeCard.issuer }} {{ activeCard.name }}</strong>
             <span>****{{ activeCard.last4 }}</span>
-            <div class="mycard-mini-dots">
-              <i
-                v-for="(_, index) in months"
-                :key="index"
-                :class="{ active: index === monthIndex }"
-              ></i>
-            </div>
+            <!--
+              월 표시 점을 뺐다 (#216). 바로 옆 월 선택기가 `2026.07` 로 같은 것을 말하고,
+              점 개수가 availableYearMonths 길이라 월이 늘수록 카드 번호 밑을 채웠다.
+            -->
           </div>
           <div class="mycard-month-selector compact">
             <button type="button" :disabled="monthIndex >= months.length - 1" @click="moveMonth(1)">
