@@ -175,9 +175,12 @@ const hasBenefitDetail = computed(
 )
 
 /**
- * 시트 상단 요약. **디자인의 진행바는 실적이 아니라 잠재 혜택이다.**
+ * 시트 상단 요약. **디자인의 진행바는 실적이 아니라 남은 혜택이다.**
  *
  * 전체 한도가 없는 카드는 `potentialBenefitRate` 가 null 이라 분모를 감춘다.
+ *
+ * 화면 문구는 `남은 혜택` 이지만 **백엔드 필드는 `potential*` 그대로다** (#245).
+ * 응답 필드를 화면 문구에 맞춰 바꾸면 대조할 때 더 헷갈려서 이름은 두었다.
  */
 const benefitSummary = computed(() => {
   const summary = monthlyBenefit.value?.monthlySummary
@@ -190,7 +193,7 @@ const benefitSummary = computed(() => {
   }
 })
 
-/** 잠재 혜택 진행률. 백엔드가 계산해서 준다 — 화면에서 다시 나누지 않는다. */
+/** 남은 혜택 진행률. 백엔드가 계산해서 준다 — 화면에서 다시 나누지 않는다. */
 const benefitProgress = computed(() =>
   Math.min(
     100,
@@ -212,7 +215,7 @@ const performanceLabel = computed(() => {
   return tierName ? `전월 실적 ${tierName} 적용 중` : performance.message
 })
 
-/** 잠재 혜택 설명 토글. 상단 ⓘ 를 누를 때마다 열리고 닫힌다. */
+/** 남은 혜택 설명 토글. 상단 ⓘ 를 누를 때마다 열리고 닫힌다. */
 const isPotentialInfoOpen = ref(false)
 
 function won(value) {
@@ -331,10 +334,14 @@ onMounted(() => {
           </button>
           <h2>{{ benefitCard.name }}</h2>
           <p>{{ benefitCard.issuer }}</p>
-          <!-- 상단은 실적이 아니라 **잠재 혜택**이다 (#121, 디자인 기준). -->
+          <!--
+            상단은 실적이 아니라 **남은 혜택**이다 (#121, 디자인 기준).
+            문구만 `잠재 혜택` 에서 바꿨고 값과 계산은 그대로다 (#245) —
+            백엔드 필드명은 `potential` 로 남아 있다.
+          -->
           <div class="progress-title">
             <span class="inline-flex items-center gap-1">
-              이번 달 잠재 혜택
+              이번 달 남은 혜택
               <!--
                 Preflight 를 빼둔 프로젝트라 `bg-transparent` 를 직접 준다.
                 안 주면 브라우저 기본 버튼 배경(회색 알약)이 그대로 보인다.
@@ -343,7 +350,7 @@ onMounted(() => {
                 type="button"
                 class="inline-flex bg-transparent p-0 text-muted transition-colors hover:text-sub"
                 :aria-expanded="isPotentialInfoOpen"
-                aria-label="잠재 혜택이 무엇인지 보기"
+                aria-label="남은 혜택이 무엇인지 보기"
                 @click="isPotentialInfoOpen = !isPotentialInfoOpen"
               >
                 <Info :size="13" />
@@ -359,13 +366,13 @@ onMounted(() => {
           <div class="progress"><span :style="{ width: `${benefitProgress}%` }"></span></div>
           <p class="tier">{{ performanceLabel }}</p>
 
-          <!-- 잠재 혜택 설명. ⓘ 를 누를 때마다 열리고 닫힌다. 문구는 디자인 주석 그대로다. -->
+          <!-- 남은 혜택 설명. ⓘ 를 누를 때마다 열리고 닫힌다. -->
           <Transition name="expand">
             <p
               v-if="isPotentialInfoOpen"
               class="mt-2 rounded-xl bg-icon-bg px-3 py-2 text-xs leading-relaxed text-sub"
             >
-              잠재혜택은 청구할인, 포인트 적립, 캐시백, 할인쿠폰을 합산한 혜택이에요.
+              남은 혜택은 청구할인, 포인트 적립, 캐시백, 할인쿠폰을 합산한 혜택이에요.
             </p>
           </Transition>
         </div>
