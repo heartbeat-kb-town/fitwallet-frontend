@@ -30,6 +30,7 @@ const BACKEND_CATEGORY_IDS = {
   gas: 6,
 }
 import storeSearchIcon from '@/assets/icons/category-store.svg'
+import storeNearbyIcon from '@/assets/icons/store-nearby.svg'
 import benefitGiftIcon from '@/assets/icons/category-benefit.svg'
 import pigPickIcon from '@/assets/icons/pig-pick.svg'
 import pickBubbleIcon from '@/assets/icons/pick-bubble.svg'
@@ -55,7 +56,10 @@ const str = (value, fallback = '') => (typeof value === 'string' ? value : fallb
 // 무엇을 보여줄지는 URL 이 정한다 (#59). 기본값은 기존 props default 그대로다.
 const request = computed(() => ({
   categoryId: str(route.query.categoryId, 'cafe'),
-  title: str(route.query.title, str(route.query.query) || '카페/디저트'),
+  title: str(
+    route.query.title,
+    route.query.nearby === '1' ? '내 주변 혜택 가맹점' : str(route.query.query) || '카페/디저트',
+  ),
   query: str(route.query.query),
 }))
 
@@ -75,9 +79,10 @@ const initialStoreName = computed(() => str(route.query.store))
 const initialStoreId = computed(() => str(route.query.storeId))
 const requestedAmount = computed(() => str(route.query.amount))
 
-// 검색에서 들어왔으면 뒤로가기가 검색으로 간다. 아니면 홈(셸 기본 화면).
+// 들어온 곳으로 되돌린다. 결제에서 온 경우가 #228 로 늘었다.
 function goBack() {
   if (route.query.from === 'search') router.push({ name: 'search' })
+  else if (route.query.from === 'payment') router.push({ name: 'payment' })
   else router.push({ name: 'home' })
 }
 
@@ -143,6 +148,21 @@ const category = computed(
 )
 const isSearch = computed(() => Boolean(request.value.query))
 
+/**
+ * 주변 조회 모드 (#228). 결제 화면의 `최적의 카드 추천 받고 결제하기` 가 여는 모습이다.
+ *
+ * 카테고리도 검색어도 없이 **좌표만으로** 조회한다. 백엔드가 이미 이 모드를 지원한다 —
+ * `DefaultStoreService.searchStores()` 가 "카테고리도 없는(= 좌표만 온) 요청" 을
+ * 주변 조회로 받는다. 막고 있던 것은 프론트였다.
+ */
+const isNearby = computed(() => route.query.nearby === '1')
+
+/** 앞에 세우는 아이콘. 주변 조회는 가게, 키워드 검색은 검색, 나머지는 카테고리 아이콘이다. */
+const leadingIcon = computed(() => {
+  if (isNearby.value) return storeNearbyIcon
+  return isSearch.value ? storeSearchIcon : category.value.icon
+})
+
 // 로딩 표시는 `isLoading` 이 아니라 아래 `isSearching` 이 맡는다 (최소 노출 시간 때문).
 const { data: searchResult, execute: fetchStores } = useAsyncState(storeApi.getStoreSearch)
 
@@ -186,15 +206,18 @@ onBeforeUnmount(() => window.clearTimeout(searchLoaderTimer))
 /**
  * 가맹점을 조회한다.
  *
- * 검색어가 있으면 키워드 검색, 없으면 카테고리 주변 조회다.
- * 둘 다 비면 백엔드가 400 을 주므로 그 조합으로는 아예 부르지 않는다.
+ * 셋 중 하나다 — 검색어가 있으면 키워드 검색, 주변 조회 모드면 좌표만,
+ * 나머지는 카테고리 주변 조회다.
+ *
+ * 셋 다 아니면 백엔드가 400 을 주므로 그 조합으로는 아예 부르지 않는다.
+ * **주변 조회 모드는 좌표만 보내는 것이 정상이다** — 여기서 걸러내면 안 된다 (#228).
  *
  * **키워드 검색은 백엔드가 검색 기록에 남긴다.** 검색 화면의 최근 검색어가 여기서 쌓인다.
  */
 async function loadStores() {
   const keyword = request.value.query?.trim()
-  const categoryId = BACKEND_CATEGORY_IDS[category.value.id]
-  if (!keyword && !categoryId) return
+  const categoryId = isNearby.value ? null : BACKEND_CATEGORY_IDS[category.value.id]
+  if (!keyword && !categoryId && !isNearby.value) return
 
   // 좌표를 구하는 동안에도 기다리는 것은 마찬가지다. 로더를 그 전에 켠다.
   startSearchLoader()
@@ -203,9 +226,9 @@ async function loadStores() {
   const { latitude, longitude } = await getCurrentCoordinates()
 
   try {
-    await fetchStores(
-      keyword ? { keyword, latitude, longitude } : { categoryId, latitude, longitude },
-    )
+    if (keyword) await fetchStores({ keyword, latitude, longitude })
+    else if (categoryId) await fetchStores({ categoryId, latitude, longitude })
+    else await fetchStores({ latitude, longitude })
   } catch (error) {
     if (error.code === 'LOCATION_AGREEMENT_REQUIRED') {
       // 예전에는 토스트만 띄웠다. 이 화면에 동의할 수단이 없어 막다른 길이었다 (#220).
@@ -512,7 +535,7 @@ async function confirmPin() {
           </button>
           <div class="merchant-heading">
             <span class="merchant-leading-icon">
-              <img :src="isSearch ? storeSearchIcon : category.icon" alt="" />
+              <img :src="leadingIcon" alt="" />
             </span>
             <h1>{{ request.title }}</h1>
           </div>
@@ -548,6 +571,42 @@ async function confirmPin() {
         근처에 조건에 맞는 가맹점이 없어요
       </p>
       <div v-else class="merchant-list">
+        <!--
+          주변 조회는 거리순 상위 5건만 온다 (백엔드에 페이징이 없다). 찾는 가게가
+          그 안에 없을 때 빠져나갈 길을 준다 — 매장 검색 화면으로 보낸다 (#228).
+
+          **목록 맨 위에 둔다.** 아래에 두면 5건을 다 내려야 보이는데, "내가 찾는 가게가
+          여기 없다" 는 것은 목록을 다 읽기 전에 이미 안다. 조회 범위 안내를 목록 위로
+          올린 것과 같은 이유다 (#137).
+
+          카테고리·키워드로 들어온 목록에는 띄우지 않는다. 그쪽은 이미 좁힌 결과다.
+        -->
+        <div
+          v-if="isNearby"
+          class="flex items-center gap-3 rounded-2xl border border-line bg-white px-4 py-3.5"
+        >
+          <div class="min-w-0 flex-1">
+            <strong class="block text-[13px] font-semibold text-ink">
+              찾으시는 매장이 없으신가요?
+            </strong>
+            <small class="mt-0.5 block text-[11px] text-muted-deep">
+              자세히 검색하려면 매장 검색 탭으로 이동하세요
+            </small>
+          </div>
+          <!--
+            글자는 아래 거리 칩(`.merchant-distance`)과 같은 13px / 750 이다.
+            `!` 가 필요하다 — style.css 의 `button, a, input { font: inherit }` 가 레이어 밖이라
+            유틸리티를 이긴다. `font` 는 단축 속성이라 크기와 굵기를 한꺼번에 덮어쓴다.
+          -->
+          <button
+            class="flex-none rounded-full bg-icon-bg px-2.5 py-1.5 text-[13px]! font-[750]! text-primary-dark"
+            type="button"
+            @click="navigateTo('search')"
+          >
+            이동하기
+          </button>
+        </div>
+
         <button
           v-for="store in stores"
           :key="store.storeId"
@@ -556,7 +615,7 @@ async function confirmPin() {
           @click="selectStore(store)"
         >
           <span class="merchant-store-icon">
-            <img :src="isSearch ? storeSearchIcon : category.icon" alt="" />
+            <img :src="leadingIcon" alt="" />
           </span>
           <span class="merchant-store-info">
             <strong>{{ store.storeName }}</strong>
