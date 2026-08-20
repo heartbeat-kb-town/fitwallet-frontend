@@ -225,7 +225,7 @@ function onConsentAgreed() {
           />
           <path d="M2.25 9H21.75M6 14.0625H8.25V15H6V14.0625Z" />
         </svg>
-        <span>홈</span>
+        <span>결제</span>
       </button>
       <button type="button" @click="goToMyCard()">
         <svg viewBox="0 0 24 24" aria-hidden="true">

@@ -872,8 +872,9 @@ onBeforeUnmount(() => {
 
       <nav class="bottom-nav">
         <!--
-          이 화면이 `홈` 칸이 가리키는 곳이다 (#198). 라벨만 `결제` → `홈` 으로 바뀌었고
-          켜지는 칸은 그대로 둘째 칸이다. 아이콘은 예전 홈 칸이 쓰던 것을 가져왔다.
+          이 화면이 둘째 칸이 가리키는 곳이다. 켜지는 칸은 처음부터 둘째 칸 그대로다.
+          라벨은 #198 에서 `결제` → `홈` 으로 갔다가 #223 에서 다시 `결제` 로 돌아왔고,
+          아이콘도 그때 집 모양에서 카드 모양으로 바뀌었다.
         -->
         <button type="button" @click="openSearch()">
           <img :src="iconSearchTab" alt="" width="22" height="22" />
@@ -881,7 +882,7 @@ onBeforeUnmount(() => {
         </button>
         <button class="active" type="button">
           <img :src="iconHomeActive" alt="" width="22" height="22" />
-          <span>홈</span>
+          <span>결제</span>
         </button>
         <button type="button" @click="goToMyCard()">
           <img :src="iconMycard" alt="" width="22" height="22" />
