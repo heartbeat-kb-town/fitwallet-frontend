@@ -1,13 +1,3 @@
-<script>
-// 같은 세션에서 동의 시트를 두 번 띄우지 않기 위한 캐시. 홈에 다시 들어와도 유지된다.
-//
-// **동의의 진짜 상태는 서버에 있다** (`users.is_location_agreed`). 이건 요청을 아끼는 용도일 뿐이다.
-// 새로고침하면 false 로 돌아가 시트가 다시 뜨는데, 그때 동의를 한 번 더 저장한다.
-// 멱등한 요청이라 문제 없다. 서버 값을 읽어 시트 노출을 정하려면 `GET /user/me` 가 필요한데
-// 백엔드에 아직 없다 (#117).
-let locationConsented = false
-</script>
-
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -27,18 +17,18 @@ import iconMycard from '@/assets/icons/mycard.svg'
 import iconMycardActive from '@/assets/icons/mycard-selected.svg'
 import iconReport from '@/assets/icons/report.svg'
 import iconReportActive from '@/assets/icons/report-selected.svg'
-import iconLocation from '@/assets/icons/location.svg'
 import { categories } from '@/data'
 import { CATEGORY_PHOTOS } from '@/constants/categoryPhotos'
+import BaseLocationConsentSheet from '@/components/common/BaseLocationConsentSheet.vue'
 import * as userApi from '@/api/userApi'
 import { vDragScroll } from '@/directives/dragScroll'
 import { useAsyncState } from '@/composables/useAsyncState'
-import { useToast } from '@/composables/useToast'
 import { usePaymentStore } from '@/stores/paymentStore'
+import { useLocationStore } from '@/stores/locationStore'
 
 const router = useRouter()
 const paymentStore = usePaymentStore()
-const { showToast } = useToast()
+const locationStore = useLocationStore()
 
 /**
  * 자주 찾는 장소. 목데이터가 아니라 API 에서 온다 (#114).
@@ -169,51 +159,33 @@ const SEARCH_TAB_INDEX = 0
 
 const selectedCategory = ref(null)
 const consentCategory = ref(null)
-const isSavingConsent = ref(false)
 const activeTab = ref(SEARCH_TAB_INDEX)
 
 // 이 화면의 자체 토스트는 없앴다. 유일한 사용처가 "이 탭은 제외했어요" 였는데 네 칸이 전부
 // 실제 화면으로 이어지면서 부를 일이 사라졌다. 에러 토스트는 공용 `useToast` 가 맡는다.
 
+/**
+ * 카테고리를 고르면 가맹점 목록으로 간다.
+ *
+ * 동의를 아직 안 받았으면 시트를 먼저 띄운다. **저장하고 나서 넘어간다** — 가맹점 조회가
+ * `users.is_location_agreed` 를 보고 403 으로 막으므로(`DefaultStoreService.searchStores`),
+ * 먼저 넘어가면 빈 화면을 보여주게 된다.
+ *
+ * 동의 여부는 이제 `locationStore` 가 새로고침 뒤에도 기억한다 (#220).
+ */
 function chooseCategory(category) {
   selectedCategory.value = category.id
-  if (locationConsented) {
+  if (locationStore.isAgreed) {
     openMerchants({ categoryId: category.id, title: category.name })
     return
   }
   consentCategory.value = category
 }
 
-/**
- * 위치 정보 이용 동의.
- *
- * **서버에 저장하고 나서 넘어간다.** 가맹점 조회가 `users.is_location_agreed` 를 보고
- * 403 으로 막으므로(`DefaultStoreService`), 먼저 넘어가면 빈 화면을 보여주게 된다.
- *
- * 예전에는 모듈 변수만 세우고 서버에 알리지 않아, 동의를 눌러도 목록이 뜨지 않았다 (#117).
- */
-async function confirmLocation() {
-  if (isSavingConsent.value) return
-
+function onConsentAgreed() {
   const category = consentCategory.value
-  isSavingConsent.value = true
-
-  try {
-    await userApi.patchLocationAgreement({ agreed: true })
-  } catch (error) {
-    // 시트를 닫지 않는다. 닫으면 사용자가 다시 동의할 방법이 없다.
-    showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
-    return
-  } finally {
-    isSavingConsent.value = false
-  }
-
-  locationConsented = true
   consentCategory.value = null
-
-  if (category) {
-    openMerchants({ categoryId: category.id, title: category.name })
-  }
+  if (category) openMerchants({ categoryId: category.id, title: category.name })
 }
 
 /**
@@ -404,25 +376,12 @@ function selectTab(index) {
   </nav>
 
   <Transition name="fade">
-    <div v-if="consentCategory" class="sheet-layer">
-      <button class="scrim" aria-label="닫기" @click="consentCategory = null"></button>
-      <section class="sheet consent-sheet">
-        <span class="handle"></span>
-        <span class="consent-icon">
-          <img :src="iconLocation" alt="" width="32" height="32" />
-        </span>
-        <div class="consent-copy">
-          <h2>내 주변 {{ consentCategory.name }} 혜택을 볼까요?</h2>
-          <p>가까운 매장과 지금 받을 수 있는 카드 혜택을 찾기 위해 위치 정보가 필요해요.</p>
-        </div>
-        <button class="primary-button" :disabled="isSavingConsent" @click="confirmLocation">
-          {{ isSavingConsent ? '저장 중…' : '위치 정보 동의하고 보기' }}
-        </button>
-        <button class="text-button" :disabled="isSavingConsent" @click="consentCategory = null">
-          다음에 할게요
-        </button>
-      </section>
-    </div>
+    <BaseLocationConsentSheet
+      v-if="consentCategory"
+      :subject="consentCategory.name"
+      @agreed="onConsentAgreed"
+      @close="consentCategory = null"
+    />
   </Transition>
 
   <!-- 혜택 현황·이벤트 시트는 `CardBenefitStatusSection` 과 함께 리포트로 옮겼다. -->

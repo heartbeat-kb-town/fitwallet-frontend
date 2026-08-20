@@ -2,16 +2,22 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import * as storeApi from '@/api/storeApi'
+import BaseLocationConsentSheet from '@/components/common/BaseLocationConsentSheet.vue'
 import { useAsyncState } from '@/composables/useAsyncState'
 import { useToast } from '@/composables/useToast'
 import { usePaymentStore } from '@/stores/paymentStore'
+import { useLocationStore } from '@/stores/locationStore'
 
 const router = useRouter()
 const paymentStore = usePaymentStore()
+const locationStore = useLocationStore()
 const { showToast } = useToast()
 
 const searchInput = ref(null)
 const query = ref('')
+
+/** 동의를 기다리는 검색어. null 이면 시트가 닫혀 있다. */
+const consentKeyword = ref(null)
 
 /**
  * 최근·인기 검색어는 서버에 있다.
@@ -88,11 +94,29 @@ function submitSearch() {
     searchInput.value?.focus()
     return
   }
-  // 최근 검색어에 넣지 않는다. 가맹점 화면이 이 키워드로 조회하면 백엔드가 기록한다.
+
+  // 키워드 검색도 백엔드가 같은 `searchStores` 로 처리하고 위치 동의를 요구한다.
+  // 동의 없이 넘어가면 가맹점 화면이 403 을 받는다 (#220).
+  if (!locationStore.isAgreed) {
+    consentKeyword.value = value
+    return
+  }
+
+  openMerchants(value)
+}
+
+// 최근 검색어에 넣지 않는다. 가맹점 화면이 이 키워드로 조회하면 백엔드가 기록한다.
+function openMerchants(keyword) {
   router.push({
     name: 'merchants',
-    query: { query: value, title: value, from: 'search' },
+    query: { query: keyword, title: keyword, from: 'search' },
   })
+}
+
+function onConsentAgreed() {
+  const keyword = consentKeyword.value
+  consentKeyword.value = null
+  if (keyword) openMerchants(keyword)
 }
 </script>
 
@@ -214,5 +238,14 @@ function submitSearch() {
         <span>혜택</span>
       </button>
     </nav>
+
+    <Transition name="fade">
+      <BaseLocationConsentSheet
+        v-if="consentKeyword"
+        :subject="consentKeyword"
+        @agreed="onConsentAgreed"
+        @close="consentKeyword = null"
+      />
+    </Transition>
   </div>
 </template>
