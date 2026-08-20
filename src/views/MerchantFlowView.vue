@@ -7,11 +7,13 @@ import * as benefitApi from '@/api/benefitApi'
 import { CARD_BENEFIT_STATUS } from '@/api/benefitApi'
 import * as storeApi from '@/api/storeApi'
 import BaseSpinner from '@/components/common/BaseSpinner.vue'
+import BaseLocationConsentSheet from '@/components/common/BaseLocationConsentSheet.vue'
 import { useAsyncState } from '@/composables/useAsyncState'
 import { CARD_RATIO, useCardImage } from '@/composables/useCardImage'
 import { useToast } from '@/composables/useToast'
 import { getCurrentCoordinates } from '@/utils/geolocation'
 import { usePaymentStore } from '@/stores/paymentStore'
+import { useLocationStore } from '@/stores/locationStore'
 
 /**
  * 화면 카테고리 id → 백엔드 `category.category_id`.
@@ -41,6 +43,7 @@ import iconReport from '@/assets/icons/report.svg'
 const route = useRoute()
 const router = useRouter()
 const paymentStore = usePaymentStore()
+const locationStore = useLocationStore()
 const { showToast } = useToast()
 const { markCardImageOrientation, cardImageStyle } = useCardImage()
 
@@ -128,6 +131,8 @@ const selectedStore = ref(
 )
 const showPin = ref(false)
 const pendingPick = ref(null)
+/** 위치 동의 시트. 조회가 403 을 받았을 때만 뜬다. */
+const showConsent = ref(false)
 const pin = ref([])
 // PIN 시트 안에 띄우는 인라인 메시지. 시트가 화면을 덮고 있어 토스트는 가려진다.
 const pinMessage = ref('')
@@ -203,7 +208,10 @@ async function loadStores() {
     )
   } catch (error) {
     if (error.code === 'LOCATION_AGREEMENT_REQUIRED') {
-      showToast('위치 정보 이용에 동의해 주세요')
+      // 예전에는 토스트만 띄웠다. 이 화면에 동의할 수단이 없어 막다른 길이었다 (#220).
+      // 기억한 값이 서버와 어긋났다는 뜻이므로 지우고 시트를 띄운다.
+      locationStore.forget()
+      showConsent.value = true
       return
     }
     showToast(error.status >= 500 || !error.code ? '일시적인 오류가 발생했어요' : error.message)
@@ -407,6 +415,12 @@ function chooseCard(pick) {
   pin.value = []
   pinMessage.value = ''
   showPin.value = true
+}
+
+/** 동의를 받았으니 막혔던 조회를 그대로 다시 돌린다. */
+function onConsentAgreed() {
+  showConsent.value = false
+  loadStores()
 }
 
 function closePin() {
@@ -727,6 +741,15 @@ async function confirmPin() {
         <img :src="iconReport" alt="" width="22" height="22" /><span>혜택</span>
       </button>
     </nav>
+
+    <Transition name="fade">
+      <BaseLocationConsentSheet
+        v-if="showConsent"
+        :subject="request.title"
+        @agreed="onConsentAgreed"
+        @close="showConsent = false"
+      />
+    </Transition>
 
     <div v-if="showPin" class="payment-flow-layer">
       <button
