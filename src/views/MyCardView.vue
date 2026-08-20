@@ -433,6 +433,19 @@ function tierLabelStyle(index) {
   return { left: `${tierPercent(index)}%`, transform: 'translateX(-50%)' }
 }
 
+/**
+ * 이미 지나온 구간인가. 실적 바에서 픽피 왼쪽에 놓인 눈금들이다 (#249).
+ *
+ * **인덱스를 `currentTier` 와 그대로 견준다.** `tiers` 는 배열 인덱스와 `tierOrder` 가
+ * 같아서(`tiers[0].tierOrder === 0`) 변환이 필요 없다.
+ *
+ * 미달성이면 `currentTier` 가 0 이라 `0구간` 하나만 지나온 것이 된다 — 바의 채움도
+ * 0 눈금을 막 지난 지점이므로 맞는 표현이다.
+ */
+function isTierPassed(index) {
+  return index <= currentTier.value
+}
+
 /** 구간 버튼 아래 표시할 금액 범위. 최고 구간은 위쪽이 열려 있다. */
 function tierRangeLabel(tier) {
   if (!tier) return ''
@@ -925,10 +938,21 @@ function dateLabel(date) {
                 <!-- 라벨은 바에 붙이고(12px) 아래를 넉넉히 띄운다(16px). 12px 은 돼지 얼굴이
                      바 아래로 내려오는 11px 을 겨우 비키는 값이라 더 줄이면 겹친다. -->
                 <div class="relative mt-3 mb-4 h-[15px]">
+                  <!--
+                    지나온 구간은 노랑이다 (#249). 바가 이미 지나온 만큼을 노랑으로
+                    채우고 있으니 라벨도 같은 규칙을 따라야 둘이 한 이야기를 한다.
+
+                    바 채움색(`primary`)이 아니라 `primary-dark` 를 쓴다 — `#ffcc00` 을
+                    11px 글자에 그대로 주면 흰 배경에서 거의 안 읽힌다. 이 프로젝트가
+                    노란 글자에 쓰는 색이 `primary-dark` 다 (`.merchant-distance` 등).
+                  -->
                   <span
                     v-for="(tier, index) in tiers"
                     :key="tier.tierOrder"
-                    class="absolute text-[11px] leading-[15px] whitespace-nowrap text-muted-deep"
+                    class="absolute text-[11px] leading-[15px] whitespace-nowrap"
+                    :class="
+                      isTierPassed(index) ? 'font-semibold text-primary-dark' : 'text-muted-deep'
+                    "
                     :style="tierLabelStyle(index)"
                     >{{ tier.tierName }}</span
                   >
