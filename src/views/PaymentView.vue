@@ -842,9 +842,14 @@ onBeforeUnmount(() => {
           주된 동작이라 위에 두고 노랑을 준다 (#228). 아래 `QR 결제하기` 는 회색으로
           내렸다 — 두 개가 다 노랑이면 어느 쪽이 기본인지 알 수 없다.
           `.payment-qr-area` 는 레이어 밖이라 여백만 여기서 Tailwind 로 더한다.
+
+          **글자 크기·굵기에 `!` 가 필요하다.** style.css 의 `button, a, input { font: inherit }`
+          가 레이어 밖이라 `@layer utilities` 의 `text-[15px]` · `font-bold` 를 이긴다.
+          `font` 는 단축 속성이라 크기와 굵기를 한꺼번에 덮어써서, 안 붙이면 16px/400 으로
+          그려지고 아래 `QR 결제하기`(15px/700)와 어긋난다.
         -->
         <button
-          class="mb-2.5 flex h-[58px] w-full items-center justify-center gap-2 rounded-2xl bg-primary text-[15px] font-bold text-ink transition-transform active:scale-[0.985]"
+          class="mb-2.5 flex h-[58px] w-full items-center justify-center gap-2 rounded-2xl bg-primary text-[15px]! font-bold! text-ink transition-transform active:scale-[0.985]"
           type="button"
           @click="openNearbyStores()"
         >
