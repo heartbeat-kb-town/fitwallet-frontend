@@ -16,12 +16,6 @@ import iconHome from '@/assets/icons/home.svg'
 import iconSearchTab from '@/assets/icons/search-tab.svg'
 import iconMycard from '@/assets/icons/mycard.svg'
 import iconReportActive from '@/assets/icons/report-selected.svg'
-import iconFood from '@/assets/icons/category-food.svg'
-import iconCafe from '@/assets/icons/category-cafe.svg'
-import iconMart from '@/assets/icons/category-mart.svg'
-import iconShopping from '@/assets/icons/category-shopping.svg'
-import iconRefuel from '@/assets/icons/category-refuel.svg'
-import iconTransport from '@/assets/icons/potentialbenefit-transportation.svg'
 // 포인트 적립임을 알리는 Ⓟ 배지. 원화 금액과 한눈에 갈리게 숫자 앞에 붙인다.
 import iconPointBadge from '@/assets/icons/point-badge.svg'
 // 놓친 혜택 히어로에 걸터앉는 픽피. 우는 얼굴은 `pig-cry` 와 같고 앞발이 더 붙어 있다.
@@ -41,6 +35,7 @@ import pigSmilePeek from '@/assets/icons/pig-smile-peek.svg'
 import BaseSpinner from '@/components/common/BaseSpinner.vue'
 import CardBenefitStatusSection from '@/components/card/CardBenefitStatusSection.vue'
 import ReportMonthPicker from '@/components/report/ReportMonthPicker.vue'
+import { categoryIcon } from '@/constants/categoryIcons'
 import { useCardImage } from '@/composables/useCardImage'
 import { useToast } from '@/composables/useToast'
 import { useCardStore } from '@/stores/cardStore'
@@ -336,6 +331,17 @@ function benefitKindLabel(item) {
 }
 
 /**
+ * 승인취소된 결제인지.
+ *
+ * **아직 백엔드가 취소 건을 내려주지 않는다.** `CardBenefitMapper.getCategoryTransactions` 가
+ * `transaction_status = 'APPROVED'` 로 걸러내고 응답 DTO 에도 상태 필드가 없다.
+ * 필드가 붙기 전까지 이 함수는 늘 false 이고 화면은 지금과 똑같이 그려진다.
+ */
+function isCanceled(item) {
+  return item.transactionStatus === 'CANCELED'
+}
+
+/**
  * 카테고리 줄의 오른쪽 숫자.
  *
  * 원화와 포인트를 **합치지 않는다.** 단위가 다르다. 둘 다 받은 카테고리는 두 줄로 적는다.
@@ -347,28 +353,6 @@ function categoryAmounts(category) {
   if (category.pointAmount) amounts.push({ isPoint: true, label: points(category.pointAmount) })
   // 매퍼가 혜택 받은 결제만 주므로 보통 하나는 찬다. 비면 0 원으로 둔다.
   return amounts.length ? amounts : [{ isPoint: false, label: currency(0) }]
-}
-
-/**
- * 카테고리명 → 아이콘.
- *
- * 백엔드가 카테고리 이미지 URL 을 주지 않는 응답이라 이름으로 찾는다.
- * 모르는 카테고리는 빈 원으로 두고 아이콘을 지어내지 않는다 (`MyCardView` 와 같은 방침).
- */
-const CATEGORY_ICONS = {
-  '카페/디저트': iconCafe,
-  '편의점/마트': iconMart,
-  쇼핑: iconShopping,
-  푸드: iconFood,
-  주유: iconRefuel,
-  교통: iconTransport,
-  외식: iconFood,
-  마트: iconMart,
-  카페: iconCafe,
-}
-
-function categoryIcon(categoryName) {
-  return CATEGORY_ICONS[categoryName] ?? ''
 }
 
 /** 지금 고른 카드. 목록이 아직 안 왔으면 없다. */
@@ -1111,10 +1095,26 @@ onBeforeUnmount(() => {
                     <b :class="{ 'text-primary-dark': isPointBenefit(item) }">{{
                       benefitKindLabel(item)
                     }}</b>
-                    · 결제 {{ currency(item.paidAmount) }}</small
+                    <!--
+                      취소된 결제는 결제 금액에만 취소선을 긋는다. 혜택 종류(`7% 할인`)와
+                      `승인취소` 는 그대로 읽혀야 해서 취소선 밖에 둔다.
+                    -->
+                    <span :class="{ 'line-through': isCanceled(item) }"
+                      >· 결제 {{ currency(item.paidAmount) }}</span
+                    >
+                    <span v-if="isCanceled(item)" class="text-danger">· 승인취소</span></small
                   >
                 </p>
-                <em :class="{ 'text-primary-dark': isPointBenefit(item) }"
+                <!--
+                  `.report-transactions em { color: #3d7ab5 }` 가 레이어 밖 규칙이라
+                  `text-*` 유틸리티를 이긴다. 색만 인라인으로 넣되 값은 토큰에서 읽는다.
+                -->
+                <em
+                  :class="{
+                    'text-primary-dark': isPointBenefit(item),
+                    'line-through': isCanceled(item),
+                  }"
+                  :style="isCanceled(item) ? { color: 'var(--color-muted-deeper)' } : null"
                   >+{{
                     isPointBenefit(item) ? points(item.benefitAmount) : currency(item.benefitAmount)
                   }}</em

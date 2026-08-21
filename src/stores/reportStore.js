@@ -87,6 +87,12 @@ function toCardDetail(response) {
         benefitRate: item.benefitRate == null ? null : Number(item.benefitRate),
         paidAmount: Number(item.paidAmount) || 0,
         benefitAmount: Number(item.benefitAmount) || 0,
+        /*
+         * 승인취소 여부. 필드가 없으면 승인 건으로 본다 — 백엔드가 아직 이 값을 안 내려서
+         * (`CardBenefitMapper.getCategoryTransactions` 가 `transaction_status = 'APPROVED'`
+         * 로 걸러낸다) 필드가 붙기 전까지는 지금과 똑같이 그려진다.
+         */
+        transactionStatus: item.transactionStatus ?? 'APPROVED',
       })),
     })),
   }

@@ -387,7 +387,15 @@ onMounted(() => {
                 **통합 한도 그룹이 먼저다.** 한도를 나눠 쓰는 혜택을 낱개로 흩어 놓으면
                 같은 한도가 여러 번 세어져, 받을 수 있는 금액이 실제보다 크게 읽힌다.
               -->
-              <div v-if="sharedLimitGroups.length" class="mb-5 flex flex-col gap-3">
+              <!--
+                아래 여백은 **뒤에 목록이 올 때만** 준다. 바로 `받은 혜택 리포트 보기` 가
+                오는 카드에서는 버튼이 스스로 `mt-5` 를 갖고 있어 둘이 겹친다.
+              -->
+              <div
+                v-if="sharedLimitGroups.length"
+                class="flex flex-col gap-3"
+                :class="{ 'mb-5': categoryBenefits.length || brandBenefits.length }"
+              >
                 <SharedLimitGroupCard
                   v-for="group in sharedLimitGroups"
                   :key="group.limitGroupId"
@@ -514,11 +522,16 @@ onMounted(() => {
             </template>
 
             <!-- 월 한도가 걸린 혜택이 하나도 없는 카드. 세 배열이 함께 빈다. -->
-            <div v-else class="py-6 text-center text-xs text-sub">
+            <div v-else class="pt-6 text-center text-xs text-sub">
               이 카드에 등록된 혜택 정보가 없어요
             </div>
 
-            <button class="primary-button" @click="openCardReport(benefitCard.id)">
+            <!--
+              간격을 **버튼이 갖는다.** 앞에 오는 것이 카드마다 달라서(통합 한도 그룹 ·
+              카테고리별 · 브랜드별 · 빈 상태) 앞 요소에 맡기면 어떤 카드는 붙고 어떤 카드는
+              떨어진다. 실제로 `Pick E 체크` 는 0px, `노리 체크카드` 는 20px 였다.
+            -->
+            <button class="primary-button mt-5" @click="openCardReport(benefitCard.id)">
               받은 혜택 리포트 보기
             </button>
           </template>
