@@ -101,7 +101,7 @@ button {
 
 /* ==================== 공통 레이아웃 (폰 프레임) ==================== */
 .stage {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 18px;
@@ -109,7 +109,9 @@ button {
 .phone {
   position: relative;
   width: min(390px, 100vw);
-  height: min(844px, calc(100vh - 36px));
+  /* dvh 를 쓴다. 모바일에서 100vh 는 주소창이 숨겨진 상태 기준이라 보이는 영역보다 크고,
+     .phone 은 overflow: hidden 이라 넘친 하단탭을 스크롤로 볼 수도 없다 */
+  height: min(844px, calc(100dvh - 36px));
   min-height: 650px;
   overflow: hidden;
   background: #fff;
@@ -1432,7 +1434,10 @@ button {
 }
 
 /* ==================== 반응형 ==================== */
-@media (max-width: 430px) {
+/* 430px 로 잡으면 iPhone 16 Pro Max(440) · Galaxy S24 Ultra(480) 처럼
+   CSS 폭이 430 을 넘는 실제 휴대폰이 이 분기를 못 타고 데스크톱용 폰 목업으로 그려진다.
+   세로 모드 휴대폰은 전부 600px 아래다 */
+@media (max-width: 600px) {
   .stage {
     padding: 0;
   }
