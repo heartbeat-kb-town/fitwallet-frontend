@@ -336,6 +336,17 @@ function benefitKindLabel(item) {
 }
 
 /**
+ * 승인취소된 결제인지.
+ *
+ * **아직 백엔드가 취소 건을 내려주지 않는다.** `CardBenefitMapper.getCategoryTransactions` 가
+ * `transaction_status = 'APPROVED'` 로 걸러내고 응답 DTO 에도 상태 필드가 없다.
+ * 필드가 붙기 전까지 이 함수는 늘 false 이고 화면은 지금과 똑같이 그려진다.
+ */
+function isCanceled(item) {
+  return item.transactionStatus === 'CANCELED'
+}
+
+/**
  * 카테고리 줄의 오른쪽 숫자.
  *
  * 원화와 포인트를 **합치지 않는다.** 단위가 다르다. 둘 다 받은 카테고리는 두 줄로 적는다.
@@ -1111,10 +1122,26 @@ onBeforeUnmount(() => {
                     <b :class="{ 'text-primary-dark': isPointBenefit(item) }">{{
                       benefitKindLabel(item)
                     }}</b>
-                    · 결제 {{ currency(item.paidAmount) }}</small
+                    <!--
+                      취소된 결제는 결제 금액에만 취소선을 긋는다. 혜택 종류(`7% 할인`)와
+                      `승인취소` 는 그대로 읽혀야 해서 취소선 밖에 둔다.
+                    -->
+                    <span :class="{ 'line-through': isCanceled(item) }"
+                      >· 결제 {{ currency(item.paidAmount) }}</span
+                    >
+                    <span v-if="isCanceled(item)" class="text-danger">· 승인취소</span></small
                   >
                 </p>
-                <em :class="{ 'text-primary-dark': isPointBenefit(item) }"
+                <!--
+                  `.report-transactions em { color: #3d7ab5 }` 가 레이어 밖 규칙이라
+                  `text-*` 유틸리티를 이긴다. 색만 인라인으로 넣되 값은 토큰에서 읽는다.
+                -->
+                <em
+                  :class="{
+                    'text-primary-dark': isPointBenefit(item),
+                    'line-through': isCanceled(item),
+                  }"
+                  :style="isCanceled(item) ? { color: 'var(--color-muted-deeper)' } : null"
                   >+{{
                     isPointBenefit(item) ? points(item.benefitAmount) : currency(item.benefitAmount)
                   }}</em
