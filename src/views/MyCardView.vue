@@ -6,17 +6,11 @@ import iconHome from '@/assets/icons/home.svg'
 import iconSearchTab from '@/assets/icons/search-tab.svg'
 import iconMycardActive from '@/assets/icons/mycard-selected.svg'
 import iconReport from '@/assets/icons/report.svg'
-import iconCafe from '@/assets/icons/category-cafe.svg'
-import iconFood from '@/assets/icons/category-food.svg'
-import iconMart from '@/assets/icons/category-mart.svg'
-import iconShopping from '@/assets/icons/category-shopping.svg'
-import iconHospital from '@/assets/icons/category-hospital.svg'
-import iconRefuel from '@/assets/icons/category-refuel.svg'
-import iconTransport from '@/assets/icons/potentialbenefit-transportation.svg'
-import iconTelecom from '@/assets/icons/category-telecom.svg'
-import iconAll from '@/assets/icons/category-all.svg'
 import pigFace from '@/assets/icons/pig-face.svg'
 
+// 표는 `constants/categoryIcons.js` 한 곳에 있다. 이 화면은 `categoryImageUrl` 이
+// 있으면 그걸 먼저 쓰므로 이름 조회만 빌려 온다.
+import { categoryIcon as lookupCategoryIcon } from '@/constants/categoryIcons'
 import * as cardApi from '@/api/cardApi'
 import { useAsyncState } from '@/composables/useAsyncState'
 import { useCardImage } from '@/composables/useCardImage'
@@ -78,25 +72,6 @@ const EMPTY_CARD = {
   amount: 0,
   account: '',
   cardImageUrl: null,
-}
-
-/**
- * 카테고리명 → 화면 아이콘.
- *
- * 백엔드가 `categoryImageUrl` 을 함께 주지만 시드에서는 전부 null 이다.
- * URL 이 오면 그걸 쓰고, 없으면 이름으로 로컬 아이콘을 찾는다.
- * 모르는 카테고리는 빈 원으로 두고 이름을 지어내지 않는다.
- */
-const CATEGORY_ICONS = {
-  '카페/디저트': iconCafe,
-  '편의점/마트': iconMart,
-  쇼핑: iconShopping,
-  푸드: iconFood,
-  병원: iconHospital,
-  주유: iconRefuel,
-  교통: iconTransport,
-  통신: iconTelecom,
-  전체: iconAll,
 }
 
 const activeIndex = ref(0)
@@ -533,7 +508,7 @@ onBeforeUnmount(() => loadMoreObserver?.disconnect())
 const totalAmount = computed(() => Number(transactionDetail.value?.paymentSummary?.amount ?? 0))
 
 function categoryIcon(transaction) {
-  return transaction.categoryImageUrl || CATEGORY_ICONS[transaction.categoryName] || ''
+  return transaction.categoryImageUrl || lookupCategoryIcon(transaction.categoryName)
 }
 
 /** '2026-08' → '2026.08'. 백엔드는 yyyy-MM 으로 주고 화면은 점으로 쓴다. */
