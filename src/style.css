@@ -86,6 +86,12 @@ body,
   min-width: 320px;
   min-height: 100%;
 }
+/* 문서가 스크롤되지 않아도 모바일은 고무줄 튕김과 당겨서 새로고침이 동작한다.
+   그때 뒤에 깔린 :root 배경이 드러나 화면 전체가 움직이는 것처럼 보인다 */
+html,
+body {
+  overscroll-behavior: none;
+}
 body {
   margin: 0;
 }
@@ -101,7 +107,7 @@ button {
 
 /* ==================== 공통 레이아웃 (폰 프레임) ==================== */
 .stage {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 18px;
@@ -109,7 +115,9 @@ button {
 .phone {
   position: relative;
   width: min(390px, 100vw);
-  height: min(844px, calc(100vh - 36px));
+  /* dvh 를 쓴다. 모바일에서 100vh 는 주소창이 숨겨진 상태 기준이라 보이는 영역보다 크고,
+     .phone 은 overflow: hidden 이라 넘친 하단탭을 스크롤로 볼 수도 없다 */
+  height: min(844px, calc(100dvh - 36px));
   min-height: 650px;
   overflow: hidden;
   background: #fff;
@@ -1432,14 +1440,23 @@ button {
 }
 
 /* ==================== 반응형 ==================== */
-@media (max-width: 430px) {
+/* 430px 로 잡으면 iPhone 16 Pro Max(440) · Galaxy S24 Ultra(480) 처럼
+   CSS 폭이 430 을 넘는 실제 휴대폰이 이 분기를 못 타고 데스크톱용 폰 목업으로 그려진다.
+   세로 모드 휴대폰은 전부 600px 아래다 */
+@media (max-width: 600px) {
+  /* 튕김이 남는 구형 브라우저에서 드러나도 회색이 아니라 화면과 같은 흰색이게 한다 */
+  :root {
+    background: #fff;
+  }
   .stage {
     padding: 0;
   }
   .phone {
     width: 100vw;
     height: 100dvh;
-    min-height: 600px;
+    /* min-height 를 두면 키보드가 올라오거나 가로로 눕혀 뷰포트가 그보다 낮아졌을 때
+       프레임이 뷰포트보다 커져 문서 자체가 스크롤된다. 풀블리드에서는 딱 뷰포트만큼이면 된다 */
+    min-height: 0;
     border-radius: 0;
     box-shadow: none;
   }
