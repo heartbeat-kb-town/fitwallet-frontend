@@ -18,8 +18,10 @@ import client from './client'
  *   - `categories` 는 `[{ categoryId, categoryName, benefitAmount, spendAmount }]` 이고
  *     **매퍼가 `benefitAmount DESC LIMIT 5` 로 정렬해서 준다.** 화면이 다시 정렬하지 않는다.
  *     상위 5개만 오므로 `benefitAmount` 의 합이 `totalReceivedBenefit` 보다 작을 수 있다.
- *   - `recommendations` 는 `[{ cardProductId, cardName, cardImageUrl, expectedBenefit, description }]` 이고
+ *   - `recommendations` 는
+ *     `[{ cardProductId, cardName, cardImageUrl, detailUrl, expectedBenefit, description }]` 이고
  *     서비스가 예상 혜택 내림차순 상위 2건으로 잘라서 준다. 이것도 다시 정렬하지 않는다.
+ *     `detailUrl` 은 카드사 상품 페이지 주소이며 아직 등록되지 않은 카드는 null 이다.
  *     추천할 카드가 없으면(이미 다 보유했거나 이번 달 결제가 없으면) 빈 배열이다.
  *   - 금액은 전부 `BigDecimal` 이라 JSON 에서 숫자로 온다. 결제가 없는 달도 0 이지 null 이 아니다.
  *     단 `categories` · `recommendations` 는 빈 배열일 수 있다.

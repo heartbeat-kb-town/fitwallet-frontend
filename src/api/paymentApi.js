@@ -27,14 +27,26 @@ export const postPinVerify = ({ userCardId, paymentPin }) =>
 /**
  * QR 결제 세션 생성.
  *
- * @param payload `{ userCardId, pinAuthId }`
+ * @param payload `{ userCardId, pinAuthId, amount }`
  * @returns `{ qrToken, status, expiresIn }` — status 는 항상 PENDING 으로 시작한다
  *
+ * `amount` 는 **결제 예정 금액이고 선택값이다** (backend#322).
+ * 보내면 세션에 저장돼 결제 내역(`payment_transaction`)에 그 금액으로 남고,
+ * 안 보내면 백엔드가 목값(5,000원)으로 떨어진다 — 가맹점 단말이 없어 지어내는 값이다.
+ *
+ * ⚠️ **0 이나 빈 값을 실으면 안 된다.** 백엔드 `QrGenerateRequest.amount` 가
+ * `@Positive` 라 0 이하는 400 이다. `null` 은 통과하므로 **아예 빼서** 보낸다.
+ *
  *   - 400 PIN_AUTH_ID_INVALID : 인증이 만료됐거나 이미 썼다. PIN 입력부터 다시 받는다
+ *   - 400 INVALID_INPUT_VALUE : `amount` 가 0 이하다
  *   - 404 CARD_NOT_FOUND : 내 카드가 아니다
  */
-export const postQr = ({ userCardId, pinAuthId }) =>
-  client.post('/payment/qr', { userCardId, pinAuthId })
+export const postQr = ({ userCardId, pinAuthId, amount }) =>
+  client.post('/payment/qr', {
+    userCardId,
+    pinAuthId,
+    ...(Number(amount) > 0 ? { amount: Number(amount) } : {}),
+  })
 
 /**
  * 매장 QR 스캔 (MPM). 내 QR 을 보여주는 대신 **매장에 붙은 QR 을 내가 찍는** 결제다.

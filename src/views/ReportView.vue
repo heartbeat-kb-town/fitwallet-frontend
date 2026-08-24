@@ -225,28 +225,31 @@ function recommendationImageStyle(card) {
 }
 
 /**
- * 추천 카드의 키워드.
+ * 추천 카드에 붙는 한 줄 — **업종과 혜택률만** 남긴다 (`카페/디저트 20% 할인`).
  *
  * **카드 상품에 키워드 컬럼이 없다.** 백엔드 스키마의 `keyword` 는 검색 기록용이고
- * 카드와 무관하다. 대신 추천 응답의 `description` 이 이미 키워드를 이어 붙인 한 줄이라
- * 그것을 도로 조각낸다 — 없는 것을 지어내지 않고 오는 값만 쓴다.
+ * 카드와 무관하다. 대신 추천 응답의 `description` 이 이미 이어 붙인 한 줄이라
+ * 그중 앞 조각만 떼어 쓴다 — 없는 것을 지어내지 않고 오는 값만 쓴다.
  *
- * 백엔드가 만드는 모양은 이렇다 (`DefaultBenefitReportService.buildDescription`):
+ * 백엔드가 만드는 모양은 이렇다 (`CardRecommendationEngine.buildDescription`):
  *
  *     {카테고리} {N% 할인|N% 적립|N원 할인|N포인트 적립}
  *     [, 전월 실적 N원 이상]
  *     [, 월 최대 N원|N포인트|N회 한도]
+ *
+ * **뒤 두 조각은 붙이지 않는다.** 전월 실적과 월 한도는 지금 이 카드를 고를 이유가
+ * 아니라 나중에 따질 조건인데, 칩으로 나란히 놓으면 셋의 무게가 같아져 정작
+ * 무슨 혜택인지가 묻힌다. 첫 조각은 항상 있고 나머지 둘은 조건부라, 앞을 떼면 된다.
  *
  * ⚠️ **쉼표만으로 자르면 안 된다.** 금액을 `%,d` 로 찍어서 `전월 실적 300,000원 이상`
  * 처럼 천 단위 쉼표가 섞여 있고, 그 쉼표 뒤에는 공백이 없다. 조각 사이 구분자만
  * `, `(쉼표+공백)이므로 그것으로 자른다. 카테고리명에는 쉼표가 없다(`카페/디저트` 처럼
  * 슬래시를 쓴다).
  */
-function recommendationKeywords(description) {
+function recommendationBenefit(description) {
   return String(description ?? '')
-    .split(', ')
-    .map((keyword) => keyword.trim())
-    .filter(Boolean)
+    .split(', ')[0]
+    .trim()
 }
 
 /* ─── 받은 혜택 상세 (API) ──────────────────────────────────────────────── */
@@ -907,9 +910,9 @@ onBeforeUnmount(() => {
             </div>
 
             <!--
-              키워드. 예전에는 같은 내용이 `<p>` 한 줄(`카페/디저트 5% 할인, 전월 실적 …`)
-              이었는데, 조각내 나열하면 어떤 조건이 붙는 카드인지 훑어보기 쉽다.
-              문장을 지우고 옮긴 것이라 같은 내용이 두 번 나오지 않는다.
+              업종과 혜택률 한 조각. 예전에는 같은 내용이 `<p>` 한 줄
+              (`카페/디저트 5% 할인, 전월 실적 …`)이었고, 그 뒤에는 조각을 전부 칩으로
+              늘어놓았다. 지금은 **첫 조각만** 남긴다 — 이유는 `recommendationBenefit` 주석 참고.
 
               카드 그림 아래, **`신청하기` 버튼과 같은 줄**에 둔다.
 
@@ -926,18 +929,24 @@ onBeforeUnmount(() => {
               육안으로 구분되지 않는다).
             -->
             <div
-              v-if="recommendationKeywords(card.description).length"
+              v-if="recommendationBenefit(card.description)"
               class="absolute right-[92px] bottom-[10px] left-0 flex min-h-[34px] flex-wrap items-center gap-1"
             >
               <span
-                v-for="keyword in recommendationKeywords(card.description)"
-                :key="keyword"
                 class="rounded-md border border-line bg-icon-bg px-[7px] py-0.5 text-[10px] text-sub"
               >
-                {{ keyword }}
+                {{ recommendationBenefit(card.description) }}
               </span>
             </div>
-            <button type="button" @click="notify('카드 신청 페이지는 준비 중이에요.')">
+            <a
+              v-if="card.detailUrl"
+              :href="card.detailUrl"
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              신청하기
+            </a>
+            <button v-else type="button" @click="notify('카드 신청 페이지는 준비 중이에요.')">
               신청하기
             </button>
           </article>
