@@ -20,7 +20,7 @@ import { useCardStore } from '@/stores/cardStore'
  * 두 개의 시트(혜택 현황 · 이벤트)가 한 덩어리라, 화면에서 떼어내면서 컴포넌트로 묶었다.
  * 이제 리포트 메인이 `놓친 혜택` 아래에서 쓴다.
  *
- * **리포트 이동은 화면이 정한다.** 홈에 있을 때는 `받은 혜택 리포트 보기` 가 라우터를
+ * **리포트 이동은 화면이 정한다.** 홈에 있을 때는 `받은 혜택 상세 가기` 가 라우터를
  * 밀었지만, 이제는 이미 리포트 안이라 같은 화면의 받은 혜택 상세로 갈아타야 한다.
  * 컴포넌트는 어느 카드인지만 알리고 무엇을 할지는 부모가 정한다.
  */
@@ -388,7 +388,7 @@ onMounted(() => {
                 같은 한도가 여러 번 세어져, 받을 수 있는 금액이 실제보다 크게 읽힌다.
               -->
               <!--
-                아래 여백은 **뒤에 목록이 올 때만** 준다. 바로 `받은 혜택 리포트 보기` 가
+                아래 여백은 **뒤에 목록이 올 때만** 준다. 바로 `받은 혜택 상세 가기` 가
                 오는 카드에서는 버튼이 스스로 `mt-5` 를 갖고 있어 둘이 겹친다.
               -->
               <div
@@ -422,12 +422,23 @@ onMounted(() => {
                   <h3>카테고리별 혜택</h3>
                   <div class="benefit-list border border-line px-4">
                     <div v-for="item in categoryBenefits" :key="item.key" class="benefit-row">
-                      <span class="mini-icon">
+                      <!--
+                        칸 규격을 아래 `브랜드별 혜택` 과 똑같이 맞춘다 (36px).
+                        `.mini-icon` 은 28px 이고 그 안에 16px 그림을 넣던 자리라,
+                        두 목록을 위아래로 놓으면 **아이콘 중심과 글자 시작점이 4px 씩 어긋난다.**
+                        같은 시트 안의 같은 모양 행이라 왼쪽 칸도 같아야 한다.
+                      -->
+                      <span
+                        class="grid h-9 w-9 flex-none place-items-center overflow-hidden rounded-xl bg-icon-bg"
+                      >
+                        <!--
+                          업종 아이콘은 선 그림이라 칸을 가득 채우면 굵어 보인다.
+                          `p-1.5` 로 24px 로 그려 통합 한도 카드의 혜택 머리글과 같은 크기로 맞춘다.
+                        -->
                         <img
                           :src="item.imageUrl ?? categoryIcon(item.name)"
                           alt=""
-                          width="16"
-                          height="16"
+                          class="h-full w-full object-contain p-1.5"
                         />
                       </span>
                       <div class="benefit-body">
@@ -532,7 +543,7 @@ onMounted(() => {
               떨어진다. 실제로 `Pick E 체크` 는 0px, `노리 체크카드` 는 20px 였다.
             -->
             <button class="primary-button mt-5" @click="openCardReport(benefitCard.id)">
-              받은 혜택 리포트 보기
+              받은 혜택 상세 가기
             </button>
           </template>
         </div>

@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { LayoutGrid } from 'lucide-vue-next'
 import { BRAND_LOGOS } from '@/constants/brandLogos'
-import { benefitCategoryIcon } from '@/constants/benefitCategoryIcons'
+import { benefitCategoryIcon, matchBenefitCategoryIcon } from '@/constants/benefitCategoryIcons'
 import { benefitUnitValue } from '@/utils/benefitUnit'
 
 /**
@@ -150,6 +150,7 @@ const services = computed(() =>
       color: colorByTarget.value.get(`${service.benefitServiceId}-${target.targetId}`),
       name: target.targetName,
       imageUrl: logoUrl(target),
+      categoryIconUrl: matchBenefitCategoryIcon(target.targetName),
       value: service.valueLabel,
       perTransactionLimit: service.perTransactionLimitLabel,
       transactionCount: target.transactionCount,
@@ -277,13 +278,19 @@ function won(value) {
           :style="{ boxShadow: `inset 3px 0 0 ${target.color}` }"
         >
           <!--
-            브랜드 로고 타일. 로고를 못 구하면 이름 앞 두 글자를 계열색으로 대신한다.
-            회색으로 두면 가맹점끼리 구분되는 신호가 왼쪽 띠 하나뿐이라 한눈에 안 갈린다.
+            대상 타일. 세 갈래다.
+            1. 브랜드 로고가 있으면 로고.
+            2. **대상이 브랜드가 아니라 업종일 때는 업종 아이콘.** `카페/디저트` · `병원`
+               처럼 업종이 통째로 대상인 혜택이 있는데, 브랜드가 아니라 로고가 영영 없다.
+               두 글자만 잘라 `카페` · `병원` 이라고 쓰면 **바로 위 혜택 머리글에는 아이콘이
+               있는데 그 아래 줄만 글자**가 돼 한 덩어리로 안 읽힌다.
+            3. 브랜드인데 로고를 못 구한 경우에만 이름 앞 두 글자를 계열색으로 대신한다.
+               이때 일반 혜택 아이콘(선물 상자)을 넣으면 어느 가맹점인지 아무것도 못 알려준다.
           -->
           <span
             class="grid h-10 w-10 flex-none place-items-center overflow-hidden rounded-xl text-[11px] font-extrabold text-white"
-            :class="{ 'bg-icon-bg': target.imageUrl }"
-            :style="target.imageUrl ? null : { background: target.color }"
+            :class="{ 'bg-icon-bg': target.imageUrl || target.categoryIconUrl }"
+            :style="target.imageUrl || target.categoryIconUrl ? null : { background: target.color }"
           >
             <!--
               칸을 가득 채운다. 로고가 `637×313`(아웃백)처럼 가로로 긴 것부터
@@ -296,6 +303,13 @@ function won(value) {
               alt=""
               class="h-full w-full object-contain p-0.5"
               @error="markLogoBroken(target.imageUrl)"
+            />
+            <!-- 업종 아이콘은 선 그림이라 여백을 더 준다. 혜택 머리글과 같은 크기로 보인다. -->
+            <img
+              v-else-if="target.categoryIconUrl"
+              :src="target.categoryIconUrl"
+              alt=""
+              class="h-full w-full object-contain p-1.5"
             />
             <template v-else>{{ target.name.slice(0, 2) }}</template>
           </span>
