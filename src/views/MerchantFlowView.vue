@@ -123,6 +123,9 @@ function payWith({ userCardId, store }) {
     cardId: userCardId,
     merchantName: store,
     returnTo: route.fullPath,
+    // 금액 입력 화면에서 받은 결제 예정 금액. 이 값이 QR 세션에 실려야 결제 내역에
+    // 실제 금액이 남는다 (backend#322). `아니요` 를 골랐으면 비어 있다.
+    amount: requestedAmount.value,
   })
   router.push({ name: 'payment' })
 }

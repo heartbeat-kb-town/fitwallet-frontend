@@ -170,17 +170,17 @@ const confirmInfo = ref(null)
 /**
  * 영수증에 적을 매장·금액. **스캔한 값이 있으면 결과 응답보다 그것을 앞세운다** (#136).
  *
- * 백엔드가 결제를 굴리는 첫 걸음에서 세션의 매장·금액을 CPM 용 목값(스타벅스 세종대점 /
- * 4,500원)으로 덮어쓴다(`DefaultPaymentService:136` → `PaymentMapper.xml:83`).
- * MPM 세션은 이미 진짜 값을 갖고 있는데도 덮인다. 그대로 그리면 **바로 앞에서 확인한 금액과
- * 완료 화면이 어긋난다** — 확인의 의미가 사라진다.
+ * 백엔드가 결제를 굴리는 첫 걸음(`getPaymentResult` 의 `SCANNED` 분기)에서 세션의 값을
+ * 목값으로 덮어쓰던 것에 대한 대비다.
  *
- * `confirmInfo` 는 매장 QR 스캔에서만 채워진다. CPM 은 `null` 이라 결과 응답으로 떨어지고,
- * 그쪽은 목값이 정상 동작이다(가맹점 단말이 없어 백엔드가 지어내는 값이다).
+ * - **금액은 해결됐다** (backend#322). 세션에 금액이 있으면 그걸 쓰고, 없을 때만 목값
+ *   (5,000원)으로 떨어진다. 그래서 결제 내역·리포트도 이제 실제 금액 기준이다.
+ * - **매장은 아직 덮인다** (backend#327 대기). `MOCK_STORE_ID`(20, 스타벅스 세종대점)가
+ *   조건 없이 들어가서, MPM 세션이 진짜 매장을 갖고 있어도 지워진다.
+ *   `confirmInfo` 를 앞세워 **완료 화면만** 가린다 — 결제 내역과 리포트는 DB 를 그대로
+ *   읽으므로 가릴 수 없다.
  *
- * ⚠️ **이것으로 다 해결되지 않는다.** 백엔드는 덮어쓴 금액으로 혜택과 `payment_transaction`
- * 을 만들기 때문에(`completeAndBuildResponse`), 아래 `expectedBenefit` 과 결제 내역·리포트는
- * 여전히 4,500원 기준이다. 완전한 해결은 백엔드 수정이다.
+ * `confirmInfo` 는 매장 QR 스캔에서만 채워진다. CPM 은 `null` 이라 결과 응답으로 떨어진다.
  */
 const receiptStoreName = computed(
   () => confirmInfo.value?.storeName ?? paymentResult.value?.storeName ?? merchantName ?? '-',
