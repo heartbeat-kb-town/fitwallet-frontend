@@ -17,6 +17,7 @@ import iconMycard from '@/assets/icons/mycard.svg'
 import iconMycardActive from '@/assets/icons/mycard-selected.svg'
 import iconReport from '@/assets/icons/report.svg'
 import iconReportActive from '@/assets/icons/report-selected.svg'
+import zeroLabPhoto from '@/assets/places/zero-lab-childrens-grand-park.png'
 import { categories } from '@/data'
 import { CATEGORY_PHOTOS } from '@/constants/categoryPhotos'
 import BaseLocationConsentSheet from '@/components/common/BaseLocationConsentSheet.vue'
@@ -29,6 +30,11 @@ import { useLocationStore } from '@/stores/locationStore'
 const router = useRouter()
 const paymentStore = usePaymentStore()
 const locationStore = useLocationStore()
+
+/** 실제 매장 사진이 준비된 장소. 이름이 바뀌어도 같은 가게를 가리키도록 storeId로 매핑한다. */
+const FREQUENT_PLACE_PHOTOS = {
+  51: zeroLabPhoto,
+}
 
 /**
  * 자주 찾는 장소. 목데이터가 아니라 API 에서 온다 (#114).
@@ -45,8 +51,9 @@ const { data: frequentPlaces, execute: fetchFrequentPlaces } = useAsyncState(
 
 /**
  * 응답에는 `categoryId` 도 가게 사진도 없다. `categoryName` 으로 로컬 카테고리를 찾아
- * 아이콘과 `categoryId` 를 얻는다. 카테고리 이름은 백엔드 `category` 테이블과 정확히 같다
- * (카페/디저트 · 편의점/마트 · 쇼핑 · 푸드 · 병원 · 주유).
+ * 아이콘과 `categoryId` 를 얻고, 실제 사진이 준비된 매장은 `storeId`로 전용 사진을 고른다.
+ * 나머지는 카테고리 대표 사진을 쓴다. 카테고리 이름은 백엔드 `category` 테이블과 정확히
+ * 같다(카페/디저트 · 편의점/마트 · 쇼핑 · 푸드 · 병원 · 주유).
  *
  * 못 찾으면 `categoryId` 없이 이름만으로 검색한다. 가맹점 화면은 키워드가 있으면
  * 카테고리를 보지 않으므로 이동은 그대로 동작한다.
@@ -61,15 +68,15 @@ const places = computed(() =>
       category: place.categoryName,
       categoryId: category?.id,
       icon: category?.icon,
-      // 그 가게의 사진이 아니라 카테고리 대표 사진이다. `constants/categoryPhotos` 주석 참고.
-      photo: CATEGORY_PHOTOS[place.categoryName],
+      photo: FREQUENT_PLACE_PHOTOS[place.storeId] ?? CATEGORY_PHOTOS[place.categoryName],
     }
   }),
 )
 
 /**
- * 로드에 실패한 사진 주소. 카테고리 사진은 외부(Unsplash)에서 받아오므로 오프라인이거나
- * 주소가 죽으면 깨진 이미지가 남는다. 실패한 것만 기억해 두고 카테고리 아이콘으로 되돌린다.
+ * 로드에 실패한 사진 주소. 카테고리 사진은 외부(Unsplash)에서 받고 매장 사진은 로컬 자산이지만,
+ * 어느 쪽이든 로드하지 못하면 깨진 이미지가 남는다. 실패한 것만 기억해 카테고리 아이콘으로
+ * 되돌린다.
  */
 const brokenPhotos = ref(new Set())
 
@@ -325,8 +332,8 @@ function selectTab(index) {
           @click="openPlaceAmount(place)"
         >
           <!--
-            백엔드가 가게 사진을 주지 않아 **카테고리 대표 사진**을 그린다.
-            그 가게의 사진이 아니다 — 카페면 커피 사진, 주유소면 주유소 사진이다.
+            백엔드가 가게 사진을 주지 않아, 실제 사진이 등록된 매장은 로컬 사진을 그리고
+            나머지는 **카테고리 대표 사진**을 그린다.
 
             예전 목 사진은 가게마다 고정이라 `HD현대오일뱅크직영 효진주유소` 에 블루보틀
             사진이 붙었다. 카테고리로 고르면 적어도 종류는 맞는다.
