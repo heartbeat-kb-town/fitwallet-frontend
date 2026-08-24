@@ -22,6 +22,22 @@ export const usePaymentStore = defineStore('payment', () => {
   const startPhase = ref('cards')
   const returnTo = ref('')
 
+  /**
+   * 결제 예정 금액. **빈 문자열이면 "안 정했다" 는 뜻이다** (0 과 구분한다).
+   *
+   * `PickAmountView`(`결제금액을 입력하세요`)가 받은 금액이 가맹점 화면을 거쳐
+   * `startFromMerchant` 로 들어온다. **금액을 받는 화면은 그것 하나다** — 결제 화면에
+   * 입력칸을 따로 두지 않는다.
+   *
+   * 이 값이 `POST /payment/qr` 로 나가야 결제 내역에 실제 금액이 남는다 (backend#322).
+   * 비어 있으면 안 싣고, 백엔드가 목값으로 떨어진다 — 결제 탭에서 바로 QR 을 띄우는 경로가
+   * 그렇다. 그 경로는 금액을 알 길이 없다.
+   *
+   * ⚠️ **매장 QR 스캔(MPM)은 이 값을 쓰지 않는다.** 그쪽 금액은 매장 QR 이 싣고 오는 것이라
+   * `scanStoreQr` 가 인자로 따로 받는다. 사용자가 고쳐 칠 값이 아니다.
+   */
+  const amount = ref('')
+
   // 카드 순서가 바뀌면 미리 골라둔 카드는 무효다.
   // #56 에서 cardStore 에 넣지 않고 셸이 임시로 잇던 부수효과를 여기로 옮겼다.
   // cardStore 를 읽기만 하므로 순환 참조가 아니다.
@@ -82,10 +98,13 @@ export const usePaymentStore = defineStore('payment', () => {
    * **여기서 표를 비우지 않는다.** 백엔드가 이 시점에 `used` 로 찍지 않기 때문이다
    * (backend#185). 비우면 스캔으로 갈아탈 때 PIN 재입력이 되살아난다.
    *
+   * 금액은 인자로 받지 않고 `amount` 를 읽는다. `QR Code` 탭으로 되돌아오면 세션을 새로
+   * 만드는데(`startQrCodeFlow`), 인자로 받으면 그 자리에서 금액을 다시 구해 와야 한다.
+   *
    * @returns `{ qrToken, status, expiresIn }`
    */
   async function createQr(userCardId) {
-    return runCreateQr({ userCardId, pinAuthId: pinAuthId.value })
+    return runCreateQr({ userCardId, pinAuthId: pinAuthId.value, amount: amount.value })
   }
 
   /**
@@ -116,11 +135,15 @@ export const usePaymentStore = defineStore('payment', () => {
   }
 
   // 가맹점에서 카드를 고르고 비밀번호까지 입력한 경우 — QR 단계부터 시작한다.
+  //
+  // `amount` 는 `PickAmountView` 에서 받은 금액이다. 그 화면에서 `아니요` 를 골랐으면
+  // 비어 있고, 그때는 QR 요청에 싣지 않는다.
   function startFromMerchant(payload) {
     cardId.value = payload.cardId ?? ''
     merchantName.value = payload.merchantName ?? ''
     startPhase.value = 'qr'
     returnTo.value = payload.returnTo ?? ''
+    amount.value = payload.amount ?? ''
   }
 
   // 하단 결제 탭으로 들어온 경우 — 카드 선택부터 시작한다.
@@ -129,6 +152,7 @@ export const usePaymentStore = defineStore('payment', () => {
     merchantName.value = ''
     startPhase.value = 'cards'
     returnTo.value = ''
+    amount.value = ''
     pinAuthId.value = ''
   }
 
@@ -137,6 +161,7 @@ export const usePaymentStore = defineStore('payment', () => {
     merchantName,
     startPhase,
     returnTo,
+    amount,
     pinAuthId,
     qrSession,
     isVerifyingPin,
