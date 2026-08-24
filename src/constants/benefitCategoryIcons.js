@@ -31,19 +31,31 @@ const ICON_KEYWORDS = [
     iconFood,
   ],
   [['주유', '충전'], iconRefuel],
-  [['병원', '약국'], iconHospital],
+  // `병의원` 은 `병원` 을 포함하지 않는다. 실제 응답에 오는 이름이라 `의원` 으로 함께 잡는다.
+  [['병원', '의원', '약국'], iconHospital],
   [['쇼핑', '온라인몰', '백화점', '패션', '뷰티', '올리브영'], iconShopping],
   [['교통', '대중교통'], iconTransport],
   [['통신'], iconTelecom],
   [['가맹점', '스토어'], iconStore],
 ]
 
-/** 못 찾으면 일반 혜택 아이콘을 쓴다. 이름이 업종을 안 담은 혜택이 있다(`Daily 할인`). */
-export function benefitCategoryIcon(name) {
-  if (!name) return iconBenefit
+/**
+ * 키워드에 **실제로 걸렸을 때만** 아이콘을 준다. 못 찾으면 `null` 이다.
+ *
+ * 호출부가 "업종을 알아낸 것"과 "몰라서 기본값으로 떨어진 것"을 갈라야 할 때 쓴다.
+ * 예를 들어 대상이 브랜드(`폴바셋`)면 일반 혜택 아이콘보다 이름 두 글자가 더 알려준다 —
+ * 그 판단을 하려면 기본값으로 떨어졌다는 사실이 밖에서 보여야 한다.
+ */
+export function matchBenefitCategoryIcon(name) {
+  if (!name) return null
 
   return (
     ICON_KEYWORDS.find(([keywords]) => keywords.some((keyword) => name.includes(keyword)))?.[1] ??
-    iconBenefit
+    null
   )
+}
+
+/** 못 찾으면 일반 혜택 아이콘을 쓴다. 이름이 업종을 안 담은 혜택이 있다(`Daily 할인`). */
+export function benefitCategoryIcon(name) {
+  return matchBenefitCategoryIcon(name) ?? iconBenefit
 }
