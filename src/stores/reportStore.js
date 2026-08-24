@@ -36,6 +36,7 @@ function toSummary(response) {
       cardProductId: card.cardProductId,
       cardName: card.cardName,
       cardImageUrl: card.cardImageUrl,
+      detailUrl: card.detailUrl,
       expectedBenefit: Number(card.expectedBenefit) || 0,
       description: card.description,
     })),

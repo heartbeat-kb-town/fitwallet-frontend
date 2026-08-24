@@ -938,7 +938,15 @@ onBeforeUnmount(() => {
                 {{ recommendationBenefit(card.description) }}
               </span>
             </div>
-            <button type="button" @click="notify('카드 신청 페이지는 준비 중이에요.')">
+            <a
+              v-if="card.detailUrl"
+              :href="card.detailUrl"
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              신청하기
+            </a>
+            <button v-else type="button" @click="notify('카드 신청 페이지는 준비 중이에요.')">
               신청하기
             </button>
           </article>
