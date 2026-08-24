@@ -17,8 +17,13 @@
 import { useSignupStore } from '@/stores/signupStore'
 
 export const routes = [
-  { path: '/', redirect: { name: 'login' } },
+  { path: '/', redirect: { name: 'onboarding' } },
 
+  {
+    path: '/onboarding',
+    name: 'onboarding',
+    component: () => import('@/views/OnboardingView.vue'),
+  },
   { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue') },
   { path: '/signup', name: 'signup', component: () => import('@/views/SignUpView.vue') },
   {
