@@ -157,7 +157,7 @@ function navigateTo(target) {
       </button>
     </header>
 
-    <div class="flex flex-1 flex-col gap-5 px-5 pt-10">
+    <div class="min-h-0 flex flex-1 flex-col gap-5 overflow-y-auto px-5 pb-24 pt-10">
       <img :src="pigPickCard" alt="" class="mx-auto h-24 w-auto" />
 
       <div class="text-center">
